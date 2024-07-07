@@ -1,0 +1,17 @@
+{
+    "configurations": [
+        {
+            "name": "C#: Mtgp.Shader.TestHarness",
+            "type": "dotnet",
+            "request": "launch",
+            "projectPath": "${workspaceFolder}\\Mtgp.Shader.TestHarness\\Mtgp.Shader.TestHarness.csproj",
+            "launchConfigurationId": "TargetFramework=;Mtgp.Shader.TestHarness"
+        },
+        {
+            "name": "C#: Mtgp.Proxy",
+            "type": "dotnet",
+            "request": "launch",
+            "projectPath": "${workspaceFolder}\\Mtgp.Proxy\\Mtgp.Proxy.csproj"
+        }
+    ]
+}
