@@ -12,34 +12,32 @@ public class RenderPass
 		new(8)
 	];
 
+	private record ShaderAttribute(ShaderType Type, int Location);
+
 	private readonly IPresentReceiver receiver;
-	private readonly VertexShader vertex;
+	private readonly ShaderInterpreter vertex;
 	private readonly ShaderInterpreter fragment;
 
-	public RenderPass(IPresentReceiver receiver, VertexShader vertex, Memory<byte> fragmentShader, (int X, int Y) viewportSize)
+	public RenderPass(IPresentReceiver receiver, Memory<byte> vertexShader, Memory<byte> fragmentShader, (int X, int Y) viewportSize)
 	{
 		this.receiver = receiver;
-		this.vertex = vertex;
+
+		var (vertexInputs, vertexOutputs) = GetAttributes(vertexShader);
+
+		var vertexInputMappings = vertexInputs.Select(x => x.Type.Size).RunningOffset().ToArray();
+		var vertexOutputMappings = vertexOutputs.Select(x => x.Type.Size).RunningOffset().ToArray();
+
+		this.vertex = new(vertexShader, vertexInputMappings, vertexOutputMappings);
 
 		var (fragmentInputs, fragmentOutputs) = GetAttributes(fragmentShader);
 
 		var fragmentInputMappings = fragmentInputs.Select(x => x.Type.Size).RunningOffset().ToArray();
 		var fragmentOutputMappings = fragmentOutputs.Select(x => x.Type.Size).RunningOffset().ToArray();
-
-		int offset = 0;
-
-		for (int i = 0; i < fragmentOutputs.Length; i++)
-		{
-			fragmentOutputMappings[i] = offset;
-
-			offset += fragmentOutputs[i].Type.Size;
-		}
-
+		
 		this.fragment = new(fragmentShader, fragmentInputMappings, fragmentOutputMappings);
+
 		this.ViewportSize = viewportSize;
 	}
-
-	private record ShaderAttribute(ShaderType Type, int Location);
 
 	private static (ShaderAttribute[] Inputs, ShaderAttribute[] Outputs) GetAttributes(Memory<byte> compiledShader)
 	{
@@ -124,8 +122,8 @@ public class RenderPass
 	public void Execute(int instanceCount, int vertexCount)
 	{
 		const int instanceSize = 12;
-		Span<byte> vertexOutput = stackalloc byte[4 * 2];
-		Span<byte> vertexInput = stackalloc byte[vertex.InputMappings.Select(x => x.Type.Size).Sum()];
+		Span<byte> vertexOutput = stackalloc byte[8 * 2];
+		Span<byte> vertexInput = stackalloc byte[12];
 
 		Span<RuneDelta> deltas = stackalloc RuneDelta[80];
 		Span<byte> output = stackalloc byte[12];
@@ -134,24 +132,18 @@ public class RenderPass
 		Span<byte> fragmentInput = stackalloc byte[8];
 
 		var inputBuiltins = new ShaderInterpreter.Builtins();
+		Span<ShaderInterpreter.Builtins> vertexOutputBuiltins = stackalloc ShaderInterpreter.Builtins[2];
 
 		for (int instanceIndex = 0; instanceIndex < instanceCount; instanceIndex++)
 		{
 			for (int vertexIndex = 0; vertexIndex < vertexCount; vertexIndex++)
 			{
-				int vertexInputOffset = 0;
-
-				foreach (var mapping in vertex.InputMappings)
-				{
-					var attachment = this.Attachments[mapping.AttachmentIndex!.Value];
-					attachment.Span[(instanceIndex * instanceSize + mapping.Offset!.Value)..][..mapping.Type.Size].CopyTo(vertexInput[vertexInputOffset..]);
-
-					vertexInputOffset += mapping.Type.Size;
-				}
+				var attachment = this.Attachments[1];
+				attachment.Span[(instanceIndex * instanceSize)..][..instanceSize].CopyTo(vertexInput);
 
 				inputBuiltins.VertexIndex = vertexIndex;
 
-				this.vertex.Execute(inputBuiltins, vertexInput, vertexOutput[(vertexIndex * 4)..][..4]);
+				this.vertex.Execute(this.Attachments, inputBuiltins, vertexInput, ref vertexOutputBuiltins[vertexIndex], vertexOutput[(vertexIndex * 8)..][..8]);
 			}
 
 			(float X, float Y) uScale = (1f, 0f);
@@ -165,14 +157,17 @@ public class RenderPass
 
 			static float DotProduct((float X, float Y) a, (float X, float Y) b) => a.X * b.X + a.Y * b.Y;
 
-			int fromX = vertexOutput[0];
-			int fromY = vertexOutput[1];
-			int fromU = vertexOutput[2];
-			int fromV = vertexOutput[3];
-			int toX = vertexOutput[4];
-			int toY = vertexOutput[5];
-			int toU = vertexOutput[6];
-			int toV = vertexOutput[7];
+			new BitReader(vertexOutput)
+				.Read(out int fromU)
+				.Read(out int fromV)
+				.Read(out int toU)
+				.Read(out int toV);
+
+			int fromX = vertexOutputBuiltins[0].PositionX;
+			int fromY = vertexOutputBuiltins[0].PositionY;
+			int toX = vertexOutputBuiltins[1].PositionX;
+			int toY = vertexOutputBuiltins[1].PositionY;
+
 			int deltaX = toX - fromX;
 			int deltaY = toY - fromY;
 			int deltaU = toU - fromU;
@@ -204,8 +199,6 @@ public class RenderPass
 						.Write(v);
 
 					this.fragment.Execute(this.Attachments, inputBuiltins, fragmentInput, ref outputBuiltins, output);
-
-					output[0] += (int)'A';
 
 					var rune = Unsafe.As<byte, Rune>(ref output[0]);
 

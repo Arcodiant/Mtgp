@@ -9,6 +9,8 @@
 		private class VariableInfo
 		{
 			public uint? Location { get; set; }
+			public uint? Binding { get; set; }
+			public Builtin? Builtin { get; set; }
 			public ShaderStorageClass? StorageClass { get; set; }
 		}
 
@@ -59,6 +61,16 @@
 
 								SetVariableInfo(target, x => x.Location = location);
 								break;
+							case ShaderDecoration.Binding:
+								shaderReader = shaderReader.DecorateBinding(out target, out uint binding);
+
+								SetVariableInfo(target, x => x.Binding = binding);
+								break;
+							case ShaderDecoration.Builtin:
+								shaderReader = shaderReader.DecorateBuiltin(out target, out var builtin);
+
+								SetVariableInfo(target, x => x.Builtin = builtin);
+								break;
 							default:
 								throw new InvalidOperationException($"Unknown decoration {decoration}");
 						}
@@ -84,7 +96,23 @@
 							switch (variableInfo.StorageClass)
 							{
 								case ShaderStorageClass.Input:
-									results[result] = BitConverter.ToInt32(input[this.inputMappings[(int)variableInfo.Location!]..]);
+									if (variableInfo.Builtin is not null)
+									{
+										results[result] = variableInfo.Builtin switch
+										{
+											Builtin.VertexIndex => inputBuiltins.VertexIndex,
+											Builtin.InstanceIndex => inputBuiltins.InstanceIndex,
+											_ => throw new InvalidOperationException($"Invalid builtin {variableInfo.Builtin}"),
+										};
+									}
+									else if (variableInfo.Location is not null)
+									{
+										results[result] = BitConverter.ToInt32(input[this.inputMappings[(int)variableInfo.Location!]..]);
+									}
+									else
+									{
+										throw new InvalidOperationException("Input variable has no target decoration");
+									}
 									break;
 								default:
 									throw new InvalidOperationException($"Invalid storage class {variableInfo.StorageClass}");
@@ -103,7 +131,28 @@
 							switch (variableInfo.StorageClass)
 							{
 								case ShaderStorageClass.Output:
-									BitConverter.TryWriteBytes(output[this.outputMappings[(int)variableInfo.Location!]..], valueToStore);
+									if (variableInfo.Builtin is not null)
+									{
+										switch (variableInfo.Builtin)
+										{
+											case Builtin.PositionX:
+												outputBuiltins.PositionX = valueToStore;
+												break;
+											case Builtin.PositionY:
+												outputBuiltins.PositionY = valueToStore;
+												break;
+											default:
+												throw new InvalidOperationException($"Invalid builtin {variableInfo.Builtin}");
+										}
+									}
+									else if (variableInfo.Location is not null)
+									{
+										BitConverter.TryWriteBytes(output[this.outputMappings[(int)variableInfo.Location]..], valueToStore);
+									}
+									else
+									{
+										throw new InvalidOperationException("Output variable has no target decoration");
+									}
 									break;
 								default:
 									throw new InvalidOperationException($"Invalid storage class {variableInfo.StorageClass}");
@@ -115,6 +164,37 @@
 							shaderReader = shaderReader.Add(out result, out int a, out int b);
 
 							results[result] = results[a] + results[b];
+							break;
+						}
+					case ShaderOp.Sample:
+						{
+							shaderReader = shaderReader.Sample(out result, out int texture, out int x, out int y);
+
+							var variableData = variableDecorations[texture];
+
+							var textureData = attachments[(int)variableData.Binding!].Span;
+
+							int textureX = results[x];
+							int textureY = results[y];
+
+							int textureIndex = textureX + textureY * 80;
+
+							results[result] = BitConverter.ToInt32(textureData[(textureIndex * 4)..]);
+							break;
+						}
+					case ShaderOp.Subtract:
+					case ShaderOp.Equals:
+						{
+							shaderReader = shaderReader.Binary(op, out result, out int a, out int b);
+
+							results[result] = results[a] - results[b];
+							break;
+						}
+					case ShaderOp.Conditional:
+						{
+							shaderReader = shaderReader.Conditional(out result, out int condition, out int trueValue, out int falseValue);
+
+							results[result] = results[condition] == 0 ? results[trueValue] : results[falseValue];
 							break;
 						}
 					case ShaderOp.Return:

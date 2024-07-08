@@ -1,4 +1,5 @@
 ﻿- Vertex output & pixel input
-- SSA shader execution
+- Types in shaders
+	- Vector types
 - Compute to split variable-length strings
 - MTGP interface

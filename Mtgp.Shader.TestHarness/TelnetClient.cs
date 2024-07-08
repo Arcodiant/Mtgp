@@ -176,6 +176,11 @@ public class TelnetClient
 		this.writer.Write($"\x1B[{y + 1};{x + 1}H");
 	}
 
+	public void SetWindowSize(int rows, int columns)
+	{
+		this.writer.Write($"\x1B[8;{rows};{columns}t");
+	}
+
 	public void Clear(AnsiColour foreground = AnsiColour.White, AnsiColour background = AnsiColour.Black)
 	{
 		this.SetColour(foreground, background);

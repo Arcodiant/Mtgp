@@ -17,7 +17,7 @@ public class VertexShader
 
 		(int x, int y) = inputBuiltins.VertexIndex switch
 		{
-			1 => (initialX + length, initialY),
+			1 => (initialX + length - 1, initialY),
 			_ => (initialX, initialY)
 		};
 

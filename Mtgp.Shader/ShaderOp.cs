@@ -11,19 +11,33 @@ public enum ShaderOp
 	Return,
 	Variable,
 	EntryPoint,
-	Add
+	Add,
+	Sample,
+	Conditional,
+	Equals,
+	Subtract
 }
 
 public enum ShaderStorageClass
 {
 	Input,
-	Output
+	Output,
+	UniformConstant
 }
 
 public enum ShaderDecoration
 {
 	Location,
-	Binding
+	Binding,
+	Builtin
+}
+
+public enum Builtin
+{
+	VertexIndex,
+	InstanceIndex,
+	PositionX,
+	PositionY
 }
 
 public readonly ref struct ShaderWriter(BitWriter writer)
@@ -46,6 +60,14 @@ public readonly ref struct ShaderWriter(BitWriter writer)
 	public readonly ShaderWriter DecorateLocation(int target, uint location)
 		=> new(this.WriteDecorate(target, ShaderDecoration.Location, ShaderOpConstants.DecorateLocationWordCount)
 							.Write(location));
+
+	public readonly ShaderWriter DecorateBinding(int target, uint binding)
+		=> new(this.WriteDecorate(target, ShaderDecoration.Binding, ShaderOpConstants.DecorateBindingWordCount)
+							.Write(binding));
+
+	public readonly ShaderWriter DecorateBuiltin(int target, Builtin builtin)
+		=> new(this.WriteDecorate(target, ShaderDecoration.Builtin, ShaderOpConstants.DecorateBuiltinWordCount)
+							.Write((int)builtin));
 
 	public readonly ShaderWriter TypePointer(int result, ShaderStorageClass storageClass)
 		=> new(this.Write(ShaderOp.TypePointer, ShaderOpConstants.TypePointerWordCount)
@@ -79,10 +101,36 @@ public readonly ref struct ShaderWriter(BitWriter writer)
 		=> new(this.Write(ShaderOp.EntryPoint, (uint)(1 + variables.Length)).Write(variables));
 
 	public readonly ShaderWriter Add(int result, int left, int right)
-		=> new(this.Write(ShaderOp.Add, ShaderOpConstants.AddWordCount)
+		=> new(this.Write(ShaderOp.Add, ShaderOpConstants.BinaryWordCount)
 							.Write(result)
 							.Write(left)
 							.Write(right));
+
+	public readonly ShaderWriter Subtract(int result, int left, int right)
+		=> new(this.Write(ShaderOp.Subtract, ShaderOpConstants.BinaryWordCount)
+							.Write(result)
+							.Write(left)
+							.Write(right));
+
+	public readonly ShaderWriter Sample(int result, int texture, int x, int y)
+		=> new(this.Write(ShaderOp.Sample, ShaderOpConstants.SampleWordCount)
+							.Write(result)
+							.Write(texture)
+							.Write(x)
+							.Write(y));
+
+	public readonly ShaderWriter Equals(int result, int left, int right)
+		=> new(this.Write(ShaderOp.Equals, ShaderOpConstants.BinaryWordCount)
+							.Write(result)
+							.Write(left)
+							.Write(right));
+
+	public readonly ShaderWriter Conditional(int result, int condition, int trueValue, int falseValue)
+		=> new(this.Write(ShaderOp.Conditional, ShaderOpConstants.ConditionalWordCount)
+							.Write(result)
+							.Write(condition)
+							.Write(trueValue)
+							.Write(falseValue));
 }
 
 internal static class ShaderOpConstants
@@ -93,10 +141,14 @@ internal static class ShaderOpConstants
 	public const uint LoadWordCount = 3;
 	public const uint ConstantWordCount = 3;
 	public const uint ReturnWordCount = 1;
-	public const uint AddWordCount = 4;
+	public const uint BinaryWordCount = 4;
+	public const uint SampleWordCount = 5;
+	public const uint ConditionalWordCount = 5;
 
 	public const uint DecorateWordCount = 3;
 	public const uint DecorateLocationWordCount = 4;
+	public const uint DecorateBindingWordCount = 4;
+	public const uint DecorateBuiltinWordCount = 4;
 }
 
 public readonly ref struct ShaderReader(BitReader reader)
@@ -194,6 +246,34 @@ public readonly ref struct ShaderReader(BitReader reader)
 		return new(reader.Read(out location));
 	}
 
+	public readonly ShaderReader DecorateBinding(out int target, out uint binding)
+	{
+		var reader = this.ReadDecorate(out target, out var decoration, ShaderOpConstants.DecorateBindingWordCount);
+
+		if (decoration != ShaderDecoration.Binding)
+		{
+			throw new InvalidOperationException($"Expected {ShaderDecoration.Binding} decoration but found {decoration}");
+		}
+
+		return new(reader.Read(out binding));
+	}
+
+	public readonly ShaderReader DecorateBuiltin(out int target, out Builtin builtin)
+	{
+		var reader = this.ReadDecorate(out target, out var decoration, ShaderOpConstants.DecorateBuiltinWordCount);
+
+		if (decoration != ShaderDecoration.Builtin)
+		{
+			throw new InvalidOperationException($"Expected {ShaderDecoration.Builtin} decoration but found {decoration}");
+		}
+
+		reader = reader.Read(out int builtinValue);
+
+		builtin = (Builtin)builtinValue;
+
+		return new(reader);
+	}
+
 	public readonly ShaderReader TypePointer(out int result, out ShaderStorageClass storageClass)
 	{
 		var reader = this.ReadShaderOp(ShaderOp.TypePointer, ShaderOpConstants.TypePointerWordCount);
@@ -281,7 +361,52 @@ public readonly ref struct ShaderReader(BitReader reader)
 
 	public readonly ShaderReader Add(out int result, out int left, out int right)
 	{
-		var reader = this.ReadShaderOp(ShaderOp.Add, ShaderOpConstants.AddWordCount);
+		var reader = this.ReadShaderOp(ShaderOp.Add, ShaderOpConstants.BinaryWordCount);
+
+		reader = reader.Read(out result).Read(out left).Read(out right);
+
+		return new(reader);
+	}
+
+	public readonly ShaderReader Sample(out int result, out int texture, out int x, out int y)
+	{
+		var reader = this.ReadShaderOp(ShaderOp.Sample, ShaderOpConstants.SampleWordCount);
+
+		reader = reader.Read(out result).Read(out texture).Read(out x).Read(out y);
+
+		return new(reader);
+	}
+
+	public readonly ShaderReader Equals(out int result, out int left, out int right)
+	{
+		var reader = this.ReadShaderOp(ShaderOp.Equals, ShaderOpConstants.BinaryWordCount);
+
+		reader = reader.Read(out result).Read(out left).Read(out right);
+
+		return new(reader);
+	}
+
+	public readonly ShaderReader Conditional(out int result, out int condition, out int trueValue, out int falseValue)
+	{
+		var reader = this.ReadShaderOp(ShaderOp.Conditional, ShaderOpConstants.ConditionalWordCount);
+
+		reader = reader.Read(out result).Read(out condition).Read(out trueValue).Read(out falseValue);
+
+		return new(reader);
+	}
+
+	public readonly ShaderReader Subtract(out int result, out int left, out int right)
+	{
+		var reader = this.ReadShaderOp(ShaderOp.Subtract, ShaderOpConstants.BinaryWordCount);
+
+		reader = reader.Read(out result).Read(out left).Read(out right);
+
+		return new(reader);
+	}
+
+	public readonly ShaderReader Binary(ShaderOp op, out int result, out int left, out int right)
+	{
+		var reader = this.ReadShaderOp(op, ShaderOpConstants.BinaryWordCount);
 
 		reader = reader.Read(out result).Read(out left).Read(out right);
 
