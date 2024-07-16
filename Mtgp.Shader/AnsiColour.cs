@@ -5,9 +5,9 @@ public enum AnsiColour
 	Black = 0,
 	Red = 1,
 	Green = 2,
-	Yellow = 3,
+	Yellow = Red | Green,
 	Blue = 4,
-	Magenta = 5,
-	Cyan = 6,
-	White = 7
+	Magenta = Red | Blue,
+	Cyan = Green | Blue,
+	White = Red | Green | Blue
 }

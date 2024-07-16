@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Mtgp.Shader\Mtgp.Shader.csproj" />
     <ProjectReference Include="..\Mtgp.Util\Mtgp.Util.csproj" />
+    <ProjectReference Include="..\Mtgp\Mtgp.csproj" />
   </ItemGroup>
 
   <ItemGroup>

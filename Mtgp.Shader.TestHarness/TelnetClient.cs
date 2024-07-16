@@ -13,6 +13,8 @@ public class TelnetClient
 	private readonly NetworkStream stream;
 	private readonly StreamWriter writer;
 
+	private readonly StringBuilder outputBuffer = new();
+
 	private readonly BufferBlock<string> stringBuffer = new();
 
 	private AnsiColour currentForeground = AnsiColour.White;
@@ -30,6 +32,12 @@ public class TelnetClient
 		this.writer.Write("\x1B[?7h");
 
 		_ = Task.Run(this.ReadLoop);
+	}
+
+	public void Present()
+	{
+		this.writer.Write(this.outputBuffer.ToString());
+		this.outputBuffer.Clear();
 	}
 
 	private async Task ReadLoop()
@@ -121,13 +129,13 @@ public class TelnetClient
 	{
 		if (this.currentForeground != foreground || force)
 		{
-			this.writer.Write($"\x1B[{(int)foreground + 30}m");
+			this.outputBuffer.Append($"\x1B[{(int)foreground + 30}m");
 			this.currentForeground = foreground;
 		}
 
 		if (this.currentBackground != background || force)
 		{
-			this.writer.Write($"\x1B[{(int)background + 40}m");
+			this.outputBuffer.Append($"\x1B[{(int)background + 40}m");
 			this.currentBackground = background;
 		}
 	}
@@ -168,43 +176,45 @@ public class TelnetClient
 
 	public void HideCursor()
 	{
-		this.writer.Write("\x1B[?25l");
+		this.outputBuffer.Append("\x1B[?25l");
 	}
 
 	public void MoveCursor(int x, int y)
 	{
-		this.writer.Write($"\x1B[{y + 1};{x + 1}H");
+		this.outputBuffer.Append($"\x1B[{y + 1};{x + 1}H");
 	}
 
 	public void SetWindowSize(int rows, int columns)
 	{
-		this.writer.Write($"\x1B[8;{rows};{columns}t");
+		this.outputBuffer.Append($"\x1B[8;{rows};{columns}t");
 	}
 
 	public void Clear(AnsiColour foreground = AnsiColour.White, AnsiColour background = AnsiColour.Black)
 	{
 		this.SetColour(foreground, background);
 
-		this.writer.Write("\x1B[H");
+		this.outputBuffer.Append("\x1B[H");
 		for (int y = 0; y < 24; y++)
 		{
-			this.writer.Write("\x1B[2K");
+			this.outputBuffer.Append("\x1B[2K");
 
 			if(y < 23)
 			{
-				this.writer.Write("\x1B[B");
+				this.outputBuffer.Append("\x1B[B");
 			}
 		}
-		this.writer.Write("\x1B[H");
+		this.outputBuffer.Append("\x1B[H");
 	}
 
 	public void Write(ReadOnlySpan<char> value)
 	{
+		this.Present();
 		this.writer.Write(value);
 	}
 
 	public void WriteLine(ReadOnlySpan<char> value)
 	{
+		this.Present();
 		this.writer.WriteLine(value);
 	}
 
@@ -216,7 +226,7 @@ public class TelnetClient
 		GC.SuppressFinalize(this);
 	}
 
-	public void Present(ReadOnlySpan<RuneDelta> value)
+	public void Draw(ReadOnlySpan<RuneDelta> value)
 	{
 		var sortedValues = value.ToArray();
 		sortedValues = [.. sortedValues.Select((x, index) => (Value: x, Index: index))
@@ -276,7 +286,7 @@ public class TelnetClient
 				}
 				else
 				{
-					this.Write(buffer[..count]);
+					this.outputBuffer.Append(buffer[..count]);
 					count = 0;
 				}
 			}
@@ -299,7 +309,7 @@ public class TelnetClient
 
 		if (count > 0)
 		{
-			this.Write(buffer[..count]);
+			this.outputBuffer.Append(buffer[..count]);
 		}
 	}
 }

@@ -12,6 +12,8 @@ public class RenderPass
 		new(8)
 	];
 
+	public record ImageAttachmentDescriptor(int Binding, int Width, int Height);
+
 	private record ShaderAttribute(ShaderType Type, int Location);
 
 	private readonly IPresentReceiver receiver;
@@ -116,14 +118,15 @@ public class RenderPass
 	}
 
 	public Memory<byte>[] Attachments { get; } = new Memory<byte>[8];
+	public List<ImageAttachmentDescriptor> ImageAttachmentDescriptors { get; } = [];
 
 	public (int X, int Y) ViewportSize { get; set; }
 
 	public void Execute(int instanceCount, int vertexCount)
 	{
-		const int instanceSize = 12;
+		const int instanceSize = 16;
 		Span<byte> vertexOutput = stackalloc byte[8 * 2];
-		Span<byte> vertexInput = stackalloc byte[12];
+		Span<byte> vertexInput = stackalloc byte[instanceSize];
 
 		Span<RuneDelta> deltas = stackalloc RuneDelta[80];
 		Span<byte> output = stackalloc byte[12];
@@ -134,6 +137,10 @@ public class RenderPass
 		var inputBuiltins = new ShaderInterpreter.Builtins();
 		Span<ShaderInterpreter.Builtins> vertexOutputBuiltins = stackalloc ShaderInterpreter.Builtins[2];
 
+		var attachments = this.Attachments.Select((x, index) => (x, this.ImageAttachmentDescriptors.Where(x=>x.Binding==index).SingleOrDefault())).ToArray();
+
+		var deltaBuffer = new List<RuneDelta>();
+
 		for (int instanceIndex = 0; instanceIndex < instanceCount; instanceIndex++)
 		{
 			for (int vertexIndex = 0; vertexIndex < vertexCount; vertexIndex++)
@@ -143,7 +150,7 @@ public class RenderPass
 
 				inputBuiltins.VertexIndex = vertexIndex;
 
-				this.vertex.Execute(this.Attachments, inputBuiltins, vertexInput, ref vertexOutputBuiltins[vertexIndex], vertexOutput[(vertexIndex * 8)..][..8]);
+				this.vertex.Execute(attachments, inputBuiltins, vertexInput, ref vertexOutputBuiltins[vertexIndex], vertexOutput[(vertexIndex * 8)..][..8]);
 			}
 
 			(float X, float Y) uScale = (1f, 0f);
@@ -198,7 +205,7 @@ public class RenderPass
 						.Write(u)
 						.Write(v);
 
-					this.fragment.Execute(this.Attachments, inputBuiltins, fragmentInput, ref outputBuiltins, output);
+					this.fragment.Execute(attachments, inputBuiltins, fragmentInput, ref outputBuiltins, output);
 
 					var rune = Unsafe.As<byte, Rune>(ref output[0]);
 
@@ -215,7 +222,11 @@ public class RenderPass
 				}
 			}
 
-			this.receiver.Present(deltas[..((deltaX + 1) * (deltaY + 1))]);
+			deltaBuffer.AddRange(deltas[..((deltaX + 1) * (deltaY + 1))]);
 		}
+
+		this.receiver.Draw(deltaBuffer.ToArray());
+
+		this.receiver.Present();
 	}
 }

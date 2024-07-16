@@ -22,7 +22,7 @@
 			public int PositionY = positionY;
 		}
 
-		public void Execute(Memory<byte>[] attachments, Builtins inputBuiltins, ReadOnlySpan<byte> input, ref Builtins outputBuiltins, Span<byte> output)
+		public void Execute((Memory<byte> Buffer, RenderPass.ImageAttachmentDescriptor? Image)[] attachments, Builtins inputBuiltins, ReadOnlySpan<byte> input, ref Builtins outputBuiltins, Span<byte> output)
 		{
 			bool isRunning = true;
 
@@ -172,12 +172,13 @@
 
 							var variableData = variableDecorations[texture];
 
-							var textureData = attachments[(int)variableData.Binding!].Span;
+							var textureImage = attachments[(int)variableData.Binding!];
+							var textureData = textureImage.Buffer.Span;
 
 							int textureX = results[x];
 							int textureY = results[y];
 
-							int textureIndex = textureX + textureY * 80;
+							int textureIndex = textureX + textureY * textureImage.Image!.Width;
 
 							results[result] = BitConverter.ToInt32(textureData[(textureIndex * 4)..]);
 							break;
