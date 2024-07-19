@@ -1,10 +1,98 @@
 ﻿namespace Mtgp.Shader
 {
-	public class ShaderInterpreter(Memory<byte> compiledShader, int[] inputMappings, int[] outputMappings)
+	public class ShaderInterpreter
 	{
-		private readonly Memory<byte> compiledShader = compiledShader;
-		private readonly int[] inputMappings = inputMappings;
-		private readonly int[] outputMappings = outputMappings;
+		private readonly Memory<byte> compiledShader;
+		private readonly int[] inputMappings;
+		private readonly int[] outputMappings;
+
+		public ShaderInterpreter(Memory<byte> compiledShader)
+		{
+			this.compiledShader = compiledShader;
+
+			var (inputs, outputs) = GetAttributes(compiledShader);
+
+			this.inputMappings = inputs.Select(x => x.Type.Size).RunningOffset().ToArray();
+			this.outputMappings = outputs.Select(x => x.Type.Size).RunningOffset().ToArray();
+		}
+
+		private record ShaderAttribute(ShaderType Type, int Location);
+
+		private static (ShaderAttribute[] Inputs, ShaderAttribute[] Outputs) GetAttributes(Memory<byte> compiledShader)
+		{
+			var shaderReader = new ShaderReader(compiledShader.Span);
+
+			while (!shaderReader.EndOfStream && shaderReader.Next != ShaderOp.EntryPoint)
+			{
+				shaderReader = shaderReader.Skip();
+			}
+
+			if (shaderReader.EndOfStream)
+			{
+				throw new InvalidOperationException("No entry point found");
+			}
+
+			shaderReader.EntryPoint(out uint variableCount);
+
+			var inputs = new List<ShaderAttribute>();
+			var outputs = new List<ShaderAttribute>();
+			Span<int> variables = stackalloc int[(int)variableCount];
+
+			shaderReader.EntryPoint(variables, out _);
+
+			shaderReader = shaderReader.EntryPoint(out _);
+
+			var locations = new Dictionary<int, uint>();
+			var storageClasses = new Dictionary<int, ShaderStorageClass>();
+
+			while (!shaderReader.EndOfStream)
+			{
+				var op = shaderReader.Next;
+
+				switch (op)
+				{
+					case ShaderOp.Decorate:
+						shaderReader.Decorate(out int target, out var decoration);
+
+						if (variables.Contains(target) && decoration == ShaderDecoration.Location)
+						{
+							shaderReader.DecorateLocation(out _, out uint location);
+
+							locations[target] = location;
+						}
+						break;
+					case ShaderOp.Variable:
+						shaderReader.Variable(out int result, out var storageClass);
+
+						if (variables.Contains(result))
+						{
+							storageClasses[result] = storageClass;
+						}
+						break;
+				}
+
+				shaderReader = shaderReader.Skip();
+			}
+
+			foreach (var variable in variables)
+			{
+				if (locations.TryGetValue(variable, out var location) && storageClasses.TryGetValue(variable, out var storageClass))
+				{
+					var attribute = new ShaderAttribute(ShaderType.Int32, (int)location);
+
+					if (storageClass == ShaderStorageClass.Input)
+					{
+						inputs.Add(attribute);
+					}
+					else if (storageClass == ShaderStorageClass.Output)
+					{
+						outputs.Add(attribute);
+					}
+				}
+			}
+
+			return (inputs.ToArray(), outputs.ToArray());
+		}
 
 		private class VariableInfo
 		{
@@ -22,7 +110,7 @@
 			public int PositionY = positionY;
 		}
 
-		public void Execute((Memory<byte> Buffer, RenderPass.ImageAttachmentDescriptor? Image)[] attachments, Builtins inputBuiltins, ReadOnlySpan<byte> input, ref Builtins outputBuiltins, Span<byte> output)
+		public void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, Builtins inputBuiltins, ReadOnlySpan<byte> input, ref Builtins outputBuiltins, Span<byte> output)
 		{
 			bool isRunning = true;
 
@@ -172,13 +260,13 @@
 
 							var variableData = variableDecorations[texture];
 
-							var textureImage = attachments[(int)variableData.Binding!];
-							var textureData = textureImage.Buffer.Span;
+							var textureImage = imageAttachments[(int)variableData.Binding!];
+							var textureData = textureImage.Data.Span;
 
 							int textureX = results[x];
 							int textureY = results[y];
 
-							int textureIndex = textureX + textureY * textureImage.Image!.Width;
+							int textureIndex = textureX + textureY * textureImage.Size.Width;
 
 							results[result] = BitConverter.ToInt32(textureData[(textureIndex * 4)..]);
 							break;

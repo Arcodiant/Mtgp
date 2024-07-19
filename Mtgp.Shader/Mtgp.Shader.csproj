@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Mtgp.Util\Mtgp.Util.csproj" />
+    <ProjectReference Include="..\Mtgp\Mtgp.csproj" />
   </ItemGroup>
 
 </Project>
