@@ -16,7 +16,7 @@ public record ImageState((int Width, int Height, int Depth) Size, ImageFormat Fo
 		};
 }
 
-public class RenderPass(IPresentReceiver receiver, ShaderInterpreter vertexShader, InputRate inputRate, PolygonMode polygonMode, ShaderInterpreter fragmentShader, (int X, int Y) viewportSize)
+public class RenderPass(IPresentReceiver receiver, ShaderInterpreter vertexShader, InputRate inputRate, PolygonMode polygonMode, ShaderInterpreter fragmentShader, (int X, int Y, int Width, int Height) viewport)
 {
 	private static readonly FragmentOutputMapping[] fragmentOutputMappings =
 	[
@@ -29,7 +29,7 @@ public class RenderPass(IPresentReceiver receiver, ShaderInterpreter vertexShade
 	private readonly ShaderInterpreter vertex = vertexShader;
 	private readonly ShaderInterpreter fragment = fragmentShader;
 
-	public (int X, int Y) ViewportSize { get; set; } = viewportSize;
+	public (int X, int Y, int Width, int Height) Viewport { get; set; } = viewport;
 
 	public ImageState[] ImageAttachments { get; } = new ImageState[8];
 	public Memory<byte>[] BufferAttachments { get; } = new Memory<byte>[8];
@@ -52,98 +52,105 @@ public class RenderPass(IPresentReceiver receiver, ShaderInterpreter vertexShade
 
 		var attachment = this.BufferAttachments[1];
 
+		int pairCount = vertexCount / 2;
+
 		for (int instanceIndex = 0; instanceIndex < instanceCount; instanceIndex++)
 		{
-			for (int vertexIndex = 0; vertexIndex < vertexCount; vertexIndex++)
+			for (int pairIndex = 0; pairIndex < pairCount; pairIndex++)
 			{
-				switch (inputRate)
+				for (int vertexIndex = 0; vertexIndex < 2; vertexIndex++)
 				{
-					case InputRate.PerInstance:
-						attachment.Span[(instanceIndex * instanceSize)..][..instanceSize].CopyTo(vertexInput);
-						break;
-					case InputRate.PerVertex:
-						attachment.Span[(vertexIndex * 8)..][..8].CopyTo(vertexInput);
-						break;
-					default:
-						throw new NotSupportedException();
-				}
-
-				inputBuiltins = new()
-				{
-					VertexIndex = vertexIndex
-				};
-
-				this.vertex.Execute(this.ImageAttachments, this.BufferAttachments, inputBuiltins, vertexInput, ref vertexOutputBuiltins[vertexIndex], vertexOutput[(vertexIndex * 8)..][..8]);
-			}
-
-			(float X, float Y, float W) uScale = (1f, 0f, 0f);
-			(float X, float Y, float W) vScale = (0f, 1f, 0f);
-
-			uScale = MathsUtil.Normalise(uScale);
-
-			vScale = MathsUtil.Normalise(vScale);
-
-			new BitReader(vertexOutput)
-				.Read(out int fromU)
-				.Read(out int fromV)
-				.Read(out int toU)
-				.Read(out int toV);
-
-			int fromX = vertexOutputBuiltins[0].PositionX;
-			int fromY = vertexOutputBuiltins[0].PositionY;
-			int toX = vertexOutputBuiltins[1].PositionX;
-			int toY = vertexOutputBuiltins[1].PositionY;
-
-			int deltaX = toX - fromX;
-			int deltaY = toY - fromY;
-			int deltaU = toU - fromU;
-			int deltaV = toV - fromV;
-
-			for (int y = fromY; y < toY + 1; y++)
-			{
-				float yNormalised = deltaY == 0f ? 0f : (float)(y - fromY) / deltaY;
-
-				for (int x = fromX; x < toX + 1; x++)
-				{
-					if(polygonMode == PolygonMode.Line && !(x == fromX || x == toX || y == fromY || y == toY))
+					switch (inputRate)
 					{
-						continue;
+						case InputRate.PerInstance:
+							attachment.Span[(instanceIndex * instanceSize)..][..instanceSize].CopyTo(vertexInput);
+							break;
+						case InputRate.PerVertex:
+							attachment.Span[((pairIndex * 2 + vertexIndex) * 8)..][..8].CopyTo(vertexInput);
+							break;
+						default:
+							throw new NotSupportedException();
 					}
 
-					float xNormalised = deltaX == 0f ? 0f : (float)(x - fromX) / deltaX;
-
-					int u = fromU + (int)MathF.Round(deltaU * MathsUtil.DotProduct(uScale, (xNormalised, yNormalised, 1)));
-					int v = fromV + (int)MathF.Round(deltaV * MathsUtil.DotProduct(vScale, (xNormalised, yNormalised, 1)));
-
-					var outputBuiltins = new ShaderInterpreter.Builtins();
-
-					inputBuiltins = new ShaderInterpreter.Builtins
+					inputBuiltins = new()
 					{
-						VertexIndex = 0,
-						InstanceIndex = instanceIndex,
-						PositionX = x,
-						PositionY = y
+						VertexIndex = vertexIndex
 					};
 
-					new BitWriter(fragmentInput)
-						.Write(u)
-						.Write(v);
+					this.vertex.Execute(this.ImageAttachments, this.BufferAttachments, inputBuiltins, vertexInput, ref vertexOutputBuiltins[vertexIndex], vertexOutput[(vertexIndex * 8)..][..8]);
+				}
 
-					this.fragment.Execute(this.ImageAttachments, this.BufferAttachments, inputBuiltins, fragmentInput, ref outputBuiltins, output);
+				(float X, float Y, float W) uScale = (1f, 0f, 0f);
+				(float X, float Y, float W) vScale = (0f, 1f, 0f);
 
-					var rune = Unsafe.As<byte, Rune>(ref output[0]);
+				uScale = MathsUtil.Normalise(uScale);
 
-					var delta = new RuneDelta
+				vScale = MathsUtil.Normalise(vScale);
+
+				new BitReader(vertexOutput)
+					.Read(out int fromU)
+					.Read(out int fromV)
+					.Read(out int toU)
+					.Read(out int toV);
+
+				int fromX = vertexOutputBuiltins[0].PositionX;
+				int fromY = vertexOutputBuiltins[0].PositionY;
+				int toX = vertexOutputBuiltins[1].PositionX;
+				int toY = vertexOutputBuiltins[1].PositionY;
+
+				int deltaX = toX - fromX;
+				int deltaY = toY - fromY;
+				int deltaU = toU - fromU;
+				int deltaV = toV - fromV;
+
+				for (int y = fromY; y < toY + 1; y++)
+				{
+					float yNormalised = deltaY == 0f ? 0f : (float)(y - fromY) / deltaY;
+
+					for (int x = fromX; x < toX + 1; x++)
 					{
-						X = x,
-						Y = y,
-						Value = rune,
-						Foreground = (AnsiColour)output[4],
-						Background = (AnsiColour)output[5]
-					};
+						if (polygonMode == PolygonMode.Line && !(x == fromX || x == toX || y == fromY || y == toY))
+						{
+							continue;
+						}
 
-					if (MathsUtil.IsWithin((delta.X, delta.Y), (0, 0), (this.ViewportSize.X - 1, this.ViewportSize.Y - 1)))
-					{
+						if (!MathsUtil.IsWithin((x, y), (0, 0), (this.Viewport.Width - 1, this.Viewport.Height - 1)))
+						{
+							continue;
+						}
+
+						float xNormalised = deltaX == 0f ? 0f : (float)(x - fromX) / deltaX;
+
+						int u = fromU + (int)MathF.Round(deltaU * MathsUtil.DotProduct(uScale, (xNormalised, yNormalised, 1)));
+						int v = fromV + (int)MathF.Round(deltaV * MathsUtil.DotProduct(vScale, (xNormalised, yNormalised, 1)));
+
+						var outputBuiltins = new ShaderInterpreter.Builtins();
+
+						inputBuiltins = new ShaderInterpreter.Builtins
+						{
+							VertexIndex = 0,
+							InstanceIndex = instanceIndex,
+							PositionX = x,
+							PositionY = y
+						};
+
+						new BitWriter(fragmentInput)
+							.Write(u)
+							.Write(v);
+
+						this.fragment.Execute(this.ImageAttachments, this.BufferAttachments, inputBuiltins, fragmentInput, ref outputBuiltins, output);
+
+						var rune = Unsafe.As<byte, Rune>(ref output[0]);
+
+						var delta = new RuneDelta
+						{
+							X = x + this.Viewport.X,
+							Y = y + this.Viewport.Y,
+							Value = rune,
+							Foreground = (AnsiColour)output[4],
+							Background = (AnsiColour)output[5]
+						};
+
 						deltaBuffer.Add(delta);
 					}
 				}

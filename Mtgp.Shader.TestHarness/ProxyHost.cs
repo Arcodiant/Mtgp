@@ -7,12 +7,14 @@ internal class ProxyHost(TcpClient client)
 	: ICoreExtension, IShaderExtension, IDisposable
 {
 	private readonly List<byte[]> buffers = [];
+	private readonly List<Memory<byte>> bufferViews = [];
 	private readonly List<ImageState> images = [];
 	private readonly List<(Queue<string> Queue, List<Action> Handlers)> pipes = [];
 	private readonly List<IFixedFunctionPipeline> fixedFunctionPipelines = [];
 	private readonly List<ShaderInterpreter> shaders = [];
 	private readonly List<RenderPass> renderPasses = [];
 	private readonly List<List<IAction>> actionLists = [];
+	private readonly Dictionary<DefaultPipe, int> defaultPipes = [];
 	private readonly TelnetClient telnetClient = new(client);
 	private bool disposedValue;
 
@@ -28,6 +30,17 @@ internal class ProxyHost(TcpClient client)
 		telnetClient.SendCommand(TelnetCommand.DO, TelnetOption.TerminalType);
 		telnetClient.SendCommand(TelnetCommand.DO, TelnetOption.NewEnvironmentOption);
 		telnetClient.SendSubnegotiation(TelnetOption.TerminalType, TelnetSubNegotiationCommand.Send, []);
+
+		_ = Task.Run(async () =>
+		{
+			await foreach (var line in telnetClient.IncomingMessages.ReadAllAsync())
+			{
+				if (this.defaultPipes.TryGetValue(DefaultPipe.Input, out var pipe))
+				{
+					this.OnMessage?.Invoke((pipe, line));
+				}
+			}
+		});
 	}
 
 	private static int AddResource<T>(List<T> collection, T item)
@@ -42,19 +55,22 @@ internal class ProxyHost(TcpClient client)
 	public int CreateBuffer(int size)
 		=> AddResource(this.buffers, new byte[size]);
 
+	public int CreateBufferView(int buffer, int offset, int size)
+		=> AddResource(this.bufferViews, this.buffers[buffer].AsMemory()[offset..(offset + size)]);
+
 	public int CreateImage((int Width, int Height, int Depth) size, ImageFormat format)
 		=> AddResource(this.images, new(size, format));
 
 	public int CreatePipe()
 		=> AddResource(this.pipes, ([], []));
 
-	public int CreateRenderPass(Dictionary<int, int> imageAttachments, Dictionary<int, int> bufferAttachments, InputRate inputRate, PolygonMode polygonMode, int vertexShader, int fragmentShader, (int X, int Y) viewportSize)
+	public int CreateRenderPass(Dictionary<int, int> imageAttachments, Dictionary<int, int> bufferAttachments, InputRate inputRate, PolygonMode polygonMode, int vertexShader, int fragmentShader, (int X, int Y, int Width, int Height) viewport)
 	{
-		var pass = new RenderPass(this.telnetClient, this.shaders[vertexShader], inputRate, polygonMode, this.shaders[fragmentShader], viewportSize);
+		var pass = new RenderPass(this.telnetClient, this.shaders[vertexShader], inputRate, polygonMode, this.shaders[fragmentShader], viewport);
 
-		foreach(var item in bufferAttachments)
+		foreach (var item in bufferAttachments)
 		{
-			pass.BufferAttachments[item.Key] = this.buffers[item.Value];
+			pass.BufferAttachments[item.Key] = this.bufferViews[item.Value];
 		}
 
 		foreach (var item in imageAttachments)
@@ -75,10 +91,17 @@ internal class ProxyHost(TcpClient client)
 		=> this.actionLists[actionList].Add(new ClearAction(this.telnetClient));
 
 	public void AddIndirectDrawAction(int actionList, int renderPass, int indirectCommandBuffer, int offset)
-		=> this.actionLists[actionList].Add(new IndirectDrawAction(this.renderPasses[renderPass], this.buffers[indirectCommandBuffer], offset));
+		=> this.actionLists[actionList].Add(new IndirectDrawAction(this.renderPasses[renderPass], this.bufferViews[indirectCommandBuffer], offset));
 
 	public void AddDrawAction(int actionList, int renderPass, int instanceCount, int vertexCount)
 		=> this.actionLists[actionList].Add(new DrawAction(this.renderPasses[renderPass], instanceCount, vertexCount));
+
+	public void SetDefaultPipe(DefaultPipe pipe, int pipeId)
+		=> this.defaultPipes[pipe] = pipe switch
+			{
+				DefaultPipe.Input or DefaultPipe.Error => pipeId,
+				_ => throw new ArgumentOutOfRangeException(nameof(pipe)),
+			};
 
 	public void SetActionTrigger(int actionList, int pipe)
 		=> this.pipes[pipe].Handlers.Add(() =>
@@ -89,16 +112,8 @@ internal class ProxyHost(TcpClient client)
 				}
 			});
 
-	public (int LineImage, int InstanceBuffer, int IndirectCommandBuffer, int Pipeline) CreateStringSplitPipeline((int Width, int Height) viewport, int linesPipe)
-	{
-		var lineImage = this.CreateImage((viewport.Width * viewport.Height, 1, 1), ImageFormat.T32);
-		var instanceBuffer = this.CreateBuffer(viewport.Height * 16);
-		var indirectCommandBuffer = this.CreateBuffer(8);
-
-		this.fixedFunctionPipelines.Add(new StringSplitPipeline(this.pipes[linesPipe].Queue, this.images[lineImage].Data, this.buffers[instanceBuffer], this.buffers[indirectCommandBuffer], viewport.Height, viewport.Width));
-
-		return (lineImage, instanceBuffer, indirectCommandBuffer, this.fixedFunctionPipelines.Count - 1);
-	}
+	public int CreateStringSplitPipeline((int Width, int Height) viewport, int linesPipe, int lineImage, int instanceBufferView, int indirectCommandBufferView)
+		=> AddResource(this.fixedFunctionPipelines, new StringSplitPipeline(this.pipes[linesPipe].Queue, this.images[lineImage].Data, this.bufferViews[instanceBufferView], this.bufferViews[indirectCommandBufferView], viewport.Height, viewport.Width));
 
 	public void SetBufferData(int buffer, int offset, ReadOnlySpan<byte> data)
 	{
@@ -119,10 +134,7 @@ internal class ProxyHost(TcpClient client)
 		}
 	}
 
-	public async Task RunAsync()
-	{
-		await telnetClient.ReadLineAsync();
-	}
+	public event Action<(int Pipe, string Message)>? OnMessage;
 
 	protected virtual void Dispose(bool disposing)
 	{

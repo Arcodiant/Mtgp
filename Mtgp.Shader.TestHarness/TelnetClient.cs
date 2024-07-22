@@ -2,6 +2,7 @@ using Mtgp.Shader;
 using Serilog;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading.Channels;
 using System.Threading.Tasks.Dataflow;
 
 namespace Mtgp;
@@ -15,7 +16,7 @@ public class TelnetClient
 
 	private readonly StringBuilder outputBuffer = new();
 
-	private readonly BufferBlock<string> stringBuffer = new();
+	private readonly Channel<string> incomingBuffer = Channel.CreateUnbounded<string>();
 
 	private AnsiColour currentForeground = AnsiColour.White;
 	private AnsiColour currentBackground = AnsiColour.Black;
@@ -105,20 +106,23 @@ public class TelnetClient
 						return builder;
 					}).ToString();
 
-					Log.Debug("Received: {value}", cleanedLine);
+					Log.Verbose("Received: {value}", cleanedLine);
 
 					var lines = stringEvent.Value.Split('\n');
 
 					foreach (var line in lines[..^1])
 					{
-						this.stringBuffer.Post(line + '\n');
+						await this.incomingBuffer.Writer.WriteAsync(line + '\n');
 					}
 
-					this.stringBuffer.Post(lines[^1] + (stringEvent.Value.EndsWith('\n') ? "\n" : ""));
+					if (!string.IsNullOrEmpty(lines[^1]))
+					{
+						await this.incomingBuffer.Writer.WriteAsync(lines[^1]);
+					}
 
 					break;
 				case TelnetCloseEvent _:
-					this.stringBuffer.Complete();
+					this.incomingBuffer.Writer.Complete();
 					Log.Debug("Connection closed.");
 					return;
 			}
@@ -155,25 +159,6 @@ public class TelnetClient
 		this.stream.Write([(byte)TelnetCommand.IAC, (byte)TelnetCommand.SB, (byte)option, (byte)subCommand, .. data, (byte)TelnetCommand.IAC, (byte)TelnetCommand.SE]);
 	}
 
-	public async Task<string?> ReadLineAsync()
-	{
-		try
-		{
-			var line = await this.stringBuffer.ReceiveAsync();
-
-			while (!line.EndsWith('\n'))
-			{
-				line += await this.stringBuffer.ReceiveAsync();
-			}
-
-			return line;
-		}
-		catch (InvalidOperationException)
-		{
-			return null;
-		}
-	}
-
 	public void HideCursor()
 	{
 		this.outputBuffer.Append("\x1B[?25l");
@@ -198,7 +183,7 @@ public class TelnetClient
 		{
 			this.outputBuffer.Append("\x1B[2K");
 
-			if(y < 23)
+			if (y < 23)
 			{
 				this.outputBuffer.Append("\x1B[B");
 			}
@@ -217,6 +202,8 @@ public class TelnetClient
 		this.Present();
 		this.writer.WriteLine(value);
 	}
+
+	public ChannelReader<string> IncomingMessages => this.incomingBuffer.Reader;
 
 	public void Dispose()
 	{

@@ -33,30 +33,61 @@ try
 	proxy.Start();
 
 	var (textVertexShader, textFragmentShader) = CreateTextShaders(proxy);
-	var (mapVertexShader, mapFragmentShader) = CreateMapShaders(proxy);
+	var (mapVertexShader, mapFragmentShader) = CreateUIShaders(proxy, AnsiColour.Green, '#');
+	var (borderVertexShader, borderFragmentShader) = CreateUIShaders(proxy, AnsiColour.White, '*');
 
 	int inputPipe = proxy.CreatePipe();
+	int dataBuffer = proxy.CreateBuffer(4096);
 
-	var (textLinesImage, LinesInstanceBuffer, indirectCommandBuffer, pipeline) = proxy.CreateStringSplitPipeline((60, 24), inputPipe);
+	int textLinesImage = proxy.CreateImage((60 * 24, 1, 1), ImageFormat.T32);
 
-	var mapVertexBuffer = proxy.CreateBuffer(8 * 4);
+	int linesInstanceBufferView = proxy.CreateBufferView(dataBuffer, 0, 16 * 100);
+	int indirectCommandBufferView = proxy.CreateBufferView(dataBuffer, 16 * 100, 8);
+
+	int pipeline = proxy.CreateStringSplitPipeline((58, 19), inputPipe, textLinesImage, linesInstanceBufferView, indirectCommandBufferView);
+
+	var mapVertexBuffer = proxy.CreateBuffer(1024);
 
 	proxy.SetBufferData(mapVertexBuffer, 0,
 	[
-		60, 0, 0, 0,
+		61, 0, 0, 0,
+		1, 0, 0, 0,
+		78, 0, 0, 0,
+		13, 0, 0, 0,
+	]);
+	proxy.SetBufferData(mapVertexBuffer, 16,
+	[
+		0, 0, 0, 0,
 		0, 0, 0, 0,
 		79, 0, 0, 0,
-		14, 0, 0, 0
+		23, 0, 0, 0,
+		61, 0, 0, 0,
+		14, 0, 0, 0,
+		79, 0, 0, 0,
+		14, 0, 0, 0,
+		61, 0, 0, 0,
+		0, 0, 0, 0,
+		61, 0, 0, 0,
+		23, 0, 0, 0,
+		0, 0, 0, 0,
+		20, 0, 0, 0,
+		61, 0, 0, 0,
+		20, 0, 0, 0,
 	]);
 
-	int textRenderPass = proxy.CreateRenderPass(new() { [0] = textLinesImage }, new() { [1] = LinesInstanceBuffer }, InputRate.PerInstance, PolygonMode.Fill, textVertexShader, textFragmentShader, (60, 24));
-	int mapRenderPass = proxy.CreateRenderPass([], new() { [1] = mapVertexBuffer }, InputRate.PerVertex, PolygonMode.Line, mapVertexShader, mapFragmentShader, (80, 24));
+	int mapVertexBufferView = proxy.CreateBufferView(mapVertexBuffer, 0, 16);
+	int borderVertexBufferView = proxy.CreateBufferView(mapVertexBuffer, 16, 64);
+
+	int textRenderPass = proxy.CreateRenderPass(new() { [0] = textLinesImage }, new() { [1] = linesInstanceBufferView }, InputRate.PerInstance, PolygonMode.Fill, textVertexShader, textFragmentShader, (1, 1, 58, 19));
+	int mapRenderPass = proxy.CreateRenderPass([], new() { [1] = mapVertexBufferView }, InputRate.PerVertex, PolygonMode.Fill, mapVertexShader, mapFragmentShader, (0, 0, 80, 24));
+	int borderRenderPass = proxy.CreateRenderPass([], new() { [1] = borderVertexBufferView }, InputRate.PerVertex, PolygonMode.Line, borderVertexShader, borderFragmentShader, (0, 0, 80, 24));
 
 	int actionList = proxy.CreateActionList();
 	proxy.AddRunPipelineAction(actionList, pipeline);
 	proxy.AddClearBufferAction(actionList);
-	proxy.AddIndirectDrawAction(actionList, textRenderPass, indirectCommandBuffer, 0);
+	proxy.AddIndirectDrawAction(actionList, textRenderPass, indirectCommandBufferView, 0);
 	proxy.AddDrawAction(actionList, mapRenderPass, 1, 2);
+	proxy.AddDrawAction(actionList, borderRenderPass, 1, 8);
 
 	proxy.SetActionTrigger(actionList, inputPipe);
 
@@ -64,7 +95,30 @@ try
 	proxy.Send(inputPipe, "This is a test");
 	proxy.Send(inputPipe, "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.");
 
-	await proxy.RunAsync();
+	var runningFlag = new SemaphoreSlim(0);
+
+	proxy.SetDefaultPipe(DefaultPipe.Input, 0);
+
+	var messageData = new StringBuilder();
+
+	proxy.OnMessage += data =>
+	{
+		messageData.Append(data.Message.TrimEnd());
+
+		if (data.Message.Contains('\n'))
+		{
+			proxy.Send(inputPipe, "> " + messageData.ToString());
+
+			if (messageData.ToString() == "quit")
+			{
+				runningFlag.Release();
+			}
+
+			messageData.Clear();
+		}
+	};
+
+	await runningFlag.WaitAsync();
 
 	listener.Stop();
 }
@@ -77,7 +131,7 @@ Log.Information("Finished");
 
 Log.CloseAndFlush();
 
-static (int VertexShader, int FragmentShader) CreateMapShaders(ProxyHost proxy)
+static (int VertexShader, int FragmentShader) CreateUIShaders(ProxyHost proxy, AnsiColour colour, char character)
 {
 	var fragmentShaderCode = new byte[1024];
 
@@ -89,9 +143,9 @@ static (int VertexShader, int FragmentShader) CreateMapShaders(ProxyHost proxy)
 									.Variable(0, ShaderStorageClass.Output)
 									.Variable(1, ShaderStorageClass.Output)
 									.Variable(2, ShaderStorageClass.Output)
-									.Constant(11, (int)AnsiColour.Green)
+									.Constant(11, (int)colour)
 									.Constant(12, (int)AnsiColour.Black)
-									.Constant(13, Rune.TryCreate('#', out var rune) ? rune.Value : 0)
+									.Constant(13, Rune.TryCreate(character, out var rune) ? rune.Value : 0)
 									.Store(0, 13)
 									.Store(1, 11)
 									.Store(2, 12)
