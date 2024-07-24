@@ -15,7 +15,8 @@ public enum ShaderOp
 	Sample,
 	Conditional,
 	Equals,
-	Subtract
+	Subtract,
+	Mod
 }
 
 public enum ShaderStorageClass
@@ -37,7 +38,8 @@ public enum Builtin
 	VertexIndex,
 	InstanceIndex,
 	PositionX,
-	PositionY
+	PositionY,
+	Timer
 }
 
 public readonly ref struct ShaderWriter(BitWriter writer)
@@ -108,6 +110,12 @@ public readonly ref struct ShaderWriter(BitWriter writer)
 
 	public readonly ShaderWriter Subtract(int result, int left, int right)
 		=> new(this.Write(ShaderOp.Subtract, ShaderOpConstants.BinaryWordCount)
+							.Write(result)
+							.Write(left)
+							.Write(right));
+
+	public readonly ShaderWriter Mod(int result, int left, int right)
+		=> new(this.Write(ShaderOp.Mod, ShaderOpConstants.BinaryWordCount)
 							.Write(result)
 							.Write(left)
 							.Write(right));
@@ -398,6 +406,15 @@ public readonly ref struct ShaderReader(BitReader reader)
 	public readonly ShaderReader Subtract(out int result, out int left, out int right)
 	{
 		var reader = this.ReadShaderOp(ShaderOp.Subtract, ShaderOpConstants.BinaryWordCount);
+
+		reader = reader.Read(out result).Read(out left).Read(out right);
+
+		return new(reader);
+	}
+
+	public readonly ShaderReader Mod(out int result, out int left, out int right)
+	{
+		var reader = this.ReadShaderOp(ShaderOp.Mod, ShaderOpConstants.BinaryWordCount);
 
 		reader = reader.Read(out result).Read(out left).Read(out right);
 

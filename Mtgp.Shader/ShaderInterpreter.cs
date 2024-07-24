@@ -102,12 +102,13 @@
 			public ShaderStorageClass? StorageClass { get; set; }
 		}
 
-		public struct Builtins(int vertexIndex = 0, int instanceIndex = 0, int positionX = 0, int positionY = 0)
+		public struct Builtins(int vertexIndex = 0, int instanceIndex = 0, int positionX = 0, int positionY = 0, int timer = 0)
 		{
 			public int VertexIndex = vertexIndex;
 			public int InstanceIndex = instanceIndex;
 			public int PositionX = positionX;
 			public int PositionY = positionY;
+			public int Timer = timer;
 		}
 
 		public void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, Builtins inputBuiltins, ReadOnlySpan<byte> input, ref Builtins outputBuiltins, Span<byte> output)
@@ -190,6 +191,9 @@
 										{
 											Builtin.VertexIndex => inputBuiltins.VertexIndex,
 											Builtin.InstanceIndex => inputBuiltins.InstanceIndex,
+											Builtin.Timer => inputBuiltins.Timer,
+											Builtin.PositionX => inputBuiltins.PositionX,
+											Builtin.PositionY => inputBuiltins.PositionY,
 											_ => throw new InvalidOperationException($"Invalid builtin {variableInfo.Builtin}"),
 										};
 									}
@@ -252,6 +256,13 @@
 							shaderReader = shaderReader.Add(out result, out int a, out int b);
 
 							results[result] = results[a] + results[b];
+							break;
+						}
+					case ShaderOp.Mod:
+						{
+							shaderReader = shaderReader.Mod(out result, out int a, out int b);
+
+							results[result] = results[a] % results[b];
 							break;
 						}
 					case ShaderOp.Sample:

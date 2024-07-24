@@ -98,10 +98,10 @@ internal class ProxyHost(TcpClient client)
 
 	public void SetDefaultPipe(DefaultPipe pipe, int pipeId)
 		=> this.defaultPipes[pipe] = pipe switch
-			{
-				DefaultPipe.Input or DefaultPipe.Error => pipeId,
-				_ => throw new ArgumentOutOfRangeException(nameof(pipe)),
-			};
+		{
+			DefaultPipe.Input or DefaultPipe.Error => pipeId,
+			_ => throw new ArgumentOutOfRangeException(nameof(pipe)),
+		};
 
 	public void SetActionTrigger(int actionList, int pipe)
 		=> this.pipes[pipe].Handlers.Add(() =>
@@ -111,6 +111,24 @@ internal class ProxyHost(TcpClient client)
 					action.Execute();
 				}
 			});
+
+	public void SetTimerTrigger(int actionList, int milliseconds)
+	{
+		_ = Task.Run(async () =>
+		{
+			while (true)
+			{
+				await Task.Delay(milliseconds);
+				_ = Task.Run(() =>
+				{
+					foreach (var action in this.actionLists[actionList])
+					{
+						action.Execute();
+					}
+				});
+			}
+		});
+	}
 
 	public int CreateStringSplitPipeline((int Width, int Height) viewport, int linesPipe, int lineImage, int instanceBufferView, int indirectCommandBufferView)
 		=> AddResource(this.fixedFunctionPipelines, new StringSplitPipeline(this.pipes[linesPipe].Queue, this.images[lineImage].Data, this.bufferViews[instanceBufferView], this.bufferViews[indirectCommandBufferView], viewport.Height, viewport.Width));

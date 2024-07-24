@@ -36,6 +36,8 @@ public class RenderPass(IPresentReceiver receiver, ShaderInterpreter vertexShade
 
 	public void Execute(int instanceCount, int vertexCount)
 	{
+		int timerValue = Environment.TickCount / 100;
+
 		const int instanceSize = 16;
 		Span<byte> vertexOutput = stackalloc byte[8 * 2];
 		Span<byte> vertexInput = stackalloc byte[instanceSize];
@@ -74,7 +76,8 @@ public class RenderPass(IPresentReceiver receiver, ShaderInterpreter vertexShade
 
 					inputBuiltins = new()
 					{
-						VertexIndex = vertexIndex
+						VertexIndex = vertexIndex,
+						Timer = timerValue,
 					};
 
 					this.vertex.Execute(this.ImageAttachments, this.BufferAttachments, inputBuiltins, vertexInput, ref vertexOutputBuiltins[vertexIndex], vertexOutput[(vertexIndex * 8)..][..8]);
@@ -131,7 +134,8 @@ public class RenderPass(IPresentReceiver receiver, ShaderInterpreter vertexShade
 							VertexIndex = 0,
 							InstanceIndex = instanceIndex,
 							PositionX = x,
-							PositionY = y
+							PositionY = y,
+							Timer = timerValue,
 						};
 
 						new BitWriter(fragmentInput)
