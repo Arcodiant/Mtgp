@@ -14,7 +14,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Mtgp.Util", "Mtgp.Util\Mtgp.Util.csproj", "{B468951D-3B02-4D57-804A-9678A3E6E427}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mtgp", "Mtgp\Mtgp.csproj", "{9F1F97F1-225C-4C41-A80A-2B865625E844}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Mtgp", "Mtgp\Mtgp.csproj", "{9F1F97F1-225C-4C41-A80A-2B865625E844}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mtgp.Shader.Tsl", "Mtgp.Shader.Tsl\Mtgp.Shader.Tsl.csproj", "{2D467DEA-CD07-4D97-9D2C-7D4DD9395448}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -47,6 +49,12 @@ Global
 		{9F1F97F1-225C-4C41-A80A-2B865625E844}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9F1F97F1-225C-4C41-A80A-2B865625E844}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9F1F97F1-225C-4C41-A80A-2B865625E844}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2D467DEA-CD07-4D97-9D2C-7D4DD9395448}.CI|Any CPU.ActiveCfg = Debug|Any CPU
+		{2D467DEA-CD07-4D97-9D2C-7D4DD9395448}.CI|Any CPU.Build.0 = Debug|Any CPU
+		{2D467DEA-CD07-4D97-9D2C-7D4DD9395448}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2D467DEA-CD07-4D97-9D2C-7D4DD9395448}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2D467DEA-CD07-4D97-9D2C-7D4DD9395448}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2D467DEA-CD07-4D97-9D2C-7D4DD9395448}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

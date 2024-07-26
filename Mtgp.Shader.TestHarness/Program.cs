@@ -1,5 +1,6 @@
 ﻿using Mtgp;
 using Mtgp.Shader;
+using Mtgp.Shader.Tsl;
 using Serilog;
 using System.Diagnostics;
 using System.Net;
@@ -15,6 +16,24 @@ Log.Information("Starting...");
 
 try
 {
+	var testShader = @"struct input
+{
+    [Location=0] int x;
+    [Location=1] int y;
+}
+
+struct output
+{
+    [PositionX] int x;
+    [PositionY] int y;
+}";
+
+	var compiler = new ShaderCompiler();
+
+	compiler.Compile(testShader);
+
+	return;
+
 	int port = 12345;
 
 	var listener = new TcpListener(IPAddress.Loopback, port);
@@ -155,6 +174,23 @@ static (int VertexShader, int FragmentShader) CreateUIShaders(ProxyHost proxy, A
 	fragmentShaderCode = fragmentShaderCode[..fragmentShaderSize];
 
 	var vertexShaderCode = new byte[1024];
+
+	// Text Shader Language code for the vertex shader
+	//
+	// input
+	// {
+	// 	float x
+	// 	float y
+	// }
+	//
+	// output
+	// {
+	// 	float x
+	// 	float y
+	// }
+	//
+	// output.x = input.x;
+	// output.y = input.y;
 
 	int vertexShaderSize = new ShaderWriter(vertexShaderCode)
 									.EntryPoint([0, 1])

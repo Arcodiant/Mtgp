@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\Mtgp.Shader.Tsl\Mtgp.Shader.Tsl.csproj" />
     <ProjectReference Include="..\Mtgp.Shader\Mtgp.Shader.csproj" />
     <ProjectReference Include="..\Mtgp.Util\Mtgp.Util.csproj" />
     <ProjectReference Include="..\Mtgp\Mtgp.csproj" />
