@@ -16,24 +16,6 @@ Log.Information("Starting...");
 
 try
 {
-	var testShader = @"struct input
-{
-    [Location=0] int x;
-    [Location=1] int y;
-}
-
-struct output
-{
-    [PositionX] int x;
-    [PositionY] int y;
-}";
-
-	var compiler = new ShaderCompiler();
-
-	compiler.Compile(testShader);
-
-	return;
-
 	int port = 12345;
 
 	var listener = new TcpListener(IPAddress.Loopback, port);
@@ -152,6 +134,22 @@ Log.CloseAndFlush();
 
 static (int VertexShader, int FragmentShader) CreateUIShaders(ProxyHost proxy, AnsiColour colour, char character)
 {
+	var compiler = new ShaderCompiler();
+
+	var fragmentShader = @$"struct Output
+{{
+    [Location=0] int colour;
+    [Location=1] int background;
+    [Location=2] int character;
+}}
+
+func Output Main()
+{{
+    result.colour = @{colour};
+    result.background = @Black;
+    result.character = '{character}';
+}}";
+
 	var fragmentShaderCode = new byte[1024];
 
 	int fragmentShaderSize = new ShaderWriter(fragmentShaderCode)
@@ -173,43 +171,25 @@ static (int VertexShader, int FragmentShader) CreateUIShaders(ProxyHost proxy, A
 
 	fragmentShaderCode = fragmentShaderCode[..fragmentShaderSize];
 
-	var vertexShaderCode = new byte[1024];
+	var vertexShader = @"struct InputVertex
+{
+    [Location=0] int x;
+    [Location=1] int y;
+}
 
-	// Text Shader Language code for the vertex shader
-	//
-	// input
-	// {
-	// 	float x
-	// 	float y
-	// }
-	//
-	// output
-	// {
-	// 	float x
-	// 	float y
-	// }
-	//
-	// output.x = input.x;
-	// output.y = input.y;
+struct Output
+{
+    [PositionX] int x;
+    [PositionY] int y;
+}
 
-	int vertexShaderSize = new ShaderWriter(vertexShaderCode)
-									.EntryPoint([0, 1])
-									.DecorateLocation(0, 0)
-									.DecorateLocation(1, 1)
-									.DecorateBuiltin(2, Builtin.PositionX)
-									.DecorateBuiltin(3, Builtin.PositionY)
-									.Variable(0, ShaderStorageClass.Input)
-									.Variable(1, ShaderStorageClass.Input)
-									.Variable(2, ShaderStorageClass.Output)
-									.Variable(3, ShaderStorageClass.Output)
-									.Load(10, 0)
-									.Load(11, 1)
-									.Store(2, 10)
-									.Store(3, 11)
-									.Return()
-									.Writer.WriteCount;
+func Output Main(InputVertex input)
+{
+	result.x = input.x;
+	result.y = input.y;
+}";
 
-	vertexShaderCode = vertexShaderCode[..vertexShaderSize];
+	var vertexShaderCode = compiler.Compile(vertexShader);
 
 	return (proxy.CreateShader(vertexShaderCode), proxy.CreateShader(fragmentShaderCode));
 }
