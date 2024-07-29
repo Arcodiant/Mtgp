@@ -76,6 +76,8 @@ try
 		20, 0, 0, 0,
 	]);
 
+	int presentImage = proxy.GetPresentImage();
+
 	int mapVertexBufferView = proxy.CreateBufferView(mapVertexBuffer, 0, 16);
 	int borderVertexBufferView = proxy.CreateBufferView(mapVertexBuffer, 16, 64);
 
@@ -85,10 +87,11 @@ try
 
 	int actionList = proxy.CreateActionList();
 	proxy.AddRunPipelineAction(actionList, pipeline);
-	proxy.AddClearBufferAction(actionList);
-	proxy.AddIndirectDrawAction(actionList, textRenderPass, indirectCommandBufferView, 0);
+	proxy.AddClearBufferAction(actionList, presentImage);
+	//proxy.AddIndirectDrawAction(actionList, textRenderPass, indirectCommandBufferView, 0);
 	proxy.AddDrawAction(actionList, mapRenderPass, 1, 2);
 	proxy.AddDrawAction(actionList, borderRenderPass, 1, 8);
+	proxy.AddPresentAction(actionList);
 
 	proxy.SetActionTrigger(actionList, inputPipe);
 
@@ -110,7 +113,7 @@ try
 		{
 			proxy.Send(inputPipe, "> " + messageData.ToString());
 
-			if (messageData.ToString() == "quit")
+			//if (messageData.ToString() == "quit")
 			{
 				runningFlag.Release();
 			}

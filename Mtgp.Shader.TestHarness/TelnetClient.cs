@@ -3,300 +3,266 @@ using Serilog;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading.Channels;
-using System.Threading.Tasks.Dataflow;
 
 namespace Mtgp;
 
 public class TelnetClient
-	: IPresentReceiver, IDisposable
+    : IDisposable
 {
-	private readonly TcpClient client;
-	private readonly NetworkStream stream;
-	private readonly StreamWriter writer;
+    private readonly TcpClient client;
+    private readonly NetworkStream stream;
+    private readonly StreamWriter writer;
 
-	private readonly StringBuilder outputBuffer = new();
+    private readonly Channel<string> incomingBuffer = Channel.CreateUnbounded<string>();
 
-	private readonly Channel<string> incomingBuffer = Channel.CreateUnbounded<string>();
+    public TelnetClient(TcpClient client)
+    {
+        this.client = client;
 
-	private AnsiColour currentForeground = AnsiColour.White;
-	private AnsiColour currentBackground = AnsiColour.Black;
+        this.stream = client.GetStream();
 
-	public TelnetClient(TcpClient client)
-	{
-		this.client = client;
+        this.writer = new StreamWriter(this.stream) { AutoFlush = true };
 
-		this.stream = client.GetStream();
+        this.writer.Write("\x1B[?7h");
 
-		this.writer = new StreamWriter(this.stream) { AutoFlush = true };
-		this.SetColour(AnsiColour.White, AnsiColour.Black, true);
+        _ = Task.Run(this.ReadLoop);
+    }
 
-		this.writer.Write("\x1B[?7h");
+    private async Task ReadLoop()
+    {
+        var reader = new TelnetStreamReader(this.stream);
 
-		_ = Task.Run(this.ReadLoop);
-	}
+        while (true)
+        {
+            var @event = await reader.ReadNextAsync();
 
-	public void Present()
-	{
-		this.writer.Write(this.outputBuffer.ToString());
-		this.outputBuffer.Clear();
-	}
+            switch (@event)
+            {
+                case TelnetCommandEvent commandEvent:
+                    if (commandEvent.Command.IsNegotiation())
+                    {
+                        Log.Debug("Received command: {Command} {Option}", commandEvent.Command, commandEvent.Option);
+                    }
+                    else if (commandEvent.Command == TelnetCommand.SB)
+                    {
+                        switch (commandEvent.Option)
+                        {
+                            case TelnetOption.TerminalType:
+                                Log.Debug("Received subnegotiation: {Command} {Option} {SubCommand} {Value}", commandEvent.Command, commandEvent.Option, (TelnetSubNegotiationCommand)commandEvent.Data![0], Encoding.UTF8.GetString(commandEvent.Data![1..]));
+                                break;
+                            case TelnetOption.NegotiateAboutWindowSize:
+                                {
+                                    int x = commandEvent.Data![0] << 8 | (commandEvent.Data![1]);
+                                    int y = commandEvent.Data![2] << 8 | (commandEvent.Data![3]);
 
-	private async Task ReadLoop()
-	{
-		var reader = new TelnetStreamReader(this.stream);
+                                    Log.Debug("Received subnegotiation: {Command} {Option} {X} {Y}", commandEvent.Command, commandEvent.Option, x, y);
+                                    break;
+                                }
 
-		while (true)
-		{
-			var @event = await reader.ReadNextAsync();
+                            default:
+                                Log.Debug("Received subnegotiation: {Command} {Option} {Data}", commandEvent.Command, commandEvent.Option, commandEvent.Data);
+                                break;
+                        }
+                    }
+                    else if (commandEvent.Data is not null)
+                    {
+                        Log.Debug("Received command: {Command} {Option} {Data}", commandEvent.Command, commandEvent.Option, commandEvent.Data);
+                    }
+                    else
+                    {
+                        Log.Debug("Received command: {Command}", commandEvent.Command);
+                    }
+                    break;
+                case TelnetStringEvent stringEvent:
+                    var cleanedLine = stringEvent.Value.Aggregate(new StringBuilder(), (builder, character) =>
+                    {
+                        var replacement = character switch
+                        {
+                            '\x1B' => "\\x1B",
+                            '\n' => "\\n",
+                            '\r' => "\\r",
+                            '\t' => "\\t",
+                            '\0' => "\\0",
+                            '\a' => "\\a",
+                            '\v' => "\\v",
+                            _ => character.ToString()
+                        };
 
-			switch (@event)
-			{
-				case TelnetCommandEvent commandEvent:
-					if (commandEvent.Command.IsNegotiation())
-					{
-						Log.Debug("Received command: {Command} {Option}", commandEvent.Command, commandEvent.Option);
-					}
-					else if (commandEvent.Command == TelnetCommand.SB)
-					{
-						switch (commandEvent.Option)
-						{
-							case TelnetOption.TerminalType:
-								Log.Debug("Received subnegotiation: {Command} {Option} {SubCommand} {Value}", commandEvent.Command, commandEvent.Option, (TelnetSubNegotiationCommand)commandEvent.Data![0], Encoding.UTF8.GetString(commandEvent.Data![1..]));
-								break;
-							case TelnetOption.NegotiateAboutWindowSize:
-								{
-									int x = commandEvent.Data![0] << 8 | (commandEvent.Data![1]);
-									int y = commandEvent.Data![2] << 8 | (commandEvent.Data![3]);
+                        builder.Append(replacement);
 
-									Log.Debug("Received subnegotiation: {Command} {Option} {X} {Y}", commandEvent.Command, commandEvent.Option, x, y);
-									break;
-								}
+                        return builder;
+                    }).ToString();
 
-							default:
-								Log.Debug("Received subnegotiation: {Command} {Option} {Data}", commandEvent.Command, commandEvent.Option, commandEvent.Data);
-								break;
-						}
-					}
-					else if (commandEvent.Data is not null)
-					{
-						Log.Debug("Received command: {Command} {Option} {Data}", commandEvent.Command, commandEvent.Option, commandEvent.Data);
-					}
-					else
-					{
-						Log.Debug("Received command: {Command}", commandEvent.Command);
-					}
-					break;
-				case TelnetStringEvent stringEvent:
-					var cleanedLine = stringEvent.Value.Aggregate(new StringBuilder(), (builder, character) =>
-					{
-						var replacement = character switch
-						{
-							'\x1B' => "\\x1B",
-							'\n' => "\\n",
-							'\r' => "\\r",
-							'\t' => "\\t",
-							'\0' => "\\0",
-							'\a' => "\\a",
-							'\v' => "\\v",
-							_ => character.ToString()
-						};
+                    Log.Verbose("Received: {value}", cleanedLine);
 
-						builder.Append(replacement);
+                    var lines = stringEvent.Value.Split('\n');
 
-						return builder;
-					}).ToString();
+                    foreach (var line in lines[..^1])
+                    {
+                        await this.incomingBuffer.Writer.WriteAsync(line + '\n');
+                    }
 
-					Log.Verbose("Received: {value}", cleanedLine);
+                    if (!string.IsNullOrEmpty(lines[^1]))
+                    {
+                        await this.incomingBuffer.Writer.WriteAsync(lines[^1]);
+                    }
 
-					var lines = stringEvent.Value.Split('\n');
+                    break;
+                case TelnetCloseEvent _:
+                    this.incomingBuffer.Writer.Complete();
+                    Log.Debug("Connection closed.");
+                    return;
+            }
+        }
+    }
 
-					foreach (var line in lines[..^1])
-					{
-						await this.incomingBuffer.Writer.WriteAsync(line + '\n');
-					}
+    private void SetColour(AnsiColour foreground, AnsiColour background, bool force = false)
+    {
+        this.writer.Write($"\x1B[{(int)foreground + 30}m");
+        this.writer.Write($"\x1B[{(int)background + 40}m");
+    }
 
-					if (!string.IsNullOrEmpty(lines[^1]))
-					{
-						await this.incomingBuffer.Writer.WriteAsync(lines[^1]);
-					}
+    public void SendCommand(TelnetCommand command, TelnetOption option)
+    {
+        this.stream.Write([(byte)TelnetCommand.IAC, (byte)command, (byte)option]);
+    }
 
-					break;
-				case TelnetCloseEvent _:
-					this.incomingBuffer.Writer.Complete();
-					Log.Debug("Connection closed.");
-					return;
-			}
-		}
-	}
+    public void SendSubnegotiation(TelnetOption option, ReadOnlySpan<byte> data)
+    {
+        this.stream.Write([(byte)TelnetCommand.IAC, (byte)TelnetCommand.SB, (byte)option, .. data, (byte)TelnetCommand.IAC, (byte)TelnetCommand.SE]);
+    }
 
-	private void SetColour(AnsiColour foreground, AnsiColour background, bool force = false)
-	{
-		if (this.currentForeground != foreground || force)
-		{
-			this.outputBuffer.Append($"\x1B[{(int)foreground + 30}m");
-			this.currentForeground = foreground;
-		}
+    public void SendSubnegotiation(TelnetOption option, TelnetSubNegotiationCommand subCommand, ReadOnlySpan<byte> data)
+    {
+        this.stream.Write([(byte)TelnetCommand.IAC, (byte)TelnetCommand.SB, (byte)option, (byte)subCommand, .. data, (byte)TelnetCommand.IAC, (byte)TelnetCommand.SE]);
+    }
 
-		if (this.currentBackground != background || force)
-		{
-			this.outputBuffer.Append($"\x1B[{(int)background + 40}m");
-			this.currentBackground = background;
-		}
-	}
+    public void HideCursor()
+    {
+        this.writer.Write("\x1B[?25l");
+    }
 
-	public void SendCommand(TelnetCommand command, TelnetOption option)
-	{
-		this.stream.Write([(byte)TelnetCommand.IAC, (byte)command, (byte)option]);
-	}
+    public void MoveCursor(int x, int y)
+    {
+        this.writer.Write($"\x1B[{y + 1};{x + 1}H");
+    }
 
-	public void SendSubnegotiation(TelnetOption option, ReadOnlySpan<byte> data)
-	{
-		this.stream.Write([(byte)TelnetCommand.IAC, (byte)TelnetCommand.SB, (byte)option, .. data, (byte)TelnetCommand.IAC, (byte)TelnetCommand.SE]);
-	}
+    public void SetWindowSize(int rows, int columns)
+    {
+        this.writer.Write($"\x1B[8;{rows};{columns}t");
+    }
 
-	public void SendSubnegotiation(TelnetOption option, TelnetSubNegotiationCommand subCommand, ReadOnlySpan<byte> data)
-	{
-		this.stream.Write([(byte)TelnetCommand.IAC, (byte)TelnetCommand.SB, (byte)option, (byte)subCommand, .. data, (byte)TelnetCommand.IAC, (byte)TelnetCommand.SE]);
-	}
+    public void Clear(AnsiColour foreground = AnsiColour.White, AnsiColour background = AnsiColour.Black)
+    {
+        this.writer.Write("\x1B[H");
+        this.SetColour(foreground, background);
 
-	public void HideCursor()
-	{
-		this.outputBuffer.Append("\x1B[?25l");
-	}
+        for (int y = 0; y < 24; y++)
+        {
+            this.writer.Write("\x1B[2K");
 
-	public void MoveCursor(int x, int y)
-	{
-		this.outputBuffer.Append($"\x1B[{y + 1};{x + 1}H");
-	}
+            if (y < 23)
+            {
+                this.writer.Write("\x1B[B");
+            }
+        }
+        this.writer.Write("\x1B[H");
+    }
 
-	public void SetWindowSize(int rows, int columns)
-	{
-		this.outputBuffer.Append($"\x1B[8;{rows};{columns}t");
-	}
+    public ChannelReader<string> IncomingMessages => this.incomingBuffer.Reader;
 
-	public void Clear(AnsiColour foreground = AnsiColour.White, AnsiColour background = AnsiColour.Black)
-	{
-		this.SetColour(foreground, background);
+    public void Dispose()
+    {
+        this.client.Close();
+        this.client.Dispose();
 
-		this.outputBuffer.Append("\x1B[H");
-		for (int y = 0; y < 24; y++)
-		{
-			this.outputBuffer.Append("\x1B[2K");
+        GC.SuppressFinalize(this);
+    }
 
-			if (y < 23)
-			{
-				this.outputBuffer.Append("\x1B[B");
-			}
-		}
-		this.outputBuffer.Append("\x1B[H");
-	}
+    public void Draw(ReadOnlySpan<RuneDelta> value)
+    {
+        var sortedValues = value.ToArray();
+        sortedValues = [.. sortedValues.Select((x, index) => (Value: x, Index: index))
+                                 .OrderBy(x => x.Value.Y)
+                                 .ThenBy(x => x.Value.X)
+                                 .ThenBy(x => x.Index)
+                                 .Select(x => x.Value)];
 
-	public void Write(ReadOnlySpan<char> value)
-	{
-		this.Present();
-		this.writer.Write(value);
-	}
+        int x = 0;
+        int y = 0;
+        AnsiColour foreground = AnsiColour.White;
+        AnsiColour background = AnsiColour.Black;
+        Span<char> buffer = stackalloc char[4096];
+        int count = 0;
 
-	public void WriteLine(ReadOnlySpan<char> value)
-	{
-		this.Present();
-		this.writer.WriteLine(value);
-	}
+        for (int index = 0; index < sortedValues.Length; index++)
+        {
+            int newX, newY;
+            Rune rune;
+            char character = '\0';
+            AnsiColour newForeground;
+            AnsiColour newBackground;
 
-	public ChannelReader<string> IncomingMessages => this.incomingBuffer.Reader;
+            (newX, newY, rune, newForeground, newBackground) = sortedValues[index];
 
-	public void Dispose()
-	{
-		this.client.Close();
-		this.client.Dispose();
+            var charSpan = new Span<char>(ref character);
 
-		GC.SuppressFinalize(this);
-	}
+            rune.TryEncodeToUtf16(charSpan, out _);
 
-	public void Draw(ReadOnlySpan<RuneDelta> value)
-	{
-		var sortedValues = value.ToArray();
-		sortedValues = [.. sortedValues.Select((x, index) => (Value: x, Index: index))
-								 .OrderBy(x => x.Value.Y)
-								 .ThenBy(x => x.Value.X)
-								 .ThenBy(x => x.Index)
-								 .Select(x => x.Value)];
+            if (count > 0)
+            {
+                // Handle overdraw
+                if (newX == x && newY == y)
+                {
+                    count--;
+                }
 
-		int x = 0;
-		int y = 0;
-		AnsiColour foreground = AnsiColour.White;
-		AnsiColour background = AnsiColour.Black;
-		Span<char> buffer = stackalloc char[4096];
-		int count = 0;
+                if (newX == x + 1
+                        && newY == y
+                        && newForeground == foreground
+                        && newBackground == background)
+                {
+                    buffer[count] = character;
+                    count++;
+                }
+                else if (newX == 0
+                        && newY == y + 1
+                        && newForeground == foreground
+                        && newBackground == background)
+                {
+                    buffer[count] = '\r';
+                    count++;
+                    buffer[count] = '\n';
+                    count++;
+                    buffer[count] = character;
+                    count++;
+                }
+                else
+                {
+                    this.writer.Write(buffer[..count]);
+                    count = 0;
+                }
+            }
 
-		for (int index = 0; index < sortedValues.Length; index++)
-		{
-			int newX, newY;
-			Rune rune;
-			char character = '\0';
-			AnsiColour newForeground;
-			AnsiColour newBackground;
+            x = newX;
+            y = newY;
 
-			(newX, newY, rune, newForeground, newBackground) = sortedValues[index];
+            if (count == 0)
+            {
+                foreground = newForeground;
+                background = newBackground;
 
-			var charSpan = new Span<char>(ref character);
+                this.MoveCursor(x, y);
+                this.SetColour(foreground, background);
+                buffer[count] = character;
 
-			rune.TryEncodeToUtf16(charSpan, out _);
+                count++;
+            }
+        }
 
-			if (count > 0)
-			{
-				// Handle overdraw
-				if (newX == x && newY == y)
-				{
-					count--;
-				}
-
-				if (newX == x + 1
-						&& newY == y
-						&& newForeground == foreground
-						&& newBackground == background)
-				{
-					buffer[count] = character;
-					count++;
-				}
-				else if (newX == 0
-						&& newY == y + 1
-						&& newForeground == foreground
-						&& newBackground == background)
-				{
-					buffer[count] = '\r';
-					count++;
-					buffer[count] = '\n';
-					count++;
-					buffer[count] = character;
-					count++;
-				}
-				else
-				{
-					this.outputBuffer.Append(buffer[..count]);
-					count = 0;
-				}
-			}
-
-			x = newX;
-			y = newY;
-
-			if (count == 0)
-			{
-				foreground = newForeground;
-				background = newBackground;
-
-				this.MoveCursor(x, y);
-				this.SetColour(foreground, background);
-				buffer[count] = character;
-
-				count++;
-			}
-		}
-
-		if (count > 0)
-		{
-			this.outputBuffer.Append(buffer[..count]);
-		}
-	}
+        if (count > 0)
+        {
+            this.writer.Write(buffer[..count]);
+        }
+    }
 }

@@ -5,9 +5,16 @@ namespace Mtgp.Shader;
 
 public record ImageState((int Width, int Height, int Depth) Size, ImageFormat Format)
 {
-	public Memory<byte> Data { get; } = new byte[GetSize(Format) * Size.Width * Size.Height * Size.Depth];
+	public (int Width, int Height, int Depth) Size { get; private set; } = Size;
+    public Memory<byte> Data { get; private set; } = new byte[GetSize(Format) * Size.Width * Size.Height * Size.Depth];
 
-	private static int GetSize(ImageFormat format)
+	public void Resize((int Width, int Height, int Depth) newSize)
+	{
+		this.Size = newSize;
+		this.Data = new byte[GetSize(Format) * Size.Width * Size.Height * Size.Depth];
+    }
+
+	public static int GetSize(ImageFormat format)
 		=> format switch
 		{
 			ImageFormat.T32 => 4,
@@ -16,7 +23,7 @@ public record ImageState((int Width, int Height, int Depth) Size, ImageFormat Fo
 		};
 }
 
-public class RenderPass(IPresentReceiver receiver, ShaderInterpreter vertexShader, InputRate inputRate, PolygonMode polygonMode, ShaderInterpreter fragmentShader, (int X, int Y, int Width, int Height) viewport)
+public class RenderPass(ShaderInterpreter vertexShader, InputRate inputRate, PolygonMode polygonMode, ShaderInterpreter fragmentShader, (int X, int Y, int Width, int Height) viewport)
 {
 	private static readonly FragmentOutputMapping[] fragmentOutputMappings =
 	[
@@ -25,7 +32,6 @@ public class RenderPass(IPresentReceiver receiver, ShaderInterpreter vertexShade
 		new(8)
 	];
 
-	private readonly IPresentReceiver receiver = receiver;
 	private readonly ShaderInterpreter vertex = vertexShader;
 	private readonly ShaderInterpreter fragment = fragmentShader;
 
@@ -36,7 +42,7 @@ public class RenderPass(IPresentReceiver receiver, ShaderInterpreter vertexShade
 
 	public void Execute(int instanceCount, int vertexCount)
 	{
-		int timerValue = Environment.TickCount / 100;
+		int timerValue = Environment.TickCount;
 
 		const int instanceSize = 16;
 		Span<byte> vertexOutput = stackalloc byte[8 * 2];
@@ -144,6 +150,8 @@ public class RenderPass(IPresentReceiver receiver, ShaderInterpreter vertexShade
 
 						this.fragment.Execute(this.ImageAttachments, this.BufferAttachments, inputBuiltins, fragmentInput, ref outputBuiltins, output);
 
+						var frameBuffer = this.ImageAttachments[0];
+
 						var rune = Unsafe.As<byte, Rune>(ref output[0]);
 
 						var delta = new RuneDelta
@@ -160,10 +168,6 @@ public class RenderPass(IPresentReceiver receiver, ShaderInterpreter vertexShade
 				}
 			}
 		}
-
-		this.receiver.Draw(deltaBuffer.ToArray());
-
-		this.receiver.Present();
 	}
 }
 
