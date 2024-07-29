@@ -81,14 +81,14 @@ try
 	int mapVertexBufferView = proxy.CreateBufferView(mapVertexBuffer, 0, 16);
 	int borderVertexBufferView = proxy.CreateBufferView(mapVertexBuffer, 16, 64);
 
-	int textRenderPass = proxy.CreateRenderPass(new() { [0] = textLinesImage }, new() { [1] = linesInstanceBufferView }, InputRate.PerInstance, PolygonMode.Fill, textVertexShader, textFragmentShader, (1, 1, 58, 19));
-	int mapRenderPass = proxy.CreateRenderPass([], new() { [1] = mapVertexBufferView }, InputRate.PerVertex, PolygonMode.Fill, mapVertexShader, mapFragmentShader, (0, 0, 80, 24));
-	int borderRenderPass = proxy.CreateRenderPass([], new() { [1] = borderVertexBufferView }, InputRate.PerVertex, PolygonMode.Line, borderVertexShader, borderFragmentShader, (0, 0, 80, 24));
+	int textRenderPass = proxy.CreateRenderPass(new() { [0] = presentImage, [1] = textLinesImage }, new() { [1] = linesInstanceBufferView }, InputRate.PerInstance, PolygonMode.Fill, textVertexShader, textFragmentShader, (1, 1, 58, 19));
+	int mapRenderPass = proxy.CreateRenderPass(new() { [0] = presentImage }, new() { [1] = mapVertexBufferView }, InputRate.PerVertex, PolygonMode.Fill, mapVertexShader, mapFragmentShader, (0, 0, 80, 24));
+	int borderRenderPass = proxy.CreateRenderPass(new() { [0] = presentImage }, new() { [1] = borderVertexBufferView }, InputRate.PerVertex, PolygonMode.Line, borderVertexShader, borderFragmentShader, (0, 0, 80, 24));
 
 	int actionList = proxy.CreateActionList();
 	proxy.AddRunPipelineAction(actionList, pipeline);
 	proxy.AddClearBufferAction(actionList, presentImage);
-	//proxy.AddIndirectDrawAction(actionList, textRenderPass, indirectCommandBufferView, 0);
+	proxy.AddIndirectDrawAction(actionList, textRenderPass, indirectCommandBufferView, 0);
 	proxy.AddDrawAction(actionList, mapRenderPass, 1, 2);
 	proxy.AddDrawAction(actionList, borderRenderPass, 1, 8);
 	proxy.AddPresentAction(actionList);
@@ -208,7 +208,7 @@ static (int VertexShader, int FragmentShader) CreateTextShaders(ProxyHost proxy)
 									.DecorateLocation(2, 2)
 									.DecorateLocation(3, 0)
 									.DecorateLocation(4, 1)
-									.DecorateBinding(5, 0)
+									.DecorateBinding(5, 1)
 									.Variable(0, ShaderStorageClass.Output)
 									.Variable(1, ShaderStorageClass.Output)
 									.Variable(2, ShaderStorageClass.Output)

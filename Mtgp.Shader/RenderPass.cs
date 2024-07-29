@@ -152,18 +152,15 @@ public class RenderPass(ShaderInterpreter vertexShader, InputRate inputRate, Pol
 
 						var frameBuffer = this.ImageAttachments[0];
 
-						var rune = Unsafe.As<byte, Rune>(ref output[0]);
+						int step = ImageState.GetSize(frameBuffer.Format);
 
-						var delta = new RuneDelta
-						{
-							X = x + this.Viewport.X,
-							Y = y + this.Viewport.Y,
-							Value = rune,
-							Foreground = (AnsiColour)output[4],
-							Background = (AnsiColour)output[5]
-						};
+						int pixelX = x + this.Viewport.X;
+						int pixelY = y + this.Viewport.Y;
 
-						deltaBuffer.Add(delta);
+						var pixelTarget = frameBuffer.Data.Span[(ImageState.GetSize(frameBuffer.Format) * (pixelX + pixelY * frameBuffer.Size.Width))..];
+
+						output[..4].CopyTo(pixelTarget);
+						pixelTarget[4] = (byte)((output[4] & 7) + (output[5] & 7) << 3);
 					}
 				}
 			}
