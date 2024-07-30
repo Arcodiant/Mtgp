@@ -210,9 +210,22 @@ public class ShaderCompiler
             writer = writer.DecorateBuiltin(builtin.Key, builtin.Value);
         }
 
+        int intType = nextId++;
+        int intInputPointerType = nextId++;
+        int intOutputPointerType = nextId++;
+
+        writer = writer.TypeInt(intType, 4)
+                        .TypePointer(intInputPointerType, ShaderStorageClass.Input, intType)
+						.TypePointer(intOutputPointerType, ShaderStorageClass.Output, intType);
+
         foreach (var (id, storage, _) in vars)
         {
-            writer = writer.Variable(id, storage);
+            writer = writer.Variable(id, storage, storage switch
+            {
+                ShaderStorageClass.Input => intInputPointerType,
+                ShaderStorageClass.Output => intOutputPointerType,
+                _ => throw new Exception($"Unknown storage class: {storage}")
+            });
         }
 
         foreach (var statement in mainFunc.Statements)

@@ -51,9 +51,9 @@ public static class ShaderDisassembler
                     break;
                 case ShaderOp.Variable:
                     {
-                        shaderReader.Variable(out int result, out var storageClass);
+                        shaderReader.Variable(out int result, out var storageClass, out int type);
 
-                        assembly.AppendLine($"({result}, {storageClass})");
+                        assembly.AppendLine($"({result}, {storageClass}, {type})");
                     }
                     break;
                 case ShaderOp.Load:

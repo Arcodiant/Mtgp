@@ -81,7 +81,7 @@ public readonly ref struct ShaderReader(BitReader reader)
 	}
 
 	public readonly ShaderReader Decorate(out int target, out ShaderDecoration decoration)
-		=> new(this.ReadDecorate(out target, out decoration, ShaderOpConstants.DecorateWordCount));
+		=> new(this.ReadDecorate(out target, out decoration, out _));
 
 	public readonly ShaderReader DecorateLocation(out int target, out uint location)
 	{
@@ -123,24 +123,33 @@ public readonly ref struct ShaderReader(BitReader reader)
 		return new(reader);
 	}
 
-	public readonly ShaderReader TypePointer(out int result, out ShaderStorageClass storageClass)
+	public readonly ShaderReader TypePointer(out int result, out ShaderStorageClass storageClass, out int type)
 	{
 		var reader = this.ReadShaderOp(ShaderOp.TypePointer, ShaderOpConstants.TypePointerWordCount);
 
-		reader = reader.Read(out result).Read(out int storageClassValue);
+		reader = reader.Read(out result).Read(out int storageClassValue).Read(out type);
 
 		storageClass = (ShaderStorageClass)storageClassValue;
 
 		return new(reader);
 	}
 
-	public readonly ShaderReader Variable(out int result, out ShaderStorageClass storageClass)
+	public readonly ShaderReader TypeInt(out int result, out int width)
+	{
+		var reader = this.ReadShaderOp(ShaderOp.TypeInt, ShaderOpConstants.TypeIntWordCount);
+
+		reader = reader.Read(out result).Read(out width);
+
+		return new(reader);
+	}
+
+	public readonly ShaderReader Variable(out int result, out ShaderStorageClass shaderStorageClass, out int type)
 	{
 		var reader = this.ReadShaderOp(ShaderOp.Variable, ShaderOpConstants.VariableWordCount);
 
-		reader = reader.Read(out result).Read(out int storageClassValue);
+		reader = reader.Read(out result).Read(out int shaderStorageClassValue).Read(out type);
 
-		storageClass = (ShaderStorageClass)storageClassValue;
+		shaderStorageClass = (ShaderStorageClass)shaderStorageClassValue;
 
 		return new(reader);
 	}

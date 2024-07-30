@@ -29,15 +29,22 @@ public readonly ref struct ShaderWriter(BitWriter writer)
 		=> new(this.WriteDecorate(target, ShaderDecoration.Builtin, ShaderOpConstants.DecorateBuiltinWordCount)
 							.Write((int)builtin));
 
-	public readonly ShaderWriter TypePointer(int result, ShaderStorageClass storageClass)
+	public readonly ShaderWriter TypePointer(int result, ShaderStorageClass storageClass, int type)
 		=> new(this.Write(ShaderOp.TypePointer, ShaderOpConstants.TypePointerWordCount)
 							.Write(result)
-							.Write((int)storageClass));
+							.Write((int)storageClass)
+							.Write(type));
 
-	public readonly ShaderWriter Variable(int result, ShaderStorageClass storageClass)
+	public readonly ShaderWriter TypeInt(int result, int width)
+		=> new(this.Write(ShaderOp.TypeInt, ShaderOpConstants.TypeIntWordCount)
+							.Write(result)
+							.Write(width));
+
+	public readonly ShaderWriter Variable(int result, ShaderStorageClass shaderStorageClass, int type)
 		=> new(this.Write(ShaderOp.Variable, ShaderOpConstants.VariableWordCount)
 							.Write(result)
-							.Write((int)storageClass));
+							.Write((int)shaderStorageClass)
+							.Write(type));
 
 	public readonly ShaderWriter Store(int variable, int value)
 		=> new(this.Write(ShaderOp.Store, ShaderOpConstants.StoreWordCount)

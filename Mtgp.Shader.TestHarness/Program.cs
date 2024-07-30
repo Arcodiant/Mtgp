@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading.Channels;
 
 Log.Logger = new LoggerConfiguration()
 	.MinimumLevel.Debug()
@@ -33,19 +34,13 @@ try
 
 	proxy.Start();
 
-	var (textVertexShader, textFragmentShader) = CreateTextShaders(proxy);
 	var (mapVertexShader, mapFragmentShader) = CreateUIShaders(proxy, AnsiColour.Green, '#');
 	var (borderVertexShader, borderFragmentShader) = CreateUIShaders(proxy, AnsiColour.White, '*');
 
-	int inputPipe = proxy.CreatePipe();
-	int dataBuffer = proxy.CreateBuffer(4096);
+	int presentImage = proxy.GetPresentImage();
 
-	int textLinesImage = proxy.CreateImage((60 * 24, 1, 1), ImageFormat.T32);
-
-	int linesInstanceBufferView = proxy.CreateBufferView(dataBuffer, 0, 16 * 100);
-	int indirectCommandBufferView = proxy.CreateBufferView(dataBuffer, 16 * 100, 8);
-
-	int pipeline = proxy.CreateStringSplitPipeline((58, 19), inputPipe, textLinesImage, linesInstanceBufferView, indirectCommandBufferView);
+	var (outputPipe, addOutputActions) = CreateStringSplitPipeline(proxy, presentImage, (1, 1, 59, 19));
+	var (inputPipe, addInputActions) = CreateStringSplitPipeline(proxy, presentImage, (1, 21, 59, 2), true);
 
 	var mapVertexBuffer = proxy.CreateBuffer(1024);
 
@@ -76,53 +71,68 @@ try
 		20, 0, 0, 0,
 	]);
 
-	int presentImage = proxy.GetPresentImage();
-
 	int mapVertexBufferView = proxy.CreateBufferView(mapVertexBuffer, 0, 16);
 	int borderVertexBufferView = proxy.CreateBufferView(mapVertexBuffer, 16, 64);
 
-	int textRenderPass = proxy.CreateRenderPass(new() { [0] = presentImage, [1] = textLinesImage }, new() { [1] = linesInstanceBufferView }, InputRate.PerInstance, PolygonMode.Fill, textVertexShader, textFragmentShader, (1, 1, 58, 19));
 	int mapRenderPass = proxy.CreateRenderPass(new() { [0] = presentImage }, new() { [1] = mapVertexBufferView }, InputRate.PerVertex, PolygonMode.Fill, mapVertexShader, mapFragmentShader, (0, 0, 80, 24));
 	int borderRenderPass = proxy.CreateRenderPass(new() { [0] = presentImage }, new() { [1] = borderVertexBufferView }, InputRate.PerVertex, PolygonMode.Line, borderVertexShader, borderFragmentShader, (0, 0, 80, 24));
 
 	int actionList = proxy.CreateActionList();
-	proxy.AddRunPipelineAction(actionList, pipeline);
 	proxy.AddClearBufferAction(actionList, presentImage);
-	proxy.AddIndirectDrawAction(actionList, textRenderPass, indirectCommandBufferView, 0);
+	addInputActions(actionList);
+	addOutputActions(actionList);
 	proxy.AddDrawAction(actionList, mapRenderPass, 1, 2);
 	proxy.AddDrawAction(actionList, borderRenderPass, 1, 8);
 	proxy.AddPresentAction(actionList);
 
 	proxy.SetActionTrigger(actionList, inputPipe);
+	proxy.SetActionTrigger(actionList, outputPipe);
 
-	proxy.Send(inputPipe, "Hello, World!");
-	proxy.Send(inputPipe, "This is a test");
-	proxy.Send(inputPipe, "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.");
-
-	var runningFlag = new SemaphoreSlim(0);
+	proxy.Send(outputPipe, "Hello, World!");
+	proxy.Send(outputPipe, "This is a test");
+	proxy.Send(outputPipe, "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.");
 
 	proxy.SetDefaultPipe(DefaultPipe.Input, 0);
 
+	var characterChannel = Channel.CreateUnbounded<char>();
+
 	var messageData = new StringBuilder();
 
-	proxy.OnMessage += data =>
+	proxy.OnMessageAsync += async data =>
 	{
-		messageData.Append(data.Message.TrimEnd());
-
-		if (data.Message.Contains('\n'))
+		foreach (var character in data.Message)
 		{
-			proxy.Send(inputPipe, "> " + messageData.ToString());
+			await characterChannel.Writer.WriteAsync(character);
+		}
+	};
 
-			//if (messageData.ToString() == "quit")
+	await foreach (var character in characterChannel.Reader.ReadAllAsync())
+	{
+		if (character == '\n')
+		{
+			proxy.Send(outputPipe, "> " + messageData.ToString());
+
+			if (messageData.ToString() == "quit")
 			{
-				runningFlag.Release();
+				break;
 			}
 
 			messageData.Clear();
 		}
-	};
+		else if (char.IsControl(character))
+		{
+			if ((character == '\b' || character == '\u007F') && messageData.Length > 0)
+			{
+				messageData.Remove(messageData.Length - 1, 1);
+			}
+		}
+		else
+		{
+			messageData.Append(character);
+		}
 
-	await runningFlag.WaitAsync();
+		proxy.Send(inputPipe, messageData.ToString());
+	}
 
 	listener.Stop();
 }
@@ -160,9 +170,11 @@ func Output Main()
 									.DecorateLocation(0, 0)
 									.DecorateLocation(1, 1)
 									.DecorateLocation(2, 2)
-									.Variable(0, ShaderStorageClass.Output)
-									.Variable(1, ShaderStorageClass.Output)
-									.Variable(2, ShaderStorageClass.Output)
+									.TypeInt(100, 4)
+									.TypePointer(101, ShaderStorageClass.Output, 100)
+									.Variable(0, ShaderStorageClass.Output, 101)
+									.Variable(1, ShaderStorageClass.Output, 101)
+									.Variable(2, ShaderStorageClass.Output, 101)
 									.Constant(11, (int)colour)
 									.Constant(12, (int)AnsiColour.Black)
 									.Constant(13, Rune.TryCreate(character, out var rune) ? rune.Value : 0)
@@ -197,6 +209,28 @@ func Output Main(InputVertex input)
 	return (proxy.CreateShader(vertexShaderCode), proxy.CreateShader(fragmentShaderCode));
 }
 
+static (int PipeId, Action<int> AddActions) CreateStringSplitPipeline(ProxyHost proxy, int presentImage, (int X, int Y, int Width, int Height) viewport, bool discard = false)
+{
+	int inputPipe = proxy.CreatePipe(discard);
+	int dataBuffer = proxy.CreateBuffer(4096);
+
+	var (textVertexShader, textFragmentShader) = CreateTextShaders(proxy);
+	int textLinesImage = proxy.CreateImage((viewport.Width * viewport.Height, 1, 1), ImageFormat.T32);
+
+	int linesInstanceBufferView = proxy.CreateBufferView(dataBuffer, 0, 16 * viewport.Height);
+	int indirectCommandBufferView = proxy.CreateBufferView(dataBuffer, 16 * viewport.Height, 8);
+
+	int inputSplitPipeline = proxy.CreateStringSplitPipeline((viewport.Width, viewport.Height), inputPipe, textLinesImage, linesInstanceBufferView, indirectCommandBufferView);
+	int textRenderPass = proxy.CreateRenderPass(new() { [0] = presentImage, [1] = textLinesImage }, new() { [1] = linesInstanceBufferView }, InputRate.PerInstance, PolygonMode.Fill, textVertexShader, textFragmentShader, viewport);
+
+	return (inputPipe, actionList =>
+	{
+		proxy.AddRunPipelineAction(actionList, inputSplitPipeline);
+		proxy.AddIndirectDrawAction(actionList, textRenderPass, indirectCommandBufferView, 0);
+	}
+	);
+}
+
 static (int VertexShader, int FragmentShader) CreateTextShaders(ProxyHost proxy)
 {
 	var fragmentShaderCode = new byte[1024];
@@ -209,12 +243,16 @@ static (int VertexShader, int FragmentShader) CreateTextShaders(ProxyHost proxy)
 									.DecorateLocation(3, 0)
 									.DecorateLocation(4, 1)
 									.DecorateBinding(5, 1)
-									.Variable(0, ShaderStorageClass.Output)
-									.Variable(1, ShaderStorageClass.Output)
-									.Variable(2, ShaderStorageClass.Output)
-									.Variable(3, ShaderStorageClass.Input)
-									.Variable(4, ShaderStorageClass.Input)
-									.Variable(5, ShaderStorageClass.UniformConstant)
+									.TypeInt(100, 4)
+									.TypePointer(101, ShaderStorageClass.Output, 100)
+									.TypePointer(102, ShaderStorageClass.Input, 100)
+									.TypePointer(103, ShaderStorageClass.UniformConstant, 100)
+									.Variable(0, ShaderStorageClass.Output, 101)
+									.Variable(1, ShaderStorageClass.Output, 101)
+									.Variable(2, ShaderStorageClass.Output, 101)
+									.Variable(3, ShaderStorageClass.Input, 102)
+									.Variable(4, ShaderStorageClass.Input, 102)
+									.Variable(5, ShaderStorageClass.UniformConstant, 103)
 									.Constant(11, (int)AnsiColour.White)
 									.Constant(12, (int)AnsiColour.Black)
 									.Load(13, 3)
@@ -241,15 +279,18 @@ static (int VertexShader, int FragmentShader) CreateTextShaders(ProxyHost proxy)
 									.DecorateLocation(6, 1)
 									.DecorateLocation(7, 2)
 									.DecorateLocation(8, 3)
-									.Variable(0, ShaderStorageClass.Output)
-									.Variable(1, ShaderStorageClass.Output)
-									.Variable(2, ShaderStorageClass.Output)
-									.Variable(3, ShaderStorageClass.Output)
-									.Variable(4, ShaderStorageClass.Input)
-									.Variable(5, ShaderStorageClass.Input)
-									.Variable(6, ShaderStorageClass.Input)
-									.Variable(7, ShaderStorageClass.Input)
-									.Variable(8, ShaderStorageClass.Input)
+									.TypeInt(100, 4)
+									.TypePointer(101, ShaderStorageClass.Output, 100)
+									.TypePointer(102, ShaderStorageClass.Input, 100)
+									.Variable(0, ShaderStorageClass.Output, 101)
+									.Variable(1, ShaderStorageClass.Output, 101)
+									.Variable(2, ShaderStorageClass.Output, 101)
+									.Variable(3, ShaderStorageClass.Output, 101)
+									.Variable(4, ShaderStorageClass.Input, 102)
+									.Variable(5, ShaderStorageClass.Input, 102)
+									.Variable(6, ShaderStorageClass.Input, 102)
+									.Variable(7, ShaderStorageClass.Input, 102)
+									.Variable(8, ShaderStorageClass.Input, 102)
 									.Constant(10, 0)
 									.Constant(18, 1)
 									.Load(11, 4) // Vertex Index

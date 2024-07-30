@@ -44,6 +44,9 @@
 
 			var locations = new Dictionary<int, uint>();
 			var storageClasses = new Dictionary<int, ShaderStorageClass>();
+			var variableTypes = new Dictionary<int, int>();
+
+			var types = new Dictionary<int, ShaderType>();
 
 			while (!shaderReader.EndOfStream)
 			{
@@ -61,12 +64,28 @@
 							locations[target] = location;
 						}
 						break;
-					case ShaderOp.Variable:
-						shaderReader.Variable(out int result, out var storageClass);
-
-						if (variables.Contains(result))
+					case ShaderOp.TypeInt:
 						{
-							storageClasses[result] = storageClass;
+							shaderReader.TypeInt(out int result, out int width);
+							types[result] = ShaderType.Int(width);
+						}
+						break;
+					case ShaderOp.TypePointer:
+						{
+							shaderReader.TypePointer(out int result, out var storageClass, out int typeId);
+							var type = types[typeId];
+							types[result] = ShaderType.PointerOf(type, storageClass);
+						}
+						break;
+					case ShaderOp.Variable:
+						{
+							shaderReader.Variable(out int result, out var storageClass, out var type);
+
+							if (variables.Contains(result))
+							{
+								variableTypes[result] = type;
+								storageClasses[result] = storageClass;
+							}
 						}
 						break;
 				}
@@ -76,9 +95,11 @@
 
 			foreach (var variable in variables)
 			{
-				if (locations.TryGetValue(variable, out var location) && storageClasses.TryGetValue(variable, out var storageClass))
+				if (locations.TryGetValue(variable, out var location)
+					&& variableTypes.TryGetValue(variable, out var type)
+					&& storageClasses.TryGetValue(variable, out var storageClass))
 				{
-					var attribute = new ShaderAttribute(ShaderType.Int32, (int)location);
+					var attribute = new ShaderAttribute(types[type], (int)location);
 
 					if (storageClass == ShaderStorageClass.Input)
 					{
@@ -131,6 +152,7 @@
 			}
 
 			var results = new Dictionary<int, int>();
+			var types = new Dictionary<int, ShaderType>();
 
 			while (isRunning)
 			{
@@ -164,10 +186,30 @@
 								throw new InvalidOperationException($"Unknown decoration {decoration}");
 						}
 						break;
+					case ShaderOp.TypeInt:
+						shaderReader = shaderReader.TypeInt(out result, out int width);
+						types[result] = ShaderType.Int(width);
+						break;
+					case ShaderOp.TypePointer:
+						shaderReader = shaderReader.TypePointer(out result, out var storageClass, out int pointerType);
+						types[result] = ShaderType.PointerOf(types[pointerType], storageClass);
+						break;
 					case ShaderOp.Variable:
-						shaderReader = shaderReader.Variable(out result, out var storageClass);
+						shaderReader = shaderReader.Variable(out result, out var variableStorageClass, out int type);
 
-						SetVariableInfo(result, x => x.StorageClass = storageClass);
+						var variableType = types[type];
+
+						if (!variableType.IsPointer())
+						{
+							throw new InvalidOperationException("Variable type must be a pointer");
+						}
+
+						if (variableType.StorageClass != variableStorageClass)
+						{
+							throw new InvalidOperationException("Variable storage class must match type storage class");
+						}
+
+						SetVariableInfo(result, x => x.StorageClass = variableStorageClass);
 						break;
 					case ShaderOp.Constant:
 						{

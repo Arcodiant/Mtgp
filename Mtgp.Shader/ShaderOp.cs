@@ -3,6 +3,9 @@
 public enum ShaderOp
 {
 	None = 0,
+	TypeInt,
+	TypeFloat,
+	TypeVector,
 	TypePointer,
 	Decorate,
 	Store,

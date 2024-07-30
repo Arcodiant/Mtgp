@@ -15,7 +15,7 @@ public class ClearAction(ImageState image, AnsiColour foreground = AnsiColour.Wh
         Span<byte> clearValue = image.Format switch
         {
             ImageFormat.T32 => [32, 0, 0, 0],
-            ImageFormat.T32FG3BG3 => [32, 0, 0, 0, 0],
+            ImageFormat.T32FG3BG3 => [32, 0, 0, 0, 56],
             _ => throw new NotImplementedException()
         };
 

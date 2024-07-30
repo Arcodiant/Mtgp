@@ -11,7 +11,7 @@ internal class ProxyHost(TcpClient client)
 	private readonly List<byte[]> buffers = [];
 	private readonly List<Memory<byte>> bufferViews = [];
 	private readonly List<ImageState> images = [];
-	private readonly List<(Queue<string> Queue, List<Action> Handlers)> pipes = [];
+	private readonly List<(Queue<string> Queue, List<Action> Handlers, bool Discard)> pipes = [];
 	private readonly List<IFixedFunctionPipeline> fixedFunctionPipelines = [];
 	private readonly List<ShaderInterpreter> shaders = [];
 	private readonly List<RenderPass> renderPasses = [];
@@ -40,7 +40,7 @@ internal class ProxyHost(TcpClient client)
 			{
 				if (this.defaultPipes.TryGetValue(DefaultPipe.Input, out var pipe))
 				{
-					this.OnMessage?.Invoke((pipe, line));
+					await (this.OnMessageAsync?.Invoke((pipe, line)) ?? Task.CompletedTask);
 				}
 			}
 		});
@@ -64,8 +64,8 @@ internal class ProxyHost(TcpClient client)
 	public int CreateImage((int Width, int Height, int Depth) size, ImageFormat format)
 		=> AddResource(this.images, new(size, format));
 
-	public int CreatePipe()
-		=> AddResource(this.pipes, ([], []));
+	public int CreatePipe(bool discard = false)
+		=> AddResource(this.pipes, ([], [], discard));
 
 	public int GetPresentImage() => 0;
 
@@ -182,6 +182,11 @@ internal class ProxyHost(TcpClient client)
 	{
 		var pipe = this.pipes[pipeId];
 
+		if(pipe.Discard)
+		{
+			pipe.Queue.Clear();
+		}
+
 		pipe.Queue.Enqueue(value);
 
 		foreach (var handler in pipe.Handlers)
@@ -190,7 +195,7 @@ internal class ProxyHost(TcpClient client)
 		}
 	}
 
-	public event Action<(int Pipe, string Message)>? OnMessage;
+	public event Func<(int Pipe, string Message), Task>? OnMessageAsync;
 
 	protected virtual void Dispose(bool disposing)
 	{
