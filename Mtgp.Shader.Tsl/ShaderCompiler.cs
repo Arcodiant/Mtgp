@@ -256,7 +256,7 @@ public class ShaderCompiler
         {
             id = nextId++;
 
-            return writer.Load(id, GetVarId(expression));
+            return writer.Load(id, intType, GetVarId(expression));
         }
 
         int GetVarId(BinaryExpression expression) => varNames[(((TokenExpression)expression.Left).Value, ((TokenExpression)expression.Right).Value)];

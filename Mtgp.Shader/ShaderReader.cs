@@ -163,11 +163,11 @@ public readonly ref struct ShaderReader(BitReader reader)
 		return new(reader);
 	}
 
-	public readonly ShaderReader Load(out int result, out int variable)
+	public readonly ShaderReader Load(out int result, out int type, out int variable)
 	{
 		var reader = this.ReadShaderOp(ShaderOp.Load, ShaderOpConstants.LoadWordCount);
 
-		reader = reader.Read(out result).Read(out variable);
+		reader = reader.Read(out result).Read(out type).Read(out variable);
 
 		return new(reader);
 	}

@@ -255,8 +255,8 @@ static (int VertexShader, int FragmentShader) CreateTextShaders(ProxyHost proxy)
 									.Variable(5, ShaderStorageClass.UniformConstant, 103)
 									.Constant(11, (int)AnsiColour.White)
 									.Constant(12, (int)AnsiColour.Black)
-									.Load(13, 3)
-									.Load(14, 4)
+									.Load(13, 100, 3)
+									.Load(14, 100, 4)
 									.Sample(15, 5, 13, 14)
 									.Store(0, 15)
 									.Store(1, 11)
@@ -293,11 +293,11 @@ static (int VertexShader, int FragmentShader) CreateTextShaders(ProxyHost proxy)
 									.Variable(8, ShaderStorageClass.Input, 102)
 									.Constant(10, 0)
 									.Constant(18, 1)
-									.Load(11, 4) // Vertex Index
-									.Load(12, 5) // X
-									.Load(13, 6) // Y
-									.Load(14, 7) // TexStart
-									.Load(20, 8) // Length
+									.Load(11, 100, 4) // Vertex Index
+									.Load(12, 100, 5) // X
+									.Load(13, 100, 6) // Y
+									.Load(14, 100, 7) // TexStart
+									.Load(20, 100, 8) // Length
 									.Subtract(19, 20, 18) // Length - 1
 									.Add(15, 12, 19) // X + Length - 1
 									.Add(22, 14, 19) // TexStart + Length - 1

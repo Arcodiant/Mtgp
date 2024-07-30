@@ -195,21 +195,25 @@
 						types[result] = ShaderType.PointerOf(types[pointerType], storageClass);
 						break;
 					case ShaderOp.Variable:
-						shaderReader = shaderReader.Variable(out result, out var variableStorageClass, out int type);
-
-						var variableType = types[type];
-
-						if (!variableType.IsPointer())
 						{
-							throw new InvalidOperationException("Variable type must be a pointer");
-						}
+							shaderReader = shaderReader.Variable(out result, out var variableStorageClass, out int type);
 
-						if (variableType.StorageClass != variableStorageClass)
-						{
-							throw new InvalidOperationException("Variable storage class must match type storage class");
-						}
+							var variableType = types[type];
 
-						SetVariableInfo(result, x => x.StorageClass = variableStorageClass);
+							if (!variableType.IsPointer())
+							{
+								throw new InvalidOperationException("Variable type must be a pointer");
+							}
+
+							if (variableType.StorageClass != variableStorageClass)
+							{
+								throw new InvalidOperationException("Variable storage class must match type storage class");
+							}
+
+							types[result] = variableType;
+
+							SetVariableInfo(result, x => x.StorageClass = variableStorageClass);
+						}
 						break;
 					case ShaderOp.Constant:
 						{
@@ -220,7 +224,12 @@
 						}
 					case ShaderOp.Load:
 						{
-							shaderReader = shaderReader.Load(out result, out int variable);
+							shaderReader = shaderReader.Load(out result, out int variableType, out int variable);
+
+							if (types[variable].ElementType != types[variableType])
+							{
+								throw new InvalidOperationException("Load result type must match variable element type");
+							}
 
 							var variableInfo = variableDecorations[variable];
 

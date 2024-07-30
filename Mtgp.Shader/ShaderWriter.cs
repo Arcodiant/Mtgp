@@ -51,9 +51,10 @@ public readonly ref struct ShaderWriter(BitWriter writer)
 							.Write(variable)
 							.Write(value));
 
-	public readonly ShaderWriter Load(int result, int variable)
+	public readonly ShaderWriter Load(int result, int type, int variable)
 		=> new(this.Write(ShaderOp.Load, ShaderOpConstants.LoadWordCount)
 							.Write(result)
+							.Write(type)
 							.Write(variable));
 
 	public readonly ShaderWriter Constant(int result, int value)
