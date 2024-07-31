@@ -3,6 +3,7 @@
 public enum ShaderOp
 {
 	None = 0,
+	TypeBool,
 	TypeInt,
 	TypeFloat,
 	TypeVector,

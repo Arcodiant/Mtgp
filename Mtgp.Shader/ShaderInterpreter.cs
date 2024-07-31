@@ -70,6 +70,12 @@
 							types[result] = ShaderType.Int(width);
 						}
 						break;
+					case ShaderOp.TypeBool:
+						{
+							shaderReader.TypeBool(out int result);
+							types[result] = ShaderType.Bool;
+						}
+						break;
 					case ShaderOp.TypePointer:
 						{
 							shaderReader.TypePointer(out int result, out var storageClass, out int typeId);
@@ -190,6 +196,10 @@
 						shaderReader = shaderReader.TypeInt(out result, out int width);
 						types[result] = ShaderType.Int(width);
 						break;
+					case ShaderOp.TypeBool:
+						shaderReader = shaderReader.TypeBool(out result);
+						types[result] = ShaderType.Bool;
+						break;
 					case ShaderOp.TypePointer:
 						shaderReader = shaderReader.TypePointer(out result, out var storageClass, out int pointerType);
 						types[result] = ShaderType.PointerOf(types[pointerType], storageClass);
@@ -217,9 +227,10 @@
 						break;
 					case ShaderOp.Constant:
 						{
-							shaderReader = shaderReader.Constant(out result, out int value);
+							shaderReader = shaderReader.Constant(out result, out int type, out int value);
 
 							results[result] = value;
+							types[result] = types[type];
 							break;
 						}
 					case ShaderOp.Load:
@@ -261,6 +272,8 @@
 									throw new InvalidOperationException($"Invalid storage class {variableInfo.StorageClass}");
 							}
 
+							types[result] = types[variableType];
+
 							break;
 						}
 					case ShaderOp.Store:
@@ -270,6 +283,11 @@
 							var variableInfo = variableDecorations[variable];
 
 							int valueToStore = results[value];
+
+							if (types[variable].ElementType != types[value])
+							{
+								throw new InvalidOperationException("Store value type must match variable element type");
+							}
 
 							switch (variableInfo.StorageClass)
 							{
@@ -304,21 +322,33 @@
 						}
 					case ShaderOp.Add:
 						{
-							shaderReader = shaderReader.Add(out result, out int a, out int b);
+							shaderReader = shaderReader.Add(out result, out int type, out int a, out int b);
+
+							if (types[type] != types[a] || types[type] != types[b])
+							{
+								throw new InvalidOperationException("Add operands must have the same type");
+							}
 
 							results[result] = results[a] + results[b];
+							types[result] = types[type];
 							break;
 						}
 					case ShaderOp.Mod:
 						{
-							shaderReader = shaderReader.Mod(out result, out int a, out int b);
+							shaderReader = shaderReader.Mod(out result, out int type, out int a, out int b);
+
+							if (types[type] != types[a] || types[type] != types[b])
+							{
+								throw new InvalidOperationException("Mod operands must have the same type");
+							}
 
 							results[result] = results[a] % results[b];
+							types[result] = types[type];
 							break;
 						}
 					case ShaderOp.Sample:
 						{
-							shaderReader = shaderReader.Sample(out result, out int texture, out int x, out int y);
+							shaderReader = shaderReader.Sample(out result, out int type, out int texture, out int x, out int y);
 
 							var variableData = variableDecorations[texture];
 
@@ -330,22 +360,62 @@
 
 							int textureIndex = textureX + textureY * textureImage.Size.Width;
 
+							if (types[type] != ShaderType.Int(4))
+							{
+								throw new InvalidOperationException("Sample result type must be int32");
+							}
+
 							results[result] = BitConverter.ToInt32(textureData[(textureIndex * 4)..]);
+							types[result] = types[type];
 							break;
 						}
 					case ShaderOp.Subtract:
-					case ShaderOp.Equals:
 						{
-							shaderReader = shaderReader.Binary(op, out result, out int a, out int b);
+							shaderReader = shaderReader.Subtract(out result, out int type, out int a, out int b);
+
+							if (types[type] != types[a] || types[type] != types[b])
+							{
+								throw new InvalidOperationException($"Subtract operands must have the same type");
+							}
 
 							results[result] = results[a] - results[b];
+							types[result] = types[type];
+							break;
+						}
+					case ShaderOp.Equals:
+						{
+							shaderReader = shaderReader.Equals(out result, out int type, out int a, out int b);
+
+							if (types[a] != types[b])
+							{
+								throw new InvalidOperationException($"Equals operands must have the same type");
+							}
+
+							if(types[type] != ShaderType.Bool)
+							{
+								throw new InvalidOperationException($"Equals result must be bool");
+							}
+
+							results[result] = results[a] - results[b];
+							types[result] = types[type];
 							break;
 						}
 					case ShaderOp.Conditional:
 						{
-							shaderReader = shaderReader.Conditional(out result, out int condition, out int trueValue, out int falseValue);
+							shaderReader = shaderReader.Conditional(out result, out int type, out int condition, out int trueValue, out int falseValue);
+
+							if (types[condition] != ShaderType.Bool)
+							{
+								throw new InvalidOperationException("Conditional condition must be bool");
+							}
+
+							if (types[trueValue] != types[falseValue])
+							{
+								throw new InvalidOperationException("Conditional true and false values must have the same type");
+							}
 
 							results[result] = results[condition] == 0 ? results[trueValue] : results[falseValue];
+							types[result] = types[type];
 							break;
 						}
 					case ShaderOp.Return:

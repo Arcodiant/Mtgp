@@ -2,6 +2,7 @@
 
 public record ShaderType(string Id, int Size, ShaderStorageClass? StorageClass = null, int ElementCount = 1, ShaderType? ElementType = null)
 {
+	public static ShaderType Bool => new("bool", 1);
 	public static ShaderType Float(int width) => new("float", width);
 	public static ShaderType Int(int width) => new("int", width);
 	public static ShaderType PointerOf(ShaderType type, ShaderStorageClass storageClass)

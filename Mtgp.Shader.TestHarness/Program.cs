@@ -34,42 +34,45 @@ try
 
 	proxy.Start();
 
+	Log.Information("Building UI shaders");
+
 	var (mapVertexShader, mapFragmentShader) = CreateUIShaders(proxy, AnsiColour.Green, '#');
-	var (borderVertexShader, borderFragmentShader) = CreateUIShaders(proxy, AnsiColour.White, '*');
+	var (borderVertexShader, borderFragmentShader) = CreateUIShaders(proxy, AnsiColour.Blue, '*');
 
 	int presentImage = proxy.GetPresentImage();
+
+	Log.Information("Creating pipelines");
 
 	var (outputPipe, addOutputActions) = CreateStringSplitPipeline(proxy, presentImage, (1, 1, 59, 19));
 	var (inputPipe, addInputActions) = CreateStringSplitPipeline(proxy, presentImage, (1, 21, 59, 2), true);
 
 	var mapVertexBuffer = proxy.CreateBuffer(1024);
 
-	proxy.SetBufferData(mapVertexBuffer, 0,
-	[
-		61, 0, 0, 0,
-		1, 0, 0, 0,
-		78, 0, 0, 0,
-		13, 0, 0, 0,
-	]);
-	proxy.SetBufferData(mapVertexBuffer, 16,
-	[
-		0, 0, 0, 0,
-		0, 0, 0, 0,
-		79, 0, 0, 0,
-		23, 0, 0, 0,
-		61, 0, 0, 0,
-		14, 0, 0, 0,
-		79, 0, 0, 0,
-		14, 0, 0, 0,
-		61, 0, 0, 0,
-		0, 0, 0, 0,
-		61, 0, 0, 0,
-		23, 0, 0, 0,
-		0, 0, 0, 0,
-		20, 0, 0, 0,
-		61, 0, 0, 0,
-		20, 0, 0, 0,
-	]);
+	var setBuffer = new byte[80];
+
+	new BitWriter(setBuffer)
+		.Write(61)
+		.Write(1)
+		.Write(78)
+		.Write(13)
+		.Write(0)
+		.Write(0)
+		.Write(79)
+		.Write(23)
+		.Write(61)
+		.Write(14)
+		.Write(79)
+		.Write(14)
+		.Write(61)
+		.Write(0)
+		.Write(61)
+		.Write(23)
+		.Write(0)
+		.Write(20)
+		.Write(61)
+		.Write(20);
+
+	proxy.SetBufferData(mapVertexBuffer, 0, setBuffer);
 
 	int mapVertexBufferView = proxy.CreateBufferView(mapVertexBuffer, 0, 16);
 	int borderVertexBufferView = proxy.CreateBufferView(mapVertexBuffer, 16, 64);
@@ -87,6 +90,8 @@ try
 
 	proxy.SetActionTrigger(actionList, inputPipe);
 	proxy.SetActionTrigger(actionList, outputPipe);
+
+	Log.Information("Running");
 
 	proxy.Send(outputPipe, "Hello, World!");
 	proxy.Send(outputPipe, "This is a test");
@@ -110,14 +115,19 @@ try
 	{
 		if (character == '\n')
 		{
-			proxy.Send(outputPipe, "> " + messageData.ToString());
-
-			if (messageData.ToString() == "quit")
+			if (messageData.Length > 0)
 			{
-				break;
-			}
+				var message = messageData.ToString().Trim();
 
-			messageData.Clear();
+				proxy.Send(outputPipe, "> " + message);
+
+				if (message.ToLower() == "quit")
+				{
+					break;
+				}
+
+				messageData.Clear();
+			}
 		}
 		else if (char.IsControl(character))
 		{
@@ -151,40 +161,19 @@ static (int VertexShader, int FragmentShader) CreateUIShaders(ProxyHost proxy, A
 
 	var fragmentShader = @$"struct Output
 {{
-    [Location=0] int colour;
-    [Location=1] int background;
-    [Location=2] int character;
+    [Location=0] int character;
+    [Location=1] int colour;
+    [Location=2] int background;
 }}
 
 func Output Main()
 {{
-    result.colour = @{colour};
-    result.background = @Black;
-    result.character = '{character}';
+    result.colour = {(int)colour};
+    result.background = {(int)AnsiColour.Black};
+    result.character = {(Rune.TryCreate(character, out var rune) ? rune.Value : 0)};
 }}";
 
-	var fragmentShaderCode = new byte[1024];
-
-	int fragmentShaderSize = new ShaderWriter(fragmentShaderCode)
-									.EntryPoint([0, 1, 2])
-									.DecorateLocation(0, 0)
-									.DecorateLocation(1, 1)
-									.DecorateLocation(2, 2)
-									.TypeInt(100, 4)
-									.TypePointer(101, ShaderStorageClass.Output, 100)
-									.Variable(0, ShaderStorageClass.Output, 101)
-									.Variable(1, ShaderStorageClass.Output, 101)
-									.Variable(2, ShaderStorageClass.Output, 101)
-									.Constant(11, (int)colour)
-									.Constant(12, (int)AnsiColour.Black)
-									.Constant(13, Rune.TryCreate(character, out var rune) ? rune.Value : 0)
-									.Store(0, 13)
-									.Store(1, 11)
-									.Store(2, 12)
-									.Return()
-									.Writer.WriteCount;
-
-	fragmentShaderCode = fragmentShaderCode[..fragmentShaderSize];
+	var fragmentShaderCode = compiler.Compile(fragmentShader);
 
 	var vertexShader = @"struct InputVertex
 {
@@ -253,11 +242,11 @@ static (int VertexShader, int FragmentShader) CreateTextShaders(ProxyHost proxy)
 									.Variable(3, ShaderStorageClass.Input, 102)
 									.Variable(4, ShaderStorageClass.Input, 102)
 									.Variable(5, ShaderStorageClass.UniformConstant, 103)
-									.Constant(11, (int)AnsiColour.White)
-									.Constant(12, (int)AnsiColour.Black)
+									.Constant(11, 100, (int)AnsiColour.White)
+									.Constant(12, 100, (int)AnsiColour.Black)
 									.Load(13, 100, 3)
 									.Load(14, 100, 4)
-									.Sample(15, 5, 13, 14)
+									.Sample(15, 100, 5, 13, 14)
 									.Store(0, 15)
 									.Store(1, 11)
 									.Store(2, 12)
@@ -282,6 +271,7 @@ static (int VertexShader, int FragmentShader) CreateTextShaders(ProxyHost proxy)
 									.TypeInt(100, 4)
 									.TypePointer(101, ShaderStorageClass.Output, 100)
 									.TypePointer(102, ShaderStorageClass.Input, 100)
+									.TypeBool(103)
 									.Variable(0, ShaderStorageClass.Output, 101)
 									.Variable(1, ShaderStorageClass.Output, 101)
 									.Variable(2, ShaderStorageClass.Output, 101)
@@ -291,19 +281,19 @@ static (int VertexShader, int FragmentShader) CreateTextShaders(ProxyHost proxy)
 									.Variable(6, ShaderStorageClass.Input, 102)
 									.Variable(7, ShaderStorageClass.Input, 102)
 									.Variable(8, ShaderStorageClass.Input, 102)
-									.Constant(10, 0)
-									.Constant(18, 1)
+									.Constant(10, 100, 0)
+									.Constant(18, 100, 1)
 									.Load(11, 100, 4) // Vertex Index
 									.Load(12, 100, 5) // X
 									.Load(13, 100, 6) // Y
 									.Load(14, 100, 7) // TexStart
 									.Load(20, 100, 8) // Length
-									.Subtract(19, 20, 18) // Length - 1
-									.Add(15, 12, 19) // X + Length - 1
-									.Add(22, 14, 19) // TexStart + Length - 1
-									.Equals(16, 11, 10) // Vertex Index == 0
-									.Conditional(17, 16, 12, 15) // Vertex Index == 0 ? X : X + Length - 1
-									.Conditional(21, 16, 14, 22) // Vertex Index == 0 ? TexStart : TexStart + Length - 1
+									.Subtract(19, 100, 20, 18) // Length - 1
+									.Add(15, 100, 12, 19) // X + Length - 1
+									.Add(22, 100, 14, 19) // TexStart + Length - 1
+									.Equals(16, 103, 11, 10) // Vertex Index == 0
+									.Conditional(17, 100, 16, 12, 15) // Vertex Index == 0 ? X : X + Length - 1
+									.Conditional(21, 100, 16, 14, 22) // Vertex Index == 0 ? TexStart : TexStart + Length - 1
 									.Store(0, 17) // X
 									.Store(1, 13) // Y
 									.Store(2, 21) // U

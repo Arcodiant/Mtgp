@@ -39,6 +39,9 @@ public readonly ref struct ShaderWriter(BitWriter writer)
 		=> new(this.Write(ShaderOp.TypeInt, ShaderOpConstants.TypeIntWordCount)
 							.Write(result)
 							.Write(width));
+	public readonly ShaderWriter TypeBool(int result)
+		=> new(this.Write(ShaderOp.TypeBool, ShaderOpConstants.TypeBoolWordCount)
+							.Write(result));
 
 	public readonly ShaderWriter Variable(int result, ShaderStorageClass shaderStorageClass, int type)
 		=> new(this.Write(ShaderOp.Variable, ShaderOpConstants.VariableWordCount)
@@ -57,9 +60,10 @@ public readonly ref struct ShaderWriter(BitWriter writer)
 							.Write(type)
 							.Write(variable));
 
-	public readonly ShaderWriter Constant(int result, int value)
+	public readonly ShaderWriter Constant(int result, int type, int value)
 		=> new(this.Write(ShaderOp.Constant, ShaderOpConstants.ConstantWordCount)
 							.Write(result)
+							.Write(type)
 							.Write(value));
 
 	public readonly ShaderWriter Return()
@@ -68,40 +72,46 @@ public readonly ref struct ShaderWriter(BitWriter writer)
 	public readonly ShaderWriter EntryPoint(ReadOnlySpan<int> variables)
 		=> new(this.Write(ShaderOp.EntryPoint, (uint)(1 + variables.Length)).Write(variables));
 
-	public readonly ShaderWriter Add(int result, int left, int right)
+	public readonly ShaderWriter Add(int result, int type, int left, int right)
 		=> new(this.Write(ShaderOp.Add, ShaderOpConstants.BinaryWordCount)
 							.Write(result)
+							.Write(type)
 							.Write(left)
 							.Write(right));
 
-	public readonly ShaderWriter Subtract(int result, int left, int right)
+	public readonly ShaderWriter Subtract(int result, int type, int left, int right)
 		=> new(this.Write(ShaderOp.Subtract, ShaderOpConstants.BinaryWordCount)
 							.Write(result)
+							.Write(type)
 							.Write(left)
 							.Write(right));
 
-	public readonly ShaderWriter Mod(int result, int left, int right)
+	public readonly ShaderWriter Mod(int result, int type, int left, int right)
 		=> new(this.Write(ShaderOp.Mod, ShaderOpConstants.BinaryWordCount)
 							.Write(result)
+							.Write(type)
 							.Write(left)
 							.Write(right));
 
-	public readonly ShaderWriter Sample(int result, int texture, int x, int y)
+	public readonly ShaderWriter Sample(int result, int type, int texture, int x, int y)
 		=> new(this.Write(ShaderOp.Sample, ShaderOpConstants.SampleWordCount)
 							.Write(result)
+							.Write(type)
 							.Write(texture)
 							.Write(x)
 							.Write(y));
 
-	public readonly ShaderWriter Equals(int result, int left, int right)
+	public readonly ShaderWriter Equals(int result, int type, int left, int right)
 		=> new(this.Write(ShaderOp.Equals, ShaderOpConstants.BinaryWordCount)
 							.Write(result)
+							.Write(type)
 							.Write(left)
 							.Write(right));
 
-	public readonly ShaderWriter Conditional(int result, int condition, int trueValue, int falseValue)
+	public readonly ShaderWriter Conditional(int result, int type, int condition, int trueValue, int falseValue)
 		=> new(this.Write(ShaderOp.Conditional, ShaderOpConstants.ConditionalWordCount)
 							.Write(result)
+							.Write(type)
 							.Write(condition)
 							.Write(trueValue)
 							.Write(falseValue));

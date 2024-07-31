@@ -134,6 +134,15 @@ public readonly ref struct ShaderReader(BitReader reader)
 		return new(reader);
 	}
 
+	public readonly ShaderReader TypeBool(out int result)
+	{
+		var reader = this.ReadShaderOp(ShaderOp.TypeBool, ShaderOpConstants.TypeBoolWordCount);
+
+		reader = reader.Read(out result);
+
+		return new(reader);
+	}
+
 	public readonly ShaderReader TypeInt(out int result, out int width)
 	{
 		var reader = this.ReadShaderOp(ShaderOp.TypeInt, ShaderOpConstants.TypeIntWordCount);
@@ -172,11 +181,11 @@ public readonly ref struct ShaderReader(BitReader reader)
 		return new(reader);
 	}
 
-	public readonly ShaderReader Constant(out int result, out int value)
+	public readonly ShaderReader Constant(out int result, out int type, out int value)
 	{
 		var reader = this.ReadShaderOp(ShaderOp.Constant, ShaderOpConstants.ConstantWordCount);
 
-		reader = reader.Read(out result).Read(out value);
+		reader = reader.Read(out result).Read(out type).Read(out value);
 
 		return new(reader);
 	}
@@ -217,65 +226,65 @@ public readonly ref struct ShaderReader(BitReader reader)
 		return new(reader);
 	}
 
-	public readonly ShaderReader Add(out int result, out int left, out int right)
+	public readonly ShaderReader Add(out int result, out int type, out int left, out int right)
 	{
 		var reader = this.ReadShaderOp(ShaderOp.Add, ShaderOpConstants.BinaryWordCount);
 
-		reader = reader.Read(out result).Read(out left).Read(out right);
+		reader = reader.Read(out result).Read(out type).Read(out left).Read(out right);
 
 		return new(reader);
 	}
 
-	public readonly ShaderReader Sample(out int result, out int texture, out int x, out int y)
+	public readonly ShaderReader Sample(out int result, out int type, out int texture, out int x, out int y)
 	{
 		var reader = this.ReadShaderOp(ShaderOp.Sample, ShaderOpConstants.SampleWordCount);
 
-		reader = reader.Read(out result).Read(out texture).Read(out x).Read(out y);
+		reader = reader.Read(out result).Read(out type).Read(out texture).Read(out x).Read(out y);
 
 		return new(reader);
 	}
 
-	public readonly ShaderReader Equals(out int result, out int left, out int right)
+	public readonly ShaderReader Equals(out int result, out int type, out int left, out int right)
 	{
 		var reader = this.ReadShaderOp(ShaderOp.Equals, ShaderOpConstants.BinaryWordCount);
 
-		reader = reader.Read(out result).Read(out left).Read(out right);
+		reader = reader.Read(out result).Read(out type).Read(out left).Read(out right);
 
 		return new(reader);
 	}
 
-	public readonly ShaderReader Conditional(out int result, out int condition, out int trueValue, out int falseValue)
+	public readonly ShaderReader Conditional(out int result, out int type, out int condition, out int trueValue, out int falseValue)
 	{
 		var reader = this.ReadShaderOp(ShaderOp.Conditional, ShaderOpConstants.ConditionalWordCount);
 
-		reader = reader.Read(out result).Read(out condition).Read(out trueValue).Read(out falseValue);
+		reader = reader.Read(out result).Read(out type).Read(out condition).Read(out trueValue).Read(out falseValue);
 
 		return new(reader);
 	}
 
-	public readonly ShaderReader Subtract(out int result, out int left, out int right)
+	public readonly ShaderReader Subtract(out int result, out int type, out int left, out int right)
 	{
 		var reader = this.ReadShaderOp(ShaderOp.Subtract, ShaderOpConstants.BinaryWordCount);
 
-		reader = reader.Read(out result).Read(out left).Read(out right);
+		reader = reader.Read(out result).Read(out type).Read(out left).Read(out right);
 
 		return new(reader);
 	}
 
-	public readonly ShaderReader Mod(out int result, out int left, out int right)
+	public readonly ShaderReader Mod(out int result, out int type, out int left, out int right)
 	{
 		var reader = this.ReadShaderOp(ShaderOp.Mod, ShaderOpConstants.BinaryWordCount);
 
-		reader = reader.Read(out result).Read(out left).Read(out right);
+		reader = reader.Read(out result).Read(out type).Read(out left).Read(out right);
 
 		return new(reader);
 	}
 
-	public readonly ShaderReader Binary(ShaderOp op, out int result, out int left, out int right)
+	public readonly ShaderReader Binary(ShaderOp op, out int result, out int type, out int left, out int right)
 	{
 		var reader = this.ReadShaderOp(op, ShaderOpConstants.BinaryWordCount);
 
-		reader = reader.Read(out result).Read(out left).Read(out right);
+		reader = reader.Read(out result).Read(out type).Read(out left).Read(out right);
 
 		return new(reader);
 	}

@@ -118,7 +118,7 @@ public class TelnetClient
 
     private void SetColour(AnsiColour foreground, AnsiColour background, bool force = false)
     {
-        this.writer.Write($"\x1B[{(int)foreground + 30}m");
+        this.writer.Write($"\x1B[{(int)foreground + 90}m");
         this.writer.Write($"\x1B[{(int)background + 40}m");
     }
 
