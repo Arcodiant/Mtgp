@@ -43,6 +43,12 @@ public static class ShaderDisassembler
 									assembly.AppendLine($"({target}, {decoration}, {builtin})");
 								}
 								break;
+							case ShaderDecoration.Binding:
+								{
+									shaderReader.DecorateBinding(out _, out var binding);
+									assembly.AppendLine($"({target}, {decoration}, {binding})");
+								}
+								break;
 							default:
 								assembly.AppendLine($"({target}, {decoration}, ...?) - Unknown Decoration");
 								break;
@@ -68,6 +74,27 @@ public static class ShaderDisassembler
 						shaderReader.TypeInt(out int result, out int width);
 
 						assembly.AppendLine($"({result}, {width})");
+					}
+					break;
+				case ShaderOp.TypeFloat:
+					{
+						shaderReader.TypeFloat(out int result, out int width);
+
+						assembly.AppendLine($"({result}, {width})");
+					}
+					break;
+				case ShaderOp.TypeVector:
+					{
+						shaderReader.TypeVector(out int result, out int type, out int count);
+
+						assembly.AppendLine($"({result}, {type}, {count})");
+					}
+					break;
+				case ShaderOp.TypeImage:
+					{
+						shaderReader.TypeImage(out int result, out int type, out int dim);
+
+						assembly.AppendLine($"({result}, {type}, {dim})");
 					}
 					break;
 				case ShaderOp.Variable:
@@ -96,6 +123,13 @@ public static class ShaderDisassembler
 						shaderReader.Constant(out int result, out int type, out int value);
 
 						assembly.AppendLine($"({result}, {type}, {value})");
+					}
+					break;
+				case ShaderOp.Gather:
+					{
+						shaderReader.Gather(out int result, out int type, out int texture, out int coordinate);
+
+						assembly.AppendLine($"({result}, {type}, {texture}, {coordinate})");
 					}
 					break;
 				case ShaderOp.Return:

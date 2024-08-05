@@ -2,6 +2,7 @@
 - Types in shaders
 	- Vector types
 	- Float types
+	- Struct types
 	- Colours as float vectors
 - Bind vertex buffers?
 - MTGP over network

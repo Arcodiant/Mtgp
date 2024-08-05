@@ -16,8 +16,14 @@ public record ShaderType(string Id, int Size, ShaderStorageClass? StorageClass =
 
 public static class ShaderTypeExtensions
 {
+	public static bool IsInt(this ShaderType type)
+		=> type.Id.StartsWith("int");
+	public static bool IsFloat(this ShaderType type)
+		=> type.Id.StartsWith("float");
 	public static bool IsPointer(this ShaderType type)
 		=> type.Id.StartsWith("ptr");
 	public static bool IsVector(this ShaderType type)
 		=> type.Id.StartsWith("vec");
+	public static bool IsImage(this ShaderType type)
+		=> type.Id.StartsWith("image");
 }

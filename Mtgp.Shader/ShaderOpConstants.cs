@@ -6,6 +6,7 @@ internal static class ShaderOpConstants
 	public const uint TypeVectorWordCount = 4;
 	public const uint TypeImageWordCount = 4;
 	public const uint TypeIntWordCount = 3;
+	public const uint TypeFloatWordCount = 3;
 	public const uint TypeBoolWordCount = 2;
 	public const uint VariableWordCount = 4;
 	public const uint StoreWordCount = 3;

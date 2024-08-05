@@ -233,52 +233,19 @@ static (int VertexShader, int FragmentShader) CreateTextShaders(ProxyHost proxy)
 
 struct Input
 {{
-	[Location=0] int u;
-	[Location=1] int v;
+	[Location=0] vec<int,2> uv;
 }}
 
-[Binding=1] uniform int text;
+[Binding=1] image2d int text;
 
 func Output Main(Input input)
 {{
 	result.colour = {(int)AnsiColour.White};
 	result.background = {(int)AnsiColour.Black};
+	result.character = Gather(text, input.uv);
 }}";
 
-	Log.Debug("Shader: {Shader}", ShaderDisassembler.Disassemble(compiler.Compile(fragmentShader)));
-
-	var fragmentShaderCode = new byte[1024];
-
-	int fragmentShaderSize = new ShaderWriter(fragmentShaderCode)
-									.EntryPoint([0, 1, 2, 3, 4])
-									.DecorateLocation(0, 0)
-									.DecorateLocation(1, 1)
-									.DecorateLocation(2, 2)
-									.DecorateLocation(3, 0)
-									.DecorateLocation(4, 1)
-									.DecorateBinding(5, 1)
-									.TypeInt(100, 4)
-									.TypePointer(101, ShaderStorageClass.Output, 100)
-									.TypeVector(102, 100, 2)
-									.TypePointer(103, ShaderStorageClass.Input, 102)
-									.TypeImage(104, 100, 2)
-									.TypePointer(105, ShaderStorageClass.Image, 104)
-									.Variable(0, ShaderStorageClass.Output, 101)
-									.Variable(1, ShaderStorageClass.Output, 101)
-									.Variable(2, ShaderStorageClass.Output, 101)
-									.Variable(3, ShaderStorageClass.Input, 103)
-									.Variable(5, ShaderStorageClass.Image, 105)
-									.Constant(11, 100, (int)AnsiColour.White)
-									.Constant(12, 100, (int)AnsiColour.Black)
-									.Load(13, 102, 3)
-									.Gather(15, 100, 5, 13)
-									.Store(0, 15)
-									.Store(1, 11)
-									.Store(2, 12)
-									.Return()
-									.Writer.WriteCount;
-
-	fragmentShaderCode = fragmentShaderCode[..fragmentShaderSize];
+	var fragmentShaderCode = compiler.Compile(fragmentShader);
 
 	var vertexShaderCode = new byte[1024];
 
