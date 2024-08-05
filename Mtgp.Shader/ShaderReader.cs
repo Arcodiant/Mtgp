@@ -134,6 +134,24 @@ public readonly ref struct ShaderReader(BitReader reader)
 		return new(reader);
 	}
 
+	public readonly ShaderReader TypeVector(out int result, out int componentType, out int componentCount)
+	{
+		var reader = this.ReadShaderOp(ShaderOp.TypeVector, ShaderOpConstants.TypeVectorWordCount);
+
+		reader = reader.Read(out result).Read(out componentType).Read(out componentCount);
+
+		return new(reader);
+	}
+
+	public readonly ShaderReader TypeImage(out int result, out int imageType, out int dim)
+	{
+		var reader = this.ReadShaderOp(ShaderOp.TypeImage, ShaderOpConstants.TypeImageWordCount);
+
+		reader = reader.Read(out result).Read(out imageType).Read(out dim);
+
+		return new(reader);
+	}
+
 	public readonly ShaderReader TypeBool(out int result)
 	{
 		var reader = this.ReadShaderOp(ShaderOp.TypeBool, ShaderOpConstants.TypeBoolWordCount);
@@ -235,11 +253,11 @@ public readonly ref struct ShaderReader(BitReader reader)
 		return new(reader);
 	}
 
-	public readonly ShaderReader Sample(out int result, out int type, out int texture, out int x, out int y)
+	public readonly ShaderReader Gather(out int result, out int type, out int image, out int coord)
 	{
-		var reader = this.ReadShaderOp(ShaderOp.Sample, ShaderOpConstants.SampleWordCount);
+		var reader = this.ReadShaderOp(ShaderOp.Gather, ShaderOpConstants.GatherWordCount);
 
-		reader = reader.Read(out result).Read(out type).Read(out texture).Read(out x).Read(out y);
+		reader = reader.Read(out result).Read(out type).Read(out image).Read(out coord);
 
 		return new(reader);
 	}

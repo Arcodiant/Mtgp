@@ -39,9 +39,22 @@ public readonly ref struct ShaderWriter(BitWriter writer)
 		=> new(this.Write(ShaderOp.TypeInt, ShaderOpConstants.TypeIntWordCount)
 							.Write(result)
 							.Write(width));
+
 	public readonly ShaderWriter TypeBool(int result)
 		=> new(this.Write(ShaderOp.TypeBool, ShaderOpConstants.TypeBoolWordCount)
 							.Write(result));
+
+	public readonly ShaderWriter TypeVector(int result, int componentType, int componentCount)
+		=> new(this.Write(ShaderOp.TypeVector, ShaderOpConstants.TypeVectorWordCount)
+							.Write(result)
+							.Write(componentType)
+							.Write(componentCount));
+
+	public readonly ShaderWriter TypeImage(int result, int imageType, int dim)
+		=> new(this.Write(ShaderOp.TypeImage, ShaderOpConstants.TypeImageWordCount)
+							.Write(result)
+							.Write(imageType)
+							.Write(dim));
 
 	public readonly ShaderWriter Variable(int result, ShaderStorageClass shaderStorageClass, int type)
 		=> new(this.Write(ShaderOp.Variable, ShaderOpConstants.VariableWordCount)
@@ -93,13 +106,12 @@ public readonly ref struct ShaderWriter(BitWriter writer)
 							.Write(left)
 							.Write(right));
 
-	public readonly ShaderWriter Sample(int result, int type, int texture, int x, int y)
-		=> new(this.Write(ShaderOp.Sample, ShaderOpConstants.SampleWordCount)
+	public readonly ShaderWriter Gather(int result, int type, int texture, int coord)
+		=> new(this.Write(ShaderOp.Gather, ShaderOpConstants.GatherWordCount)
 							.Write(result)
 							.Write(type)
 							.Write(texture)
-							.Write(x)
-							.Write(y));
+							.Write(coord));
 
 	public readonly ShaderWriter Equals(int result, int type, int left, int right)
 		=> new(this.Write(ShaderOp.Equals, ShaderOpConstants.BinaryWordCount)

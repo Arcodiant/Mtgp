@@ -222,6 +222,31 @@ static (int PipeId, Action<int> AddActions) CreateStringSplitPipeline(ProxyHost 
 
 static (int VertexShader, int FragmentShader) CreateTextShaders(ProxyHost proxy)
 {
+	var compiler = new ShaderCompiler();
+
+	var fragmentShader = @$"struct Output
+{{
+	[Location=0] int character;
+	[Location=1] int colour;
+	[Location=2] int background;
+}}
+
+struct Input
+{{
+	[Location=0] int u;
+	[Location=1] int v;
+}}
+
+[Binding=1] uniform int text;
+
+func Output Main(Input input)
+{{
+	result.colour = {(int)AnsiColour.White};
+	result.background = {(int)AnsiColour.Black};
+}}";
+
+	Log.Debug("Shader: {Shader}", ShaderDisassembler.Disassemble(compiler.Compile(fragmentShader)));
+
 	var fragmentShaderCode = new byte[1024];
 
 	int fragmentShaderSize = new ShaderWriter(fragmentShaderCode)
@@ -234,19 +259,19 @@ static (int VertexShader, int FragmentShader) CreateTextShaders(ProxyHost proxy)
 									.DecorateBinding(5, 1)
 									.TypeInt(100, 4)
 									.TypePointer(101, ShaderStorageClass.Output, 100)
-									.TypePointer(102, ShaderStorageClass.Input, 100)
-									.TypePointer(103, ShaderStorageClass.UniformConstant, 100)
+									.TypeVector(102, 100, 2)
+									.TypePointer(103, ShaderStorageClass.Input, 102)
+									.TypeImage(104, 100, 2)
+									.TypePointer(105, ShaderStorageClass.Image, 104)
 									.Variable(0, ShaderStorageClass.Output, 101)
 									.Variable(1, ShaderStorageClass.Output, 101)
 									.Variable(2, ShaderStorageClass.Output, 101)
-									.Variable(3, ShaderStorageClass.Input, 102)
-									.Variable(4, ShaderStorageClass.Input, 102)
-									.Variable(5, ShaderStorageClass.UniformConstant, 103)
+									.Variable(3, ShaderStorageClass.Input, 103)
+									.Variable(5, ShaderStorageClass.Image, 105)
 									.Constant(11, 100, (int)AnsiColour.White)
 									.Constant(12, 100, (int)AnsiColour.Black)
-									.Load(13, 100, 3)
-									.Load(14, 100, 4)
-									.Sample(15, 100, 5, 13, 14)
+									.Load(13, 102, 3)
+									.Gather(15, 100, 5, 13)
 									.Store(0, 15)
 									.Store(1, 11)
 									.Store(2, 12)

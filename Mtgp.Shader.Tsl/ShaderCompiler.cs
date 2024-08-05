@@ -12,6 +12,7 @@ public class ShaderCompiler
 	{
 		Struct,
 		Func,
+		Uniform,
 		Token,
 		LBlockParen,
 		RBlockParen,
@@ -40,20 +41,21 @@ public class ShaderCompiler
 														.Match(Character.EqualTo(','), PartType.Comma)
 														.Match(Span.EqualTo("struct"), PartType.Struct)
 														.Match(Span.EqualTo("func"), PartType.Func)
+														.Match(Span.EqualTo("uniform"), PartType.Uniform)
 														.Match(Numerics.Integer, PartType.IntegerLiteral)
 														.Match(Identifier.CStyle, PartType.Token)
 														.Build();
 
 	private readonly static TokenListParser<PartType, TokenExpression> identifier = Token.EqualTo(PartType.Token).Select(x => new TokenExpression(x.ToStringValue()));
 	private readonly static TokenListParser<PartType, Expression> fieldExpression = from left in Parse.Ref(() => identifier)
-																						  from dot in Token.EqualTo(PartType.Dot)
-																						  from right in identifier
-																						  select (Expression)new BinaryExpression(left, right, ".");
+																					from dot in Token.EqualTo(PartType.Dot)
+																					from right in identifier
+																					select (Expression)new BinaryExpression(left, right, ".");
 	private readonly static TokenListParser<PartType, Expression> intLiteralExpression = from value in Token.EqualTo(PartType.IntegerLiteral)
-																							   select (Expression)new IntegerLiteralExpression(int.Parse(value.ToStringValue()));
+																						 select (Expression)new IntegerLiteralExpression(int.Parse(value.ToStringValue()));
 
 
-	private readonly static TokenListParser<PartType, Expression> leftHandExpression = from field in fieldExpression select (Expression)field;
+	private readonly static TokenListParser<PartType, Expression> leftHandExpression = from field in fieldExpression select field;
 	private readonly static TokenListParser<PartType, Expression> rightHandExpression = from expression in fieldExpression.Or(intLiteralExpression) select expression;
 
 	private readonly static TokenListParser<PartType, AssignStatement> assignment = from leftHand in leftHandExpression
@@ -73,12 +75,12 @@ public class ShaderCompiler
 																						 from field in Token.EqualTo(PartType.Token)
 																						 from lineEnd in Token.EqualTo(PartType.Semicolon)
 																						 select new FieldDefinition(type, field.ToStringValue(), decorations);
-	private readonly static TokenListParser<PartType, StructDefinition> structDefinition = from structKeyword in Token.EqualTo(PartType.Struct)
-																						   from name in identifier
-																						   from open in Token.EqualTo(PartType.LBlockParen)
-																						   from fields in fieldDefinition.Many()
-																						   from close in Token.EqualTo(PartType.RBlockParen)
-																						   select new StructDefinition(name.Value, fields);
+	private readonly static TokenListParser<PartType, TopLevelDefinition> structDefinition = from structKeyword in Token.EqualTo(PartType.Struct)
+																							 from name in identifier
+																							 from open in Token.EqualTo(PartType.LBlockParen)
+																							 from fields in fieldDefinition.Many()
+																							 from close in Token.EqualTo(PartType.RBlockParen)
+																							 select (TopLevelDefinition)new StructDefinition(name.Value, fields);
 
 	private readonly static TokenListParser<PartType, ParameterDefinition> parameterDefinition = from type in typeReference
 																								 from name in identifier
@@ -89,19 +91,26 @@ public class ShaderCompiler
 																																				Token.EqualTo(PartType.RParen))
 																							  select parameters;
 
-	private readonly static TokenListParser<PartType, FuncDefinition> funcDefinition = from funcKeyword in Token.EqualTo(PartType.Func)
-																					   from type in typeReference
-																					   from name in identifier
-																					   from parameters in parameterBlock
-																					   from open in Token.EqualTo(PartType.LBlockParen)
-																					   from statements in assignment.Many()
-																					   from close in Token.EqualTo(PartType.RBlockParen)
-																					   select new FuncDefinition(type, name.Value, parameters, statements);
+	private readonly static TokenListParser<PartType, TopLevelDefinition> funcDefinition = from funcKeyword in Token.EqualTo(PartType.Func)
+																						   from type in typeReference
+																						   from name in identifier
+																						   from parameters in parameterBlock
+																						   from open in Token.EqualTo(PartType.LBlockParen)
+																						   from statements in assignment.Many()
+																						   from close in Token.EqualTo(PartType.RBlockParen)
+																						   select (TopLevelDefinition)new FuncDefinition(type, name.Value, parameters, statements);
 
+	private readonly static TokenListParser<PartType, TopLevelDefinition> uniformDefinition = from decorations in decoration.Many()
+																							  from uniformKeyword in Token.EqualTo(PartType.Uniform)
+																							  from type in typeReference
+																							  from name in identifier
+																							  from lineEnd in Token.EqualTo(PartType.Semicolon)
+																							  select (TopLevelDefinition)new UniformDefinition(type, name.Value, decorations);
 
-	private readonly static TokenListParser<PartType, ShaderFile> shaderFile = from structs in structDefinition.Many()
-																			   from funcs in funcDefinition.Many()
-																			   select new ShaderFile(structs, funcs);
+	private readonly static TokenListParser<PartType, TopLevelDefinition> topLevelDefinition = structDefinition.Or(funcDefinition).Or(uniformDefinition);
+
+	private readonly static TokenListParser<PartType, ShaderFile> shaderFile = from defs in topLevelDefinition.Many()
+																			   select new ShaderFile(defs.OfType<StructDefinition>().ToArray(), defs.OfType<FuncDefinition>().ToArray(), defs.OfType<UniformDefinition>().ToArray());
 
 	private record Expression();
 
@@ -122,7 +131,10 @@ public class ShaderCompiler
 			=> $"{nameof(FieldDefinition)} {{ Type = {Type}, Field = {Field}, {FormatArray(Decorations)} }}";
 	}
 
+	private record TopLevelDefinition();
+
 	private record StructDefinition(string Name, FieldDefinition[] Fields)
+		: TopLevelDefinition
 	{
 		public override string ToString()
 			=> $"{nameof(StructDefinition)} {{ Name = {Name}, {FormatArray(Fields)} }}";
@@ -131,20 +143,24 @@ public class ShaderCompiler
 	private record ParameterDefinition(TypeReference Type, string Name);
 
 	private record FuncDefinition(TypeReference ReturnType, string Name, ParameterDefinition[] Parameters, Statement[] Statements)
+		: TopLevelDefinition
 	{
 		public override string ToString()
 			=> $"{nameof(ShaderFile)} {{ {FormatField(ReturnType)}, {FormatField(Name)}, {FormatArray(Parameters)}, {FormatArray(Statements)} }}";
 	}
+
+	private record UniformDefinition(TypeReference Type, string Name, Decoration[] Decorations)
+		: TopLevelDefinition;
 
 	private record Statement();
 
 	private record AssignStatement(Expression LeftHand, Expression RightHand)
 		: Statement;
 
-	private record ShaderFile(StructDefinition[] StructDefinitions, FuncDefinition[] FuncDefinitions)
+	private record ShaderFile(StructDefinition[] StructDefinitions, FuncDefinition[] FuncDefinitions, UniformDefinition[] UniformDefinitions)
 	{
 		public override string ToString()
-			=> $"{nameof(ShaderFile)} {{ {FormatArray(StructDefinitions)}, {FormatArray(FuncDefinitions)} }}";
+			=> $"{nameof(ShaderFile)} {{ {FormatArray(StructDefinitions)}, {FormatArray(FuncDefinitions)}, {FormatArray(UniformDefinitions)} }}";
 	}
 
 	public byte[] Compile(string source)

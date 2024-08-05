@@ -4,5 +4,6 @@ public enum ShaderStorageClass
 {
 	Input,
 	Output,
-	UniformConstant
+	UniformConstant,
+	Image
 }

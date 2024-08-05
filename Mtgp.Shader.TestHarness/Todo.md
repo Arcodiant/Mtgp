@@ -5,6 +5,5 @@
 	- Colours as float vectors
 - Bind vertex buffers?
 - MTGP over network
-- Timer events
 - Presentation diffs
 - Handle incoming ANSI control codes
