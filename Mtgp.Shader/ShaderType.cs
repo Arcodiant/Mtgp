@@ -20,6 +20,8 @@ public static class ShaderTypeExtensions
 		=> type.Id.StartsWith("int");
 	public static bool IsFloat(this ShaderType type)
 		=> type.Id.StartsWith("float");
+	public static bool IsBool(this ShaderType type)
+		=> type.Id.StartsWith("bool");
 	public static bool IsPointer(this ShaderType type)
 		=> type.Id.StartsWith("ptr");
 	public static bool IsVector(this ShaderType type)

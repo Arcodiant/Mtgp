@@ -247,53 +247,34 @@ func Output Main(Input input)
 
 	var fragmentShaderCode = compiler.Compile(fragmentShader);
 
-	var vertexShaderCode = new byte[1024];
+	var vertexShader = @"struct Output
+{
+	[PositionX] int x;
+	[PositionY] int y;
+	[Location=0] int u;
+	[Location=1] int v;
+}
 
-	int vertexShaderSize = new ShaderWriter(vertexShaderCode)
-									.EntryPoint([2, 3, 5, 6, 7, 8])
-									.DecorateBuiltin(0, Builtin.PositionX)
-									.DecorateBuiltin(1, Builtin.PositionY)
-									.DecorateLocation(2, 0)
-									.DecorateLocation(3, 1)
-									.DecorateBuiltin(4, Builtin.VertexIndex)
-									.DecorateLocation(5, 0)
-									.DecorateLocation(6, 1)
-									.DecorateLocation(7, 2)
-									.DecorateLocation(8, 3)
-									.TypeInt(100, 4)
-									.TypePointer(101, ShaderStorageClass.Output, 100)
-									.TypePointer(102, ShaderStorageClass.Input, 100)
-									.TypeBool(103)
-									.Variable(0, ShaderStorageClass.Output, 101)
-									.Variable(1, ShaderStorageClass.Output, 101)
-									.Variable(2, ShaderStorageClass.Output, 101)
-									.Variable(3, ShaderStorageClass.Output, 101)
-									.Variable(4, ShaderStorageClass.Input, 102)
-									.Variable(5, ShaderStorageClass.Input, 102)
-									.Variable(6, ShaderStorageClass.Input, 102)
-									.Variable(7, ShaderStorageClass.Input, 102)
-									.Variable(8, ShaderStorageClass.Input, 102)
-									.Constant(10, 100, 0)
-									.Constant(18, 100, 1)
-									.Load(11, 100, 4) // Vertex Index
-									.Load(12, 100, 5) // X
-									.Load(13, 100, 6) // Y
-									.Load(14, 100, 7) // TexStart
-									.Load(20, 100, 8) // Length
-									.Subtract(19, 100, 20, 18) // Length - 1
-									.Add(15, 100, 12, 19) // X + Length - 1
-									.Add(22, 100, 14, 19) // TexStart + Length - 1
-									.Equals(16, 103, 11, 10) // Vertex Index == 0
-									.Conditional(17, 100, 16, 12, 15) // Vertex Index == 0 ? X : X + Length - 1
-									.Conditional(21, 100, 16, 14, 22) // Vertex Index == 0 ? TexStart : TexStart + Length - 1
-									.Store(0, 17) // X
-									.Store(1, 13) // Y
-									.Store(2, 21) // U
-									.Store(3, 10) // V
-									.Return()
-									.Writer.WriteCount;
+struct Input
+{
+	[VertexIndex] int vertexIndex;
+	[Location=0] int x;
+	[Location=1] int y;
+	[Location=2] int texStart;
+	[Location=3] int length;
+}
 
-	vertexShaderCode = vertexShaderCode[..vertexShaderSize];
+func Output Main(Input input)
+{
+	result.x = input.vertexIndex == 0 ? input.x : input.x + input.length - 1;
+	result.y = input.y;
+	result.u = input.vertexIndex == 0 ? input.texStart : input.texStart + input.length - 1;
+	result.v = 0;
+}";
+
+	Log.Information("Vertex Shader: {VertexShader}", ShaderDisassembler.Disassemble(compiler.Compile(vertexShader)));
+
+	var vertexShaderCode = compiler.Compile(vertexShader);
 
 	return (proxy.CreateShader(vertexShaderCode), proxy.CreateShader(fragmentShaderCode));
 }

@@ -6,30 +6,59 @@ using System.Runtime.CompilerServices;
 
 namespace Mtgp.Shader.Tsl;
 
+internal enum PartType
+{
+	Struct,
+	Func,
+	Uniform,
+	Image,
+	Identifier,
+	LBlockParen,
+	RBlockParen,
+	LAttributeParen,
+	RAttributeParen,
+	LArrow,
+	RArrow,
+	LParen,
+	RParen,
+	Assign,
+	Semicolon,
+	Dot,
+	IntegerLiteral,
+	Comma,
+	Question,
+	Colon,
+	Equals,
+	Plus,
+	Minus,
+	Multiply,
+	Divide,
+	And,
+	Or,
+}
+
+internal record Expression();
+
+internal record IntegerLiteralExpression(int Value)
+	: Expression;
+
+internal record TokenExpression(string Value)
+	: Expression;
+
+internal record NegateExpression(Expression Inner)
+	: Expression;
+
+internal record BinaryExpression(Expression Left, Expression Right, string Operator)
+	: Expression;
+
+internal record TernaryExpression(Expression Condition, Expression TrueBranch, Expression FalseBranch)
+	: Expression;
+
+internal record FunctionExpression(string Name, Expression[] Arguments)
+	: Expression;
+
 public class ShaderCompiler
 {
-	private enum PartType
-	{
-		Struct,
-		Func,
-		Uniform,
-		Image,
-		Token,
-		LBlockParen,
-		RBlockParen,
-		LAttributeParen,
-		RAttributeParen,
-		LArrow,
-		RArrow,
-		LParen,
-		RParen,
-		Assign,
-		Semicolon,
-		Dot,
-		IntegerLiteral,
-		Comma,
-	}
-
 	private readonly static Tokenizer<PartType> token = new TokenizerBuilder<PartType>()
 														.Ignore(Span.WhiteSpace)
 														.Match(Character.EqualTo('{'), PartType.LBlockParen)
@@ -40,50 +69,37 @@ public class ShaderCompiler
 														.Match(Character.EqualTo('>'), PartType.RArrow)
 														.Match(Character.EqualTo('('), PartType.LParen)
 														.Match(Character.EqualTo(')'), PartType.RParen)
+														.Match(Span.EqualTo("=="), PartType.Equals)
 														.Match(Character.EqualTo('='), PartType.Assign)
 														.Match(Character.EqualTo(';'), PartType.Semicolon)
+														.Match(Character.EqualTo(':'), PartType.Colon)
+														.Match(Character.EqualTo('?'), PartType.Question)
 														.Match(Character.EqualTo('.'), PartType.Dot)
 														.Match(Character.EqualTo(','), PartType.Comma)
+														.Match(Character.EqualTo('+'), PartType.Plus)
+														.Match(Character.EqualTo('-'), PartType.Minus)
 														.Match(Span.EqualTo("struct"), PartType.Struct)
 														.Match(Span.EqualTo("func"), PartType.Func)
 														.Match(Span.EqualTo("uniform"), PartType.Uniform)
 														.Match(Span.EqualTo("image1d"), PartType.Image)
 														.Match(Span.EqualTo("image2d"), PartType.Image)
 														.Match(Numerics.Integer, PartType.IntegerLiteral)
-														.Match(Identifier.CStyle, PartType.Token)
+														.Match(Identifier.CStyle, PartType.Identifier)
 														.Build();
 
-	private readonly static TokenListParser<PartType, TokenExpression> identifier = Token.EqualTo(PartType.Token).Select(x => new TokenExpression(x.ToStringValue()));
-	private readonly static TokenListParser<PartType, Expression> tokenExpression = from token in Token.EqualTo(PartType.Token) select (Expression)new TokenExpression(token.ToStringValue());
-
-	private readonly static TokenListParser<PartType, Expression> fieldExpression = from left in identifier
-																					from dot in Token.EqualTo(PartType.Dot)
-																					from right in identifier
-																					select (Expression)new BinaryExpression(left, right, ".");
-	private readonly static TokenListParser<PartType, Expression> intLiteralExpression = from value in Token.EqualTo(PartType.IntegerLiteral)
-																						 select (Expression)new IntegerLiteralExpression(int.Parse(value.ToStringValue()));
-	private readonly static TokenListParser<PartType, Expression> functionExpression = from name in Token.EqualTo(PartType.Token)
-																					   from open in Token.EqualTo(PartType.LParen)
-																					   from arguments in Parse.Ref(() => rightHandExpression!).ManyDelimitedBy(Token.EqualTo(PartType.Comma))
-																					   from close in Token.EqualTo(PartType.RParen)
-																					   select (Expression)new FunctionExpression(name.ToStringValue(), arguments);
-
-	private readonly static TokenListParser<PartType, Expression> leftHandExpression = from field in fieldExpression select field;
-	private readonly static TokenListParser<PartType, Expression> rightHandExpression = from expression in functionExpression.Try().Or(fieldExpression.Try()).Or(tokenExpression).Or(intLiteralExpression) select expression;
-
-	private readonly static TokenListParser<PartType, AssignStatement> assignment = from leftHand in leftHandExpression
+	private readonly static TokenListParser<PartType, AssignStatement> assignment = from leftHand in ExpressionParsers.Expression
 																					from @operator in Token.EqualTo(PartType.Assign)
-																					from rightHand in rightHandExpression
+																					from rightHand in ExpressionParsers.Expression
 																					from endOfLine in Token.EqualTo(PartType.Semicolon)
 																					select new AssignStatement(leftHand, rightHand);
 
 	private readonly static TokenListParser<PartType, Decoration> decoration = from open in Token.EqualTo(PartType.LAttributeParen)
-																			   from name in Token.EqualTo(PartType.Token)
+																			   from name in Token.EqualTo(PartType.Identifier)
 																			   from value in Token.EqualTo(PartType.Assign).IgnoreThen(Token.EqualTo(PartType.IntegerLiteral)).OptionalOrDefault()
 																			   from close in Token.EqualTo(PartType.RAttributeParen)
 																			   select new Decoration(name.ToStringValue(), value.HasValue ? int.Parse(value.ToStringValue()) : null);
 
-	private readonly static TokenListParser<PartType, TypeReference> typeReference = from type in Token.EqualTo(PartType.Token)
+	private readonly static TokenListParser<PartType, TypeReference> typeReference = from type in Token.EqualTo(PartType.Identifier)
 																					 from arguments in Parse.Ref(() => typeArgumentBlock!)
 																											.OptionalOrDefault([])
 																					 select new TypeReference(type.ToStringValue(), arguments);
@@ -101,19 +117,19 @@ public class ShaderCompiler
 
 	private readonly static TokenListParser<PartType, FieldDefinition> fieldDefinition = from decorations in decoration.Many()
 																						 from type in typeReference
-																						 from field in Token.EqualTo(PartType.Token)
+																						 from field in Token.EqualTo(PartType.Identifier)
 																						 from lineEnd in Token.EqualTo(PartType.Semicolon)
 																						 select new FieldDefinition(type, field.ToStringValue(), decorations);
 	private readonly static TokenListParser<PartType, TopLevelDefinition> structDefinition = from structKeyword in Token.EqualTo(PartType.Struct)
-																							 from name in identifier
+																							 from name in BaseParsers.Identifier
 																							 from open in Token.EqualTo(PartType.LBlockParen)
 																							 from fields in fieldDefinition.Many()
 																							 from close in Token.EqualTo(PartType.RBlockParen)
-																							 select (TopLevelDefinition)new StructDefinition(name.Value, fields);
+																							 select (TopLevelDefinition)new StructDefinition(name, fields);
 
 	private readonly static TokenListParser<PartType, ParameterDefinition> parameterDefinition = from type in typeReference
-																								 from name in identifier
-																								 select new ParameterDefinition(type, name.Value);
+																								 from name in BaseParsers.Identifier
+																								 select new ParameterDefinition(type, name);
 
 	private readonly static TokenListParser<PartType, ParameterDefinition[]> parameterBlock = from parameters in parameterDefinition.ManyDelimitedBy(Token.EqualTo(PartType.Comma))
 																																	.Between(Token.EqualTo(PartType.LParen),
@@ -122,37 +138,24 @@ public class ShaderCompiler
 
 	private readonly static TokenListParser<PartType, TopLevelDefinition> funcDefinition = from funcKeyword in Token.EqualTo(PartType.Func)
 																						   from type in typeReference
-																						   from name in identifier
+																						   from name in BaseParsers.Identifier
 																						   from parameters in parameterBlock
 																						   from open in Token.EqualTo(PartType.LBlockParen)
 																						   from statements in assignment.Many()
 																						   from close in Token.EqualTo(PartType.RBlockParen)
-																						   select (TopLevelDefinition)new FuncDefinition(type, name.Value, parameters, statements);
+																						   select (TopLevelDefinition)new FuncDefinition(type, name, parameters, statements);
 
 	private readonly static TokenListParser<PartType, TopLevelDefinition> bindingDefinition = from decoration in decoration
 																							  from typeKeyword in Token.EqualTo(PartType.Uniform).Or(Token.EqualTo(PartType.Image))
 																							  from type in typeReference
-																							  from name in identifier
+																							  from name in BaseParsers.Identifier
 																							  from lineEnd in Token.EqualTo(PartType.Semicolon)
-																							  select (TopLevelDefinition)new BindingDefinition(type, typeKeyword.ToStringValue(), name.Value, decoration);
+																							  select (TopLevelDefinition)new BindingDefinition(type, typeKeyword.ToStringValue(), name, decoration);
 
 	private readonly static TokenListParser<PartType, TopLevelDefinition> topLevelDefinition = structDefinition.Or(funcDefinition).Or(bindingDefinition);
 
 	private readonly static TokenListParser<PartType, ShaderFile> shaderFile = from defs in topLevelDefinition.Many().AtEnd()
 																			   select new ShaderFile(defs.OfType<StructDefinition>().ToArray(), defs.OfType<FuncDefinition>().ToArray(), defs.OfType<BindingDefinition>().ToArray());
-
-	private record Expression();
-
-	private record IntegerLiteralExpression(int Value)
-		: Expression;
-	private record TokenExpression(string Value)
-		: Expression;
-
-	private record BinaryExpression(Expression Left, Expression Right, string Operator)
-		: Expression;
-
-	private record FunctionExpression(string Name, Expression[] Arguments)
-		: Expression;
 
 	private record TypeArgument();
 
@@ -203,8 +206,6 @@ public class ShaderCompiler
 
 	public byte[] Compile(string source)
 	{
-		var test = functionExpression.AtEnd().Parse(token.Tokenize("a(b)"));
-
 		var tokens = token.Tokenize(source);
 
 		var file = shaderFile.Parse(tokens);
@@ -353,6 +354,10 @@ public class ShaderCompiler
 				{
 					writer = writer.TypeImage(id, GetTypeId(ref writer, type.ElementType!), type.ElementCount);
 				}
+				else if (type.IsBool())
+				{
+					writer = writer.TypeBool(id);
+				}
 				else
 				{
 					throw new Exception($"Unknown type: {type}");
@@ -369,6 +374,8 @@ public class ShaderCompiler
 			writer = writer.Variable(id, storage, GetTypeId(ref headerWriter, ShaderType.PointerOf(type, storage)));
 		}
 
+		var expressionImplementations = new Dictionary<Expression, (int Id, ShaderType Type)>();
+
 		foreach (var statement in mainFunc.Statements)
 		{
 			writer = statement switch
@@ -381,26 +388,66 @@ public class ShaderCompiler
 		writer = writer.Return();
 
 		ShaderWriter WriteAssignment(ShaderWriter writer, AssignStatement assignment)
-			=> WriteExpression(writer, assignment.RightHand, out int rightId)
+			=> WriteExpression(writer, assignment.RightHand, out int rightId, out _)
 				.Store(GetVarId((BinaryExpression)assignment.LeftHand), rightId);
-		ShaderWriter WriteExpression(ShaderWriter writer, Expression expression, out int id) => expression switch
+
+		ShaderWriter WriteExpression(ShaderWriter writer, Expression expression, out int id, out ShaderType type)
 		{
-			IntegerLiteralExpression integerLiteralExpression => WriteIntegerLiteralExpression(writer, integerLiteralExpression, out id),
-			BinaryExpression binaryExpression => WriteBinaryExpression(writer, binaryExpression, out id),
-			FunctionExpression functionExpression => WriteFunctionExpression(writer, functionExpression, out id),
-			_ => throw new Exception($"Unknown expression type: {expression}")
-		};
-		ShaderWriter WriteFunctionExpression(ShaderWriter writer, FunctionExpression expression, out int id)
+			if (!expressionImplementations.TryGetValue(expression, out var info))
+			{
+				writer = expression switch
+				{
+					IntegerLiteralExpression integerLiteralExpression => WriteIntegerLiteralExpression(writer, integerLiteralExpression, out id, out type),
+					BinaryExpression binaryExpression => WriteBinaryExpression(writer, binaryExpression, out id, out type),
+					FunctionExpression functionExpression => WriteFunctionExpression(writer, functionExpression, out id, out type),
+					TernaryExpression ternaryExpression => WriteTernaryExpression(writer, ternaryExpression, out id, out type),
+					_ => throw new Exception($"Unknown expression type: {expression}")
+				};
+
+				expressionImplementations[expression] = (id, type);
+			}
+			else
+			{
+				id = info.Id;
+				type = info.Type;
+			}
+
+			return writer;
+		}
+
+		ShaderWriter WriteTernaryExpression(ShaderWriter writer, TernaryExpression expression, out int id, out ShaderType type)
+		{
+			writer = WriteExpression(writer, expression.Condition, out int conditionId, out var conditionType);
+			if (!conditionType.IsBool())
+			{
+				throw new Exception($"Ternary condition must be a bool, got {conditionType}");
+			}
+
+			writer = WriteExpression(writer, expression.TrueBranch, out int trueBranchId, out var trueBranchType);
+			writer = WriteExpression(writer, expression.FalseBranch, out int falseBranchId, out var falseBranchType);
+			if(trueBranchType != falseBranchType)
+			{
+				throw new Exception($"Ternary branches must have the same type, got {trueBranchType} and {falseBranchType}");
+			}
+
+			id = nextId++;
+			type = trueBranchType;
+
+			writer = writer.Conditional(id, GetTypeId(ref writer, trueBranchType), conditionId, trueBranchId, falseBranchId);
+
+			return writer;
+		}
+		ShaderWriter WriteFunctionExpression(ShaderWriter writer, FunctionExpression expression, out int id, out ShaderType type)
 		{
 			id = nextId++;
 
 			return expression.Name switch
 			{
-				"Gather" => WriteGatherFunction(writer, expression, out id),
+				"Gather" => WriteGatherFunction(writer, expression, out id, out type),
 				_ => throw new Exception($"Unknown function: {expression.Name}")
 			};
 		}
-		ShaderWriter WriteGatherFunction(ShaderWriter writer, FunctionExpression expression, out int id)
+		ShaderWriter WriteGatherFunction(ShaderWriter writer, FunctionExpression expression, out int id, out ShaderType type)
 		{
 			if (expression.Arguments.Length != 2)
 			{
@@ -420,25 +467,73 @@ public class ShaderCompiler
 			writer = writer.Load(loadedCoordId, coordIdTypeId, coordId);
 
 			id = nextId++;
+			type = imageElementType;
 
 			return writer.Gather(id, imageElementTypeId, imageVarId, loadedCoordId);
 		}
-		ShaderWriter WriteBinaryExpression(ShaderWriter writer, BinaryExpression expression, out int id) => expression.Operator switch
+		ShaderWriter WriteBinaryExpression(ShaderWriter writer, BinaryExpression expression, out int id, out ShaderType type) => expression.Operator switch
 		{
-			"." => WriteDotExpression(writer, expression, out id),
+			"." => WriteDotExpression(writer, expression, out id, out type),
+			"==" => WriteEqualityExpression(writer, expression, out id, out type),
+			"+" => WriteAddExpression(writer, expression, out id, out type),
+			"-" => WriteSubtractExpression(writer, expression, out id, out type),
 			_ => throw new Exception($"Unknown operator: {expression.Operator}")
 		};
-		ShaderWriter WriteIntegerLiteralExpression(ShaderWriter writer, IntegerLiteralExpression expression, out int id)
+		ShaderWriter WriteIntegerLiteralExpression(ShaderWriter writer, IntegerLiteralExpression expression, out int id, out ShaderType type)
 		{
 			id = nextId++;
+			type = ShaderType.Int(4);
 
 			return writer.Constant(id, GetTypeId(ref writer, ShaderType.Int(4)), expression.Value);
 		}
-		ShaderWriter WriteDotExpression(ShaderWriter writer, BinaryExpression expression, out int id)
+		ShaderWriter WriteDotExpression(ShaderWriter writer, BinaryExpression expression, out int id, out ShaderType type)
 		{
 			id = nextId++;
+			type = ShaderType.Int(4);
 
 			return writer.Load(id, GetTypeId(ref writer, ShaderType.Int(4)), GetVarId(expression));
+		}
+		ShaderWriter WriteEqualityExpression(ShaderWriter writer, BinaryExpression expression, out int id, out ShaderType type)
+		{
+			writer = WriteExpression(writer, expression.Left, out int leftId, out var leftType);
+			writer = WriteExpression(writer, expression.Right, out int rightId, out var rightType);
+			if(leftType != rightType)
+			{
+				throw new Exception($"Equality operands must have the same type, got {leftType} and {rightType}");
+			}
+
+			id = nextId++;
+			type = ShaderType.Bool;
+
+			return writer.Equals(id, GetTypeId(ref writer, ShaderType.Bool), leftId, rightId);
+		}
+		ShaderWriter WriteAddExpression(ShaderWriter writer, BinaryExpression expression, out int id, out ShaderType type)
+		{
+			writer = WriteExpression(writer, expression.Left, out int leftId, out var leftType);
+			writer = WriteExpression(writer, expression.Right, out int rightId, out var rightType);
+			if(leftType != rightType)
+			{
+				throw new Exception($"Add operands must have the same type, got {leftType} and {rightType}");
+			}
+
+			id = nextId++;
+			type = leftType;
+
+			return writer.Add(id, GetTypeId(ref writer, leftType), leftId, rightId);
+		}
+		ShaderWriter WriteSubtractExpression(ShaderWriter writer, BinaryExpression expression, out int id, out ShaderType type)
+		{
+			writer = WriteExpression(writer, expression.Left, out int leftId, out var leftType);
+			writer = WriteExpression(writer, expression.Right, out int rightId, out var rightType);
+			if(leftType != rightType)
+			{
+				throw new Exception($"Subtract operands must have the same type, got {leftType} and {rightType}");
+			}
+
+			id = nextId++;
+			type = leftType;
+
+			return writer.Subtract(id, GetTypeId(ref writer, leftType), leftId, rightId);
 		}
 
 		int GetVarId(BinaryExpression expression) => varNames[(((TokenExpression)expression.Left).Value, ((TokenExpression)expression.Right).Value)];

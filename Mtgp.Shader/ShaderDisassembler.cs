@@ -132,6 +132,34 @@ public static class ShaderDisassembler
 						assembly.AppendLine($"({result}, {type}, {texture}, {coordinate})");
 					}
 					break;
+				case ShaderOp.Equals:
+					{
+						shaderReader.Equals(out int result, out int type, out int left, out int right);
+
+						assembly.AppendLine($"({result}, {type}, {left}, {right})");
+					}
+					break;
+				case ShaderOp.Add:
+					{
+						shaderReader.Add(out int result, out int type, out int left, out int right);
+
+						assembly.AppendLine($"({result}, {type}, {left}, {right})");
+					}
+					break;
+				case ShaderOp.Subtract:
+					{
+						shaderReader.Subtract(out int result, out int type, out int left, out int right);
+
+						assembly.AppendLine($"({result}, {type}, {left}, {right})");
+					}
+					break;
+				case ShaderOp.Conditional:
+					{
+						shaderReader.Conditional(out int result, out int type, out int condition, out int trueValue, out int falseValue);
+
+						assembly.AppendLine($"({result}, {type}, {condition}, {trueValue}, {falseValue})");
+					}
+					break;
 				case ShaderOp.Return:
 					{
 						assembly.AppendLine();

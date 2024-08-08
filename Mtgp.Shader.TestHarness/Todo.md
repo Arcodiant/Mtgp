@@ -1,6 +1,7 @@
 ﻿- Vertex output & pixel input
 - Types in shaders
 	- Vector types
+		- Swizzles
 	- Float types
 	- Struct types
 	- Colours as float vectors
