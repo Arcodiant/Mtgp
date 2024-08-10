@@ -2,16 +2,11 @@
 - Types in shaders
 	- Vector types
 		- Swizzles
-	- Float types
 	- Struct types
-	- Colours as float vectors
+		- Proper member access
 - Shader Expressions
-	- Multipler/Divide
-	- And/Or
-	- Negate
 	- Function level variables
 - Bind vertex buffers?
 - MTGP over network
 - Presentation diffs
 - Handle incoming ANSI control codes
-- 24-bit colour
