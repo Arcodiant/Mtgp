@@ -1,4 +1,5 @@
 ﻿using Superpower;
+using Superpower.Model;
 using Superpower.Parsers;
 using Superpower.Tokenizers;
 using System.Collections.Immutable;
@@ -25,6 +26,7 @@ internal enum PartType
 	Semicolon,
 	Dot,
 	IntegerLiteral,
+	DecimalLiteral,
 	Comma,
 	Question,
 	Colon,
@@ -40,6 +42,9 @@ internal enum PartType
 internal record Expression();
 
 internal record IntegerLiteralExpression(int Value)
+	: Expression;
+
+internal record FloatLiteralExpression(float Value)
 	: Expression;
 
 internal record TokenExpression(string Value)
@@ -59,6 +64,11 @@ internal record FunctionExpression(string Name, Expression[] Arguments)
 
 public class ShaderCompiler
 {
+	private static TextParser<TextSpan> Float { get; } = from first in Numerics.Integer
+														 from dot in Character.EqualTo('.')
+														 from second in Numerics.Integer
+														 select new TextSpan(first.Source!, first.Position, first.Length + second.Length + 1);
+
 	private readonly static Tokenizer<PartType> token = new TokenizerBuilder<PartType>()
 														.Ignore(Span.WhiteSpace)
 														.Match(Character.EqualTo('{'), PartType.LBlockParen)
@@ -78,11 +88,14 @@ public class ShaderCompiler
 														.Match(Character.EqualTo(','), PartType.Comma)
 														.Match(Character.EqualTo('+'), PartType.Plus)
 														.Match(Character.EqualTo('-'), PartType.Minus)
+														.Match(Character.EqualTo('*'), PartType.Multiply)
+														.Match(Character.EqualTo('/'), PartType.Divide)
 														.Match(Span.EqualTo("struct"), PartType.Struct)
 														.Match(Span.EqualTo("func"), PartType.Func)
 														.Match(Span.EqualTo("uniform"), PartType.Uniform)
 														.Match(Span.EqualTo("image1d"), PartType.Image)
 														.Match(Span.EqualTo("image2d"), PartType.Image)
+														.Match(Float, PartType.DecimalLiteral)
 														.Match(Numerics.Integer, PartType.IntegerLiteral)
 														.Match(Identifier.CStyle, PartType.Identifier)
 														.Build();
@@ -358,6 +371,10 @@ public class ShaderCompiler
 				{
 					writer = writer.TypeBool(id);
 				}
+				else if (type.IsFloat())
+				{
+					writer = writer.TypeFloat(id, type.Size);
+				}
 				else
 				{
 					throw new Exception($"Unknown type: {type}");
@@ -401,6 +418,7 @@ public class ShaderCompiler
 					BinaryExpression binaryExpression => WriteBinaryExpression(writer, binaryExpression, out id, out type),
 					FunctionExpression functionExpression => WriteFunctionExpression(writer, functionExpression, out id, out type),
 					TernaryExpression ternaryExpression => WriteTernaryExpression(writer, ternaryExpression, out id, out type),
+					FloatLiteralExpression floatLiteralExpression => WriteFloatLiteralExpression(writer, floatLiteralExpression, out id, out type),
 					_ => throw new Exception($"Unknown expression type: {expression}")
 				};
 
@@ -425,7 +443,7 @@ public class ShaderCompiler
 
 			writer = WriteExpression(writer, expression.TrueBranch, out int trueBranchId, out var trueBranchType);
 			writer = WriteExpression(writer, expression.FalseBranch, out int falseBranchId, out var falseBranchType);
-			if(trueBranchType != falseBranchType)
+			if (trueBranchType != falseBranchType)
 			{
 				throw new Exception($"Ternary branches must have the same type, got {trueBranchType} and {falseBranchType}");
 			}
@@ -444,8 +462,55 @@ public class ShaderCompiler
 			return expression.Name switch
 			{
 				"Gather" => WriteGatherFunction(writer, expression, out id, out type),
+				"Vec" => WriteVecFunction(writer, expression, out id, out type),
+				"Abs" => WriteAbsFunction(writer, expression, out id, out type),
 				_ => throw new Exception($"Unknown function: {expression.Name}")
 			};
+		}
+		ShaderWriter WriteAbsFunction(ShaderWriter writer, FunctionExpression expression, out int id, out ShaderType type)
+		{
+			if (expression.Arguments.Length != 1)
+			{
+				throw new Exception($"Abs function expects 1 argument, got {expression.Arguments.Length}");
+			}
+
+			writer = WriteExpression(writer, expression.Arguments[0], out int valueId, out type);
+
+			id = nextId++;
+			return writer.Abs(id, GetTypeId(ref writer, type), valueId);
+		}
+		ShaderWriter WriteVecFunction(ShaderWriter writer, FunctionExpression expression, out int id, out ShaderType type)
+		{
+			if (expression.Arguments.Length < 2)
+			{
+				throw new Exception($"Vec function expects at least 2 arguments, got {expression.Arguments.Length}");
+			}
+
+			writer = WriteExpression(writer, expression.Arguments[0], out int firstId, out var firstType);
+
+			var elementType = firstType.IsVector() ? firstType.ElementType! : firstType;
+
+			var expressionList = new List<int>()
+			{
+				firstId
+			};
+
+			foreach (var argument in expression.Arguments.Skip(1))
+			{
+				writer = WriteExpression(writer, argument, out int argumentId, out var argumentType);
+
+				if (!(argumentType.IsVector() ? argumentType.ElementType == elementType : argumentType == elementType))
+				{
+					throw new Exception($"Vec function arguments must have the same type or be vectors of the same element type, got {elementType} and {argumentType}");
+				}
+
+				expressionList.Add(argumentId);
+			}
+
+			id = nextId++;
+			type = ShaderType.VectorOf(elementType, expressionList.Count);
+
+			return writer.CompositeConstruct(id, GetTypeId(ref writer, type), expressionList.ToArray());
 		}
 		ShaderWriter WriteGatherFunction(ShaderWriter writer, FunctionExpression expression, out int id, out ShaderType type)
 		{
@@ -477,6 +542,8 @@ public class ShaderCompiler
 			"==" => WriteEqualityExpression(writer, expression, out id, out type),
 			"+" => WriteAddExpression(writer, expression, out id, out type),
 			"-" => WriteSubtractExpression(writer, expression, out id, out type),
+			"*" => WriteMultiplyExpression(writer, expression, out id, out type),
+			"/" => WriteDivideExpression(writer, expression, out id, out type),
 			_ => throw new Exception($"Unknown operator: {expression.Operator}")
 		};
 		ShaderWriter WriteIntegerLiteralExpression(ShaderWriter writer, IntegerLiteralExpression expression, out int id, out ShaderType type)
@@ -485,6 +552,13 @@ public class ShaderCompiler
 			type = ShaderType.Int(4);
 
 			return writer.Constant(id, GetTypeId(ref writer, ShaderType.Int(4)), expression.Value);
+		}
+		ShaderWriter WriteFloatLiteralExpression(ShaderWriter writer, FloatLiteralExpression expression, out int id, out ShaderType type)
+		{
+			id = nextId++;
+			type = ShaderType.Float(4);
+
+			return writer.Constant(id, GetTypeId(ref writer, ShaderType.Float(4)), expression.Value);
 		}
 		ShaderWriter WriteDotExpression(ShaderWriter writer, BinaryExpression expression, out int id, out ShaderType type)
 		{
@@ -497,7 +571,7 @@ public class ShaderCompiler
 		{
 			writer = WriteExpression(writer, expression.Left, out int leftId, out var leftType);
 			writer = WriteExpression(writer, expression.Right, out int rightId, out var rightType);
-			if(leftType != rightType)
+			if (leftType != rightType)
 			{
 				throw new Exception($"Equality operands must have the same type, got {leftType} and {rightType}");
 			}
@@ -507,38 +581,74 @@ public class ShaderCompiler
 
 			return writer.Equals(id, GetTypeId(ref writer, ShaderType.Bool), leftId, rightId);
 		}
-		ShaderWriter WriteAddExpression(ShaderWriter writer, BinaryExpression expression, out int id, out ShaderType type)
+		ShaderWriter WriteIntToFloat(ShaderWriter writer, int value, out int id, out ShaderType type)
 		{
-			writer = WriteExpression(writer, expression.Left, out int leftId, out var leftType);
-			writer = WriteExpression(writer, expression.Right, out int rightId, out var rightType);
-			if(leftType != rightType)
+			id = nextId++;
+			type = ShaderType.Float(4);
+			return writer.IntToFloat(id, GetTypeId(ref writer, type), value);
+		}
+		ShaderWriter PrepOperatorExpression(ShaderWriter writer, BinaryExpression expression, out ShaderType type, out int leftId, out int rightId)
+		{
+			writer = WriteExpression(writer, expression.Left, out leftId, out var leftType);
+			writer = WriteExpression(writer, expression.Right, out rightId, out var rightType);
+
+			if (leftType != rightType)
 			{
-				throw new Exception($"Add operands must have the same type, got {leftType} and {rightType}");
+				if (leftType.IsInt())
+				{
+					writer = WriteIntToFloat(writer, leftId, out leftId, out leftType);
+				}
+
+				if(rightType.IsInt())
+				{
+					writer = WriteIntToFloat(writer, rightId, out rightId, out rightType);
+				}
 			}
 
-			id = nextId++;
 			type = leftType;
 
-			return writer.Add(id, GetTypeId(ref writer, leftType), leftId, rightId);
+			return writer;
+		}
+		ShaderWriter WriteAddExpression(ShaderWriter writer, BinaryExpression expression, out int id, out ShaderType type)
+		{
+			writer = PrepOperatorExpression(writer, expression, out type, out int leftId, out int rightId);
+
+			id = nextId++;
+
+			return writer.Add(id, GetTypeId(ref writer, type), leftId, rightId);
 		}
 		ShaderWriter WriteSubtractExpression(ShaderWriter writer, BinaryExpression expression, out int id, out ShaderType type)
 		{
-			writer = WriteExpression(writer, expression.Left, out int leftId, out var leftType);
-			writer = WriteExpression(writer, expression.Right, out int rightId, out var rightType);
-			if(leftType != rightType)
-			{
-				throw new Exception($"Subtract operands must have the same type, got {leftType} and {rightType}");
-			}
+			writer = PrepOperatorExpression(writer, expression, out type, out int leftId, out int rightId);
 
 			id = nextId++;
-			type = leftType;
 
-			return writer.Subtract(id, GetTypeId(ref writer, leftType), leftId, rightId);
+			return writer.Subtract(id, GetTypeId(ref writer, type), leftId, rightId);
+		}
+		ShaderWriter WriteMultiplyExpression(ShaderWriter writer, BinaryExpression expression, out int id, out ShaderType type)
+		{
+			writer = PrepOperatorExpression(writer, expression, out type, out int leftId, out int rightId);
+
+			id = nextId++;
+
+			return writer.Multiply(id, GetTypeId(ref writer, type), leftId, rightId);
+		}
+		ShaderWriter WriteDivideExpression(ShaderWriter writer, BinaryExpression expression, out int id, out ShaderType type)
+		{
+			writer = PrepOperatorExpression(writer, expression, out type, out int leftId, out int rightId);
+
+			id = nextId++;
+
+			return writer.Divide(id, GetTypeId(ref writer, type), leftId, rightId);
 		}
 
 		int GetVarId(BinaryExpression expression) => varNames[(((TokenExpression)expression.Left).Value, ((TokenExpression)expression.Right).Value)];
 
-		return [.. shaderHeader[..headerWriter.Writer.WriteCount], .. shaderCode[..writer.Writer.WriteCount]];
+		byte[] result = [.. shaderHeader[..headerWriter.Writer.WriteCount], .. shaderCode[..writer.Writer.WriteCount]];
+
+		Console.WriteLine(ShaderDisassembler.Disassemble(result));
+
+		return result;
 	}
 
 	private static string FormatField<T>(T value, [CallerArgumentExpression(nameof(value))] string fieldName = "")

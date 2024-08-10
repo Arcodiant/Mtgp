@@ -1,37 +1,21 @@
-﻿using System.Runtime.CompilerServices;
-using System.Text;
+﻿using System.Text;
 
 namespace Mtgp.Shader;
 
 public record ImageState((int Width, int Height, int Depth) Size, ImageFormat Format)
 {
 	public (int Width, int Height, int Depth) Size { get; private set; } = Size;
-    public Memory<byte> Data { get; private set; } = new byte[GetSize(Format) * Size.Width * Size.Height * Size.Depth];
+    public Memory<byte> Data { get; private set; } = new byte[TextelUtil.GetSize(Format) * Size.Width * Size.Height * Size.Depth];
 
 	public void Resize((int Width, int Height, int Depth) newSize)
 	{
 		this.Size = newSize;
-		this.Data = new byte[GetSize(Format) * Size.Width * Size.Height * Size.Depth];
+		this.Data = new byte[TextelUtil.GetSize(Format) * Size.Width * Size.Height * Size.Depth];
     }
-
-	public static int GetSize(ImageFormat format)
-		=> format switch
-		{
-			ImageFormat.T32 => 4,
-			ImageFormat.T32FG3BG3 => 5,
-			_ => throw new NotSupportedException()
-		};
 }
 
 public class RenderPass(ShaderInterpreter vertexShader, InputRate inputRate, PolygonMode polygonMode, ShaderInterpreter fragmentShader, (int X, int Y, int Width, int Height) viewport)
 {
-	private static readonly FragmentOutputMapping[] fragmentOutputMappings =
-	[
-		new(0),
-		new(4),
-		new(8)
-	];
-
 	private readonly ShaderInterpreter vertex = vertexShader;
 	private readonly ShaderInterpreter fragment = fragmentShader;
 
@@ -44,11 +28,13 @@ public class RenderPass(ShaderInterpreter vertexShader, InputRate inputRate, Pol
 	{
 		int timerValue = Environment.TickCount;
 
+		int outputSize = ShaderType.Textel.Size;
+
 		const int instanceSize = 16;
 		Span<byte> vertexOutput = stackalloc byte[8 * 2];
 		Span<byte> vertexInput = stackalloc byte[instanceSize];
 
-		Span<byte> output = stackalloc byte[12];
+		Span<byte> output = stackalloc byte[outputSize];
 		Span<char> chars = stackalloc char[2];
 
 		Span<byte> fragmentInput = stackalloc byte[8];
@@ -152,15 +138,23 @@ public class RenderPass(ShaderInterpreter vertexShader, InputRate inputRate, Pol
 
 						var frameBuffer = this.ImageAttachments[0];
 
-						int step = ImageState.GetSize(frameBuffer.Format);
+						int step = TextelUtil.GetSize(frameBuffer.Format);
 
 						int pixelX = x + this.Viewport.X;
 						int pixelY = y + this.Viewport.Y;
 
-						var pixelTarget = frameBuffer.Data.Span[(ImageState.GetSize(frameBuffer.Format) * (pixelX + pixelY * frameBuffer.Size.Width))..];
+						var pixelTarget = frameBuffer.Data.Span[(TextelUtil.GetSize(frameBuffer.Format) * (pixelX + pixelY * frameBuffer.Size.Width))..];
 
-						output[..4].CopyTo(pixelTarget);
-						pixelTarget[4] = (byte)((output[4] & 7) + (output[5] & 7) << 3);
+						new BitReader(output)
+							.Read(out Rune character)
+							.Read(out float foregroundRed)
+							.Read(out float foregroundGreen)
+							.Read(out float foregroundBlue)
+							.Read(out float backgroundRed)
+							.Read(out float backgroundGreen)
+							.Read(out float backgroundBlue);
+
+						TextelUtil.Set(pixelTarget, (character, (foregroundRed, foregroundGreen, foregroundBlue), (backgroundRed, backgroundGreen, backgroundBlue)), frameBuffer.Format);
 					}
 				}
 			}

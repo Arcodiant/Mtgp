@@ -13,9 +13,11 @@ internal static class ShaderOpConstants
 	public const uint LoadWordCount = 4;
 	public const uint ConstantWordCount = 4;
 	public const uint ReturnWordCount = 1;
+	public const uint UnaryWordCount = 4;
 	public const uint BinaryWordCount = 5;
 	public const uint GatherWordCount = 5;
 	public const uint ConditionalWordCount = 6;
+	public const uint ConvertWordCount = 4;
 
 	public const uint DecorateWordCount = 3;
 	public const uint DecorateLocationWordCount = 4;

@@ -40,6 +40,11 @@ public readonly ref struct ShaderWriter(BitWriter writer)
 							.Write(result)
 							.Write(width));
 
+	public readonly ShaderWriter TypeFloat(int result, int width)
+		=> new(this.Write(ShaderOp.TypeFloat, ShaderOpConstants.TypeFloatWordCount)
+							.Write(result)
+							.Write(width));
+
 	public readonly ShaderWriter TypeBool(int result)
 		=> new(this.Write(ShaderOp.TypeBool, ShaderOpConstants.TypeBoolWordCount)
 							.Write(result));
@@ -79,6 +84,12 @@ public readonly ref struct ShaderWriter(BitWriter writer)
 							.Write(type)
 							.Write(value));
 
+	public readonly ShaderWriter Constant(int result, int type, float value)
+		=> new(this.Write(ShaderOp.Constant, ShaderOpConstants.ConstantWordCount)
+							.Write(result)
+							.Write(type)
+							.Write(value));
+
 	public readonly ShaderWriter Return()
 		=> new(this.Write(ShaderOp.Return, ShaderOpConstants.ReturnWordCount));
 
@@ -94,6 +105,20 @@ public readonly ref struct ShaderWriter(BitWriter writer)
 
 	public readonly ShaderWriter Subtract(int result, int type, int left, int right)
 		=> new(this.Write(ShaderOp.Subtract, ShaderOpConstants.BinaryWordCount)
+							.Write(result)
+							.Write(type)
+							.Write(left)
+							.Write(right));
+
+	public readonly ShaderWriter Multiply(int result, int type, int left, int right)
+		=> new(this.Write(ShaderOp.Multiply, ShaderOpConstants.BinaryWordCount)
+							.Write(result)
+							.Write(type)
+							.Write(left)
+							.Write(right));
+
+	public readonly ShaderWriter Divide(int result, int type, int left, int right)
+		=> new(this.Write(ShaderOp.Divide, ShaderOpConstants.BinaryWordCount)
 							.Write(result)
 							.Write(type)
 							.Write(left)
@@ -127,4 +152,28 @@ public readonly ref struct ShaderWriter(BitWriter writer)
 							.Write(condition)
 							.Write(trueValue)
 							.Write(falseValue));
+
+	public readonly ShaderWriter CompositeConstruct(int result, int type, ReadOnlySpan<int> components)
+		=> new(this.Write(ShaderOp.CompositeConstruct, (uint)(3 + components.Length))
+							.Write(result)
+							.Write(type)
+							.Write(components));
+
+	public readonly ShaderWriter IntToFloat(int result, int type, int value)
+		=> new(this.Write(ShaderOp.IntToFloat, ShaderOpConstants.ConvertWordCount)
+							.Write(result)
+							.Write(type)
+							.Write(value));
+
+	public readonly ShaderWriter Abs(int result, int type, int value)
+		=> new(this.Write(ShaderOp.Abs, ShaderOpConstants.UnaryWordCount)
+							.Write(result)
+							.Write(type)
+							.Write(value));
+
+	public readonly ShaderWriter Negate(int result, int type, int value)
+		=> new(this.Write(ShaderOp.Negate, ShaderOpConstants.UnaryWordCount)
+							.Write(result)
+							.Write(type)
+							.Write(value));
 }

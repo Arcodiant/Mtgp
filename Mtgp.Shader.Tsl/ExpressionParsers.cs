@@ -32,6 +32,7 @@ internal static class ExpressionParsers
 	private readonly static TokenListParser<PartType, Expression> tokenExpression = from token in BaseParsers.Identifier select (Expression)new TokenExpression(token);
 
 	private readonly static TokenListParser<PartType, Expression> intLiteralExpression = Token.EqualTo(PartType.IntegerLiteral).Apply(Numerics.IntegerInt32).Select(value => (Expression)new IntegerLiteralExpression(value));
+	private readonly static TokenListParser<PartType, Expression> floatLiteralExpression = Token.EqualTo(PartType.DecimalLiteral).Apply(Numerics.DecimalDouble).Select(value => (Expression)new FloatLiteralExpression((float)value));
 
 	public readonly static TokenListParser<PartType, Expression> FunctionExpression = from name in BaseParsers.Identifier
 																					  from arguments in Parse.Ref(() => Expression!).ManyDelimitedBy(Token.EqualTo(PartType.Comma)).Between(Token.EqualTo(PartType.LParen), Token.EqualTo(PartType.RParen))
@@ -40,6 +41,7 @@ internal static class ExpressionParsers
 	private readonly static TokenListParser<PartType, Expression> factor = (from expr in Parse.Ref(() => Expression!).Between(Token.EqualTo(PartType.LParen), Token.EqualTo(PartType.RParen)) select expr)
 																			.Or(FunctionExpression.Try())
 																			.Or(tokenExpression)
+																			.Or(floatLiteralExpression)
 																			.Or(intLiteralExpression);
 
 	private readonly static TokenListParser<PartType, Expression> operand = (from sign in Token.EqualTo(PartType.Minus)

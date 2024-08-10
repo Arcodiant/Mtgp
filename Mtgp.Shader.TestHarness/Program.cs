@@ -36,8 +36,8 @@ try
 
 	Log.Information("Building UI shaders");
 
-	var (mapVertexShader, mapFragmentShader) = CreateUIShaders(proxy, AnsiColour.Green, '#');
-	var (borderVertexShader, borderFragmentShader) = CreateUIShaders(proxy, AnsiColour.Blue, '*');
+	var (mapVertexShader, mapFragmentShader) = CreateUIShaders(proxy, '#', AnsiColour.Green);
+	var (borderVertexShader, borderFragmentShader) = CreateUIShaders(proxy, '*');
 
 	int presentImage = proxy.GetPresentImage();
 
@@ -155,21 +155,63 @@ Log.Information("Finished");
 
 Log.CloseAndFlush();
 
-static (int VertexShader, int FragmentShader) CreateUIShaders(ProxyHost proxy, AnsiColour colour, char character)
+static (int VertexShader, int FragmentShader) CreateUIShaders(ProxyHost proxy, char character, AnsiColour? colour = null)
 {
 	var compiler = new ShaderCompiler();
+	string colourString = "Vec(input.x / 80.0, 1 - Abs(input.y / 24.0 - input.x / 80.0), input.y / 24.0)";
+
+	if (colour != null)
+	{
+		var colourBuilder = new StringBuilder();
+		colourBuilder.Append("Vec(");
+		if(colour.Value.HasFlag(AnsiColour.Red))
+		{
+			colourBuilder.Append("1.0");
+		}
+		else
+		{
+			colourBuilder.Append("0.0");
+		}
+		colourBuilder.Append(", ");
+		if(colour.Value.HasFlag(AnsiColour.Green))
+		{
+			colourBuilder.Append("1.0");
+		}
+		else
+		{
+			colourBuilder.Append("0.0");
+		}
+		colourBuilder.Append(", ");
+		if(colour.Value.HasFlag(AnsiColour.Blue))
+		{
+			colourBuilder.Append("1.0");
+		}
+		else
+		{
+			colourBuilder.Append("0.0");
+		}
+		colourBuilder.Append(')');
+
+		colourString = colourBuilder.ToString();
+	}
 
 	var fragmentShader = @$"struct Output
 {{
     [Location=0] int character;
-    [Location=1] int colour;
-    [Location=2] int background;
+    [Location=1] vec<float, 3> colour;
+    [Location=2] vec<float, 3> background;
 }}
 
-func Output Main()
+struct Input
 {{
-    result.colour = {(int)colour};
-    result.background = {(int)AnsiColour.Black};
+    [PositionX] int x;
+    [PositionY] int y;
+}}
+
+func Output Main(Input input)
+{{
+    result.colour = {colourString};
+    result.background = Vec(0.0, 0.0, 0.0);
     result.character = {(Rune.TryCreate(character, out var rune) ? rune.Value : 0)};
 }}";
 
@@ -227,8 +269,8 @@ static (int VertexShader, int FragmentShader) CreateTextShaders(ProxyHost proxy)
 	var fragmentShader = @$"struct Output
 {{
 	[Location=0] int character;
-	[Location=1] int colour;
-	[Location=2] int background;
+	[Location=1] vec<float, 3> colour;
+	[Location=2] vec<float, 3> background;
 }}
 
 struct Input
@@ -240,8 +282,8 @@ struct Input
 
 func Output Main(Input input)
 {{
-	result.colour = {(int)AnsiColour.White};
-	result.background = {(int)AnsiColour.Black};
+	result.colour = Vec(1.0, 1.0, 1.0);
+	result.background = Vec(0.0, 0.0, 0.0);
 	result.character = Gather(text, input.uv);
 }}";
 
@@ -271,8 +313,6 @@ func Output Main(Input input)
 	result.u = input.vertexIndex == 0 ? input.texStart : input.texStart + input.length - 1;
 	result.v = 0;
 }";
-
-	Log.Information("Vertex Shader: {VertexShader}", ShaderDisassembler.Disassemble(compiler.Compile(vertexShader)));
 
 	var vertexShaderCode = compiler.Compile(vertexShader);
 

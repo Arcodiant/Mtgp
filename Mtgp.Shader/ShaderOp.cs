@@ -22,5 +22,11 @@ public enum ShaderOp
 	Conditional,
 	Equals,
 	Subtract,
-	Mod
+	Mod,
+	CompositeConstruct,
+	Divide,
+	Multiply,
+	IntToFloat,
+	Abs,
+	Negate
 }

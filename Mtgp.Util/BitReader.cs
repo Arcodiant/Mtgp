@@ -99,6 +99,13 @@ public readonly ref struct BitReader(ReadOnlySpan<byte> buffer)
 		return new BitReader(buffer[1..]);
 	}
 
+	public readonly BitReader Read(out Rune rune)
+	{
+		rune = MemoryMarshal.Cast<byte, Rune>(buffer)[0];
+
+		return new BitReader(buffer[4..]);
+	}
+
 	public readonly BitReader Read(Span<byte> buffer)
 	{
 		this.buffer[..buffer.Length].CopyTo(buffer);

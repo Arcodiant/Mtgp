@@ -32,7 +32,7 @@ internal class ProxyHost(TcpClient client)
 		telnetClient.SendCommand(TelnetCommand.DO, TelnetOption.NewEnvironmentOption);
 		telnetClient.SendSubnegotiation(TelnetOption.TerminalType, TelnetSubNegotiationCommand.Send, []);
 
-		this.images.Add(new((80, 24, 1), ImageFormat.T32FG3BG3));
+		this.images.Add(new((80, 24, 1), ImageFormat.T32FG24U8BG24U8));
 
 		_ = Task.Run(async () =>
 		{
@@ -113,17 +113,14 @@ internal class ProxyHost(TcpClient client)
 		public void Execute()
 		{
 			var deltas = new List<RuneDelta>();
-			int step = ImageState.GetSize(image.Format);
+			int step = TextelUtil.GetSize(image.Format);
 
 			for (int y = 0; y < image.Size.Height; y++)
 			{
 				for (int x = 0; x < image.Size.Width; x++)
 				{
 					var datum = image.Data.Span[((x + y * image.Size.Width) * step)..];
-					Rune rune = Unsafe.As<byte, Rune>(ref datum[0]);
-
-					AnsiColour foreground = (AnsiColour)((datum[4] & 0x38) >> 3);
-					AnsiColour background = (AnsiColour)(datum[4] & 0x7);
+					var (rune, foreground, background) = TextelUtil.Get(datum, image.Format);
 
 					deltas.Add(new(x, y, rune, foreground, background));
 				}

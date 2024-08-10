@@ -116,10 +116,32 @@ public class TelnetClient
         }
     }
 
-    private void SetColour(AnsiColour foreground, AnsiColour background, bool force = false)
+    private void SetColour(AnsiColour foreground, AnsiColour background)
     {
-        this.writer.Write($"\x1B[{(int)foreground + 90}m");
-        this.writer.Write($"\x1B[{(int)background + 40}m");
+        static (float, float, float) Extract(AnsiColour colour)
+        => colour switch
+			{
+				AnsiColour.Black => (0, 0, 0),
+				AnsiColour.Red => (1, 0, 0),
+				AnsiColour.Green => (0, 1, 0),
+				AnsiColour.Yellow => (1, 1, 0),
+				AnsiColour.Blue => (0, 0, 1),
+				AnsiColour.Magenta => (1, 0, 1),
+				AnsiColour.Cyan => (0, 1, 1),
+				AnsiColour.White => (1, 1, 1),
+				_ => (0, 0, 0)
+			};
+
+        this.SetColour(Extract(foreground), Extract(background));
+
+        //this.writer.Write($"\x1B[{(int)foreground + 90}m");
+        //this.writer.Write($"\x1B[{(int)background + 40}m");
+    }
+
+    private void SetColour(Colour foreground, Colour background)
+    {
+        this.writer.Write($"\x1B[38;2;{(int)(foreground.R * 255)};{(int)(foreground.G * 255)};{(int)(foreground.B * 255)}m");
+        this.writer.Write($"\x1B[48;2;{(int)(background.R * 255)};{(int)(background.G * 255)};{(int)(background.B * 255)}m");
     }
 
     public void SendCommand(TelnetCommand command, TelnetOption option)
@@ -190,8 +212,8 @@ public class TelnetClient
 
         int x = 0;
         int y = 0;
-        AnsiColour foreground = AnsiColour.White;
-        AnsiColour background = AnsiColour.Black;
+        Colour foreground = Colour.White;
+        Colour background = Colour.Black;
         Span<char> buffer = stackalloc char[4096];
         int count = 0;
 
@@ -200,8 +222,8 @@ public class TelnetClient
             int newX, newY;
             Rune rune;
             char character = '\0';
-            AnsiColour newForeground;
-            AnsiColour newBackground;
+            Colour newBackground;
+            Colour newForeground;
 
             (newX, newY, rune, newForeground, newBackground) = sortedValues[index];
 
