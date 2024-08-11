@@ -1,7 +1,8 @@
-﻿using System.Runtime.CompilerServices;
+﻿using Mtgp.Shader;
+using System.Runtime.CompilerServices;
 using System.Text;
 
-namespace Mtgp.Shader;
+namespace Mtgp.Proxy.Shader;
 
 public static class TextelUtil
 {

@@ -1,4 +1,6 @@
-﻿namespace Mtgp.Shader;
+﻿using Mtgp.Shader;
+
+namespace Mtgp.Proxy.Shader;
 
 public class ClearAction(ImageState image, AnsiColour foreground = AnsiColour.White, AnsiColour background = AnsiColour.Black)
     : IAction

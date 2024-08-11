@@ -1,7 +1,6 @@
-﻿using Mtgp.Shader;
+﻿using Mtgp.Proxy.Shader;
+using Mtgp.Shader;
 using System.Net.Sockets;
-using System.Runtime.CompilerServices;
-using System.Text;
 
 namespace Mtgp;
 

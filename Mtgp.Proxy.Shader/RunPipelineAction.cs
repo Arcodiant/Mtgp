@@ -1,4 +1,4 @@
-﻿namespace Mtgp.Shader;
+﻿namespace Mtgp.Proxy.Shader;
 
 public class RunPipelineAction(IFixedFunctionPipeline pipeline)
 	: IAction

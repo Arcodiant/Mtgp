@@ -217,7 +217,7 @@ public class ShaderCompiler
 			=> $"{nameof(ShaderFile)} {{ {FormatArray(StructDefinitions)}, {FormatArray(FuncDefinitions)}, {FormatArray(BindingDefinitions)} }}";
 	}
 
-	public byte[] Compile(string source)
+	public byte[] Compile(string source, string entrypointName = "Main")
 	{
 		var tokens = token.Tokenize(source);
 
@@ -226,7 +226,7 @@ public class ShaderCompiler
 		var structTypes = file.StructDefinitions.ToImmutableDictionary(x => x.Name);
 		var funcs = file.FuncDefinitions.ToImmutableDictionary(x => x.Name);
 
-		var mainFunc = funcs["Main"];
+		var mainFunc = funcs[entrypointName];
 
 		var outputStruct = structTypes[mainFunc.ReturnType.Token];
 		var inputFields = mainFunc.Parameters.Length != 0
@@ -645,8 +645,6 @@ public class ShaderCompiler
 		int GetVarId(BinaryExpression expression) => varNames[(((TokenExpression)expression.Left).Value, ((TokenExpression)expression.Right).Value)];
 
 		byte[] result = [.. shaderHeader[..headerWriter.Writer.WriteCount], .. shaderCode[..writer.Writer.WriteCount]];
-
-		Console.WriteLine(ShaderDisassembler.Disassemble(result));
 
 		return result;
 	}

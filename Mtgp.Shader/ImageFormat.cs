@@ -1,4 +1,4 @@
-﻿namespace Mtgp;
+﻿namespace Mtgp.Shader;
 
 public enum ImageFormat
 {

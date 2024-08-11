@@ -1,4 +1,4 @@
-﻿namespace Mtgp.Shader;
+﻿namespace Mtgp.Proxy.Shader;
 
 public class StringSplitPipeline(IEnumerable<string> lineBuffer, Memory<byte> characterBuffer, Memory<byte> instanceBuffer, Memory<byte> drawCommandBuffer, int maxLineCount, int regionWidth)
 	: IFixedFunctionPipeline

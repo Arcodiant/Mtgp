@@ -1,4 +1,4 @@
-﻿namespace Mtgp.Shader;
+﻿namespace Mtgp.Proxy.Shader;
 
 public class IndirectDrawAction(RenderPass renderPass, Memory<byte> buffer, int offset)
 	: IAction

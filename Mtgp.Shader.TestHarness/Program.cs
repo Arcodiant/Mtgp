@@ -1,4 +1,5 @@
 ﻿using Mtgp;
+using Mtgp.Messages;
 using Mtgp.Shader;
 using Mtgp.Shader.Tsl;
 using Serilog;
@@ -6,6 +7,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Channels;
 
 Log.Logger = new LoggerConfiguration()
@@ -34,68 +36,89 @@ try
 
 	proxy.Start();
 
-	Log.Information("Building UI shaders");
+	var mtgpClient = new TcpClient();
 
-	var (mapVertexShader, mapFragmentShader) = CreateUIShaders(proxy, '#', AnsiColour.Green);
-	var (borderVertexShader, borderFragmentShader) = CreateUIShaders(proxy, '*');
+	await mtgpClient.ConnectAsync("localhost", 2323);
 
-	int presentImage = proxy.GetPresentImage();
+	//Log.Information("Building UI shaders");
 
-	Log.Information("Creating pipelines");
+	//var (mapVertexShader, mapFragmentShader) = CreateUIShaders(proxy, '#', AnsiColour.Green);
+	//var (borderVertexShader, borderFragmentShader) = CreateUIShaders(proxy, '*');
 
-	var (outputPipe, addOutputActions) = CreateStringSplitPipeline(proxy, presentImage, (1, 1, 59, 19));
-	var (inputPipe, addInputActions) = CreateStringSplitPipeline(proxy, presentImage, (1, 21, 59, 2), true);
+	//int presentImage = proxy.GetPresentImage();
 
-	var mapVertexBuffer = proxy.CreateBuffer(1024);
+	//Log.Information("Creating pipelines");
 
-	var setBuffer = new byte[80];
+	//var (outputPipe, addOutputActions) = CreateStringSplitPipeline(proxy, presentImage, (1, 1, 59, 19));
+	//var (inputPipe, addInputActions) = CreateStringSplitPipeline(proxy, presentImage, (1, 21, 59, 2), true);
 
-	new BitWriter(setBuffer)
-		.Write(61)
-		.Write(1)
-		.Write(78)
-		.Write(13)
-		.Write(0)
-		.Write(0)
-		.Write(79)
-		.Write(23)
-		.Write(61)
-		.Write(14)
-		.Write(79)
-		.Write(14)
-		.Write(61)
-		.Write(0)
-		.Write(61)
-		.Write(23)
-		.Write(0)
-		.Write(20)
-		.Write(61)
-		.Write(20);
+	//var mapVertexBuffer = proxy.CreateBuffer(1024);
 
-	proxy.SetBufferData(mapVertexBuffer, 0, setBuffer);
+	//var setBuffer = new byte[80];
 
-	int mapVertexBufferView = proxy.CreateBufferView(mapVertexBuffer, 0, 16);
-	int borderVertexBufferView = proxy.CreateBufferView(mapVertexBuffer, 16, 64);
+	//new BitWriter(setBuffer)
+	//	.Write(61)
+	//	.Write(1)
+	//	.Write(78)
+	//	.Write(13)
+	//	.Write(0)
+	//	.Write(0)
+	//	.Write(79)
+	//	.Write(23)
+	//	.Write(61)
+	//	.Write(14)
+	//	.Write(79)
+	//	.Write(14)
+	//	.Write(61)
+	//	.Write(0)
+	//	.Write(61)
+	//	.Write(23)
+	//	.Write(0)
+	//	.Write(20)
+	//	.Write(61)
+	//	.Write(20);
 
-	int mapRenderPass = proxy.CreateRenderPass(new() { [0] = presentImage }, new() { [1] = mapVertexBufferView }, InputRate.PerVertex, PolygonMode.Fill, mapVertexShader, mapFragmentShader, (0, 0, 80, 24));
-	int borderRenderPass = proxy.CreateRenderPass(new() { [0] = presentImage }, new() { [1] = borderVertexBufferView }, InputRate.PerVertex, PolygonMode.Line, borderVertexShader, borderFragmentShader, (0, 0, 80, 24));
+	//proxy.SetBufferData(mapVertexBuffer, 0, setBuffer);
 
-	int actionList = proxy.CreateActionList();
-	proxy.AddClearBufferAction(actionList, presentImage);
-	addInputActions(actionList);
-	addOutputActions(actionList);
-	proxy.AddDrawAction(actionList, mapRenderPass, 1, 2);
-	proxy.AddDrawAction(actionList, borderRenderPass, 1, 8);
-	proxy.AddPresentAction(actionList);
+	//int mapVertexBufferView = proxy.CreateBufferView(mapVertexBuffer, 0, 16);
+	//int borderVertexBufferView = proxy.CreateBufferView(mapVertexBuffer, 16, 64);
 
-	proxy.SetActionTrigger(actionList, inputPipe);
-	proxy.SetActionTrigger(actionList, outputPipe);
+	//int mapRenderPass = proxy.CreateRenderPass(new() { [0] = presentImage }, new() { [1] = mapVertexBufferView }, InputRate.PerVertex, PolygonMode.Fill, mapVertexShader, mapFragmentShader, (0, 0, 80, 24));
+	//int borderRenderPass = proxy.CreateRenderPass(new() { [0] = presentImage }, new() { [1] = borderVertexBufferView }, InputRate.PerVertex, PolygonMode.Line, borderVertexShader, borderFragmentShader, (0, 0, 80, 24));
+
+	//int actionList = proxy.CreateActionList();
+	//proxy.AddClearBufferAction(actionList, presentImage);
+	//addInputActions(actionList);
+	//addOutputActions(actionList);
+	//proxy.AddDrawAction(actionList, mapRenderPass, 1, 2);
+	//proxy.AddDrawAction(actionList, borderRenderPass, 1, 8);
+	//proxy.AddPresentAction(actionList);
+
+	//proxy.SetActionTrigger(actionList, inputPipe);
+	//proxy.SetActionTrigger(actionList, outputPipe);
 
 	Log.Information("Running");
 
-	proxy.Send(outputPipe, "Hello, World!");
-	proxy.Send(outputPipe, "This is a test");
-	proxy.Send(outputPipe, "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.");
+	var mtgpStream = mtgpClient.GetStream();
+
+	await mtgpStream.WriteAsync(new byte[] { 0xFF, 0xFD, 0xAA });
+
+	var handshake = new byte[3];
+
+	await mtgpStream.ReadExactlyAsync(handshake);
+
+	if (handshake[0] != 0xFF || handshake[1] != 0xFB || handshake[2] != 0xAA)
+	{
+		Log.Warning("Client did not send correct handshake: {Handshake}", handshake);
+
+		return;
+	}
+
+	Log.Information("Handshake complete");
+
+	//proxy.Send(outputPipe, "Hello, World!");
+	//proxy.Send(outputPipe, "This is a test");
+	//proxy.Send(outputPipe, "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.");
 
 	proxy.SetDefaultPipe(DefaultPipe.Input, 0);
 
@@ -111,38 +134,93 @@ try
 		}
 	};
 
+	var requestHandlers = new Dictionary<string, Func<byte[], Task>>();
+
+	void AddRequestHandler<T>(Func<T, Task> handler)
+		where T : IMtgpRequest
+	{
+		requestHandlers.Add(T.Command, async data =>
+		{
+			var message = JsonSerializer.Deserialize<T>(data, Mtgp.Comms.Util.JsonSerializerOptions)!;
+
+			await handler(message);
+		});
+	}
+
+	AddRequestHandler<CreateShaderRequest>(async message =>
+	{
+		int shaderId = proxy.CreateShader(message.Shader);
+
+		await mtgpStream.WriteMessageAsync(message.CreateResponse(shaderId));
+	});
+
+	AddRequestHandler<GetPresentImageRequest>(async message =>
+	{
+		int presentImage = proxy.GetPresentImage();
+
+		await mtgpStream.WriteMessageAsync(message.CreateResponse(presentImage));
+	});
+
+	try
+	{
+		while (mtgpClient.Connected)
+		{
+			var block = await mtgpStream.ReadBlockAsync()!;
+
+			var message = JsonSerializer.Deserialize<MtgpMessage>(block, Mtgp.Comms.Util.JsonSerializerOptions)!;
+
+			Log.Information("Received message: {@Message}", message);
+
+			if (requestHandlers.TryGetValue(message.Header.Command!, out var handler))
+			{
+				await handler(block);
+			}
+			else
+			{
+				Log.Warning("No handler for message: {@Message}", message);
+			}
+		}
+	}
+	catch (Exception ex)
+	{
+	}
+
 	await foreach (var character in characterChannel.Reader.ReadAllAsync())
 	{
 		if (character == '\n')
 		{
-			if (messageData.Length > 0)
-			{
-				var message = messageData.ToString().Trim();
+			//if (messageData.Length > 0)
+			//{
+			//	var message = messageData.ToString().Trim();
 
-				proxy.Send(outputPipe, "> " + message);
+			//	proxy.Send(outputPipe, "> " + message);
 
-				if (message.ToLower() == "quit")
-				{
-					break;
-				}
+			//	if (message.ToLower() == "quit")
+			//	{
+			//		break;
+			//	}
 
-				messageData.Clear();
-			}
+			//	messageData.Clear();
+			//}
+
+			break;
 		}
-		else if (char.IsControl(character))
-		{
-			if ((character == '\b' || character == '\u007F') && messageData.Length > 0)
-			{
-				messageData.Remove(messageData.Length - 1, 1);
-			}
-		}
-		else
-		{
-			messageData.Append(character);
-		}
+		//else if (char.IsControl(character))
+		//{
+		//	if ((character == '\b' || character == '\u007F') && messageData.Length > 0)
+		//	{
+		//		messageData.Remove(messageData.Length - 1, 1);
+		//	}
+		//}
+		//else
+		//{
+		//	messageData.Append(character);
+		//}
 
-		proxy.Send(inputPipe, messageData.ToString());
+		//	//proxy.Send(inputPipe, messageData.ToString());
 	}
+
+	mtgpClient.Close();
 
 	listener.Stop();
 }
@@ -164,7 +242,7 @@ static (int VertexShader, int FragmentShader) CreateUIShaders(ProxyHost proxy, c
 	{
 		var colourBuilder = new StringBuilder();
 		colourBuilder.Append("Vec(");
-		if(colour.Value.HasFlag(AnsiColour.Red))
+		if (colour.Value.HasFlag(AnsiColour.Red))
 		{
 			colourBuilder.Append("1.0");
 		}
@@ -173,7 +251,7 @@ static (int VertexShader, int FragmentShader) CreateUIShaders(ProxyHost proxy, c
 			colourBuilder.Append("0.0");
 		}
 		colourBuilder.Append(", ");
-		if(colour.Value.HasFlag(AnsiColour.Green))
+		if (colour.Value.HasFlag(AnsiColour.Green))
 		{
 			colourBuilder.Append("1.0");
 		}
@@ -182,7 +260,7 @@ static (int VertexShader, int FragmentShader) CreateUIShaders(ProxyHost proxy, c
 			colourBuilder.Append("0.0");
 		}
 		colourBuilder.Append(", ");
-		if(colour.Value.HasFlag(AnsiColour.Blue))
+		if (colour.Value.HasFlag(AnsiColour.Blue))
 		{
 			colourBuilder.Append("1.0");
 		}
