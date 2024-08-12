@@ -1,5 +1,6 @@
 ﻿using Mtgp;
 using Mtgp.Messages;
+using Mtgp.Messages.Resources;
 using Mtgp.Shader;
 using Mtgp.Shader.Tsl;
 using Serilog;
@@ -8,6 +9,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading.Channels;
 
 Log.Logger = new LoggerConfiguration()
@@ -146,19 +148,42 @@ try
 			await handler(message);
 		});
 	}
-
-	AddRequestHandler<CreateShaderRequest>(async message =>
-	{
-		int shaderId = proxy.CreateShader(message.Shader);
-
-		await mtgpStream.WriteMessageAsync(message.CreateResponse(shaderId));
-	});
-
+	
 	AddRequestHandler<GetPresentImageRequest>(async message =>
 	{
 		int presentImage = proxy.GetPresentImage();
 
 		await mtgpStream.WriteMessageAsync(message.CreateResponse(presentImage));
+	});
+
+	requestHandlers.Add(CreateResourceRequest.Command, async data =>
+	{
+		var message = JsonSerializer.Deserialize<CreateResourceRequest>(data, Mtgp.Comms.Util.JsonSerializerOptions)!;
+
+		var results = new List<ResourceCreateResult>();
+
+		foreach (var resource in message.Resources)
+		{
+			var result = ResourceCreateResult.InternalError;
+
+			try
+			{
+				result = resource switch
+				{
+					CreateShaderInfo createInfo => new ResourceCreateResult(proxy.CreateShader(createInfo.ShaderData), ResourceCreateResultType.Success),
+					_ => ResourceCreateResult.InvalidRequest
+				};
+			}
+			catch (Exception ex)
+			{
+				Log.Error(ex, "Error creating resource: {@CreateInfo}", resource);
+				result = ResourceCreateResult.InternalError;
+			}
+
+			results.Add(result);
+		}
+
+		await mtgpStream.WriteMessageAsync(message.CreateResponse([.. results]));
 	});
 
 	try
@@ -181,7 +206,7 @@ try
 			}
 		}
 	}
-	catch (Exception ex)
+	catch (Exception)
 	{
 	}
 

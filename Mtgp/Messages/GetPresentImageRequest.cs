@@ -26,5 +26,5 @@ public class GetPresentImageResponse(int id, int imageId)
 	{
 	}
 
-	public int ImageId { get; } = imageId;
+	public int ImageId { get; init; } = imageId;
 }

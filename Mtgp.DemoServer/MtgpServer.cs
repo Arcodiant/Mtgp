@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Logging;
 using Mtgp.Comms;
 using Mtgp.Messages;
+using Mtgp.Messages.Resources;
 using Mtgp.Shader.Tsl;
 using System.Net;
 using System.Net.Sockets;
@@ -63,18 +64,16 @@ public class MtgpServer(ILogger<MtgpServer> logger, ILoggerFactory loggerFactory
 
 			var compiler = new ShaderCompiler();
 
-			var uiVertexShader = compiler.Compile(File.ReadAllText("shaders/ui.vert"));
-			var borderFragmentShader = compiler.Compile(File.ReadAllText("shaders/ui.frag"), "BorderMain");
-			var mapFragmentShader = compiler.Compile(File.ReadAllText("shaders/ui.frag"), "MapMain");
+			var uiVertexShaderCode = compiler.Compile(File.ReadAllText("shaders/ui.vert"));
+			var borderFragmentShaderCode = compiler.Compile(File.ReadAllText("shaders/ui.frag"), "BorderMain");
+			var mapFragmentShaderCode = compiler.Compile(File.ReadAllText("shaders/ui.frag"), "MapMain");
 
 			int requestId = 0;
 
-			var uiVertexResponse = await connection.Send(new CreateShaderRequest(requestId++, uiVertexShader));
-			this.logger.LogInformation("Shader created: {@Response}", uiVertexResponse);
-			var borderFragmentResponse = await connection.Send(new CreateShaderRequest(requestId++, borderFragmentShader));
-			this.logger.LogInformation("Shader created: {@Response}", borderFragmentResponse);
-			var mapFragmentResponse = await connection.Send(new CreateShaderRequest(requestId++, mapFragmentShader));
-			this.logger.LogInformation("Shader created: {@Response}", mapFragmentResponse);
+			var resourceResponses = await connection.Send(new CreateResourceRequest(requestId++, [new CreateShaderInfo(uiVertexShaderCode), new CreateShaderInfo(borderFragmentShaderCode), new CreateShaderInfo(mapFragmentShaderCode)]));
+			var uiVertexShader = resourceResponses.Resources[0].ResourceId;
+			var borderFragmentShader = resourceResponses.Resources[1].ResourceId;
+			var mapFragmentShader = resourceResponses.Resources[2].ResourceId;
 
 			var presentImageId = await connection.Send(new GetPresentImageRequest(requestId++));
 			this.logger.LogInformation("Present image ID: {PresentImageId}", presentImageId.ImageId);
