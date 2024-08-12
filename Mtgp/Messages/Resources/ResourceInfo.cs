@@ -4,10 +4,14 @@ namespace Mtgp.Messages.Resources;
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "resourceType")]
 [JsonDerivedType(typeof(CreateShaderInfo), CreateShaderInfo.ResourceType)]
-public class ResourceInfo(string? reference = null)
-{
-    public string? Reference { get; init; } = reference;
-}
+[JsonDerivedType(typeof(CreateBufferInfo), CreateBufferInfo.ResourceType)]
+[JsonDerivedType(typeof(CreateBufferViewInfo), CreateBufferViewInfo.ResourceType)]
+[JsonDerivedType(typeof(CreateImageInfo), CreateImageInfo.ResourceType)]
+[JsonDerivedType(typeof(CreateRenderPassInfo), CreateRenderPassInfo.ResourceType)]
+[JsonDerivedType(typeof(CreateActionListInfo), CreateActionListInfo.ResourceType)]
+[JsonDerivedType(typeof(CreatePipeInfo), CreatePipeInfo.ResourceType)]
+[JsonDerivedType(typeof(CreateStringSplitPipelineInfo), CreateStringSplitPipelineInfo.ResourceType)]
+public record ResourceInfo(string? Reference = null);
 
 public record ResourceCreateResult(int ResourceId, ResourceCreateResultType Result)
 {

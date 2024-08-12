@@ -2,12 +2,12 @@
 
 namespace Mtgp.Proxy.Shader;
 
-public class ClearAction(ImageState image, AnsiColour foreground = AnsiColour.White, AnsiColour background = AnsiColour.Black)
+public class ClearAction(ImageState image, Colour? foreground = null, Colour? background = null)
     : IAction
 {
     private readonly ImageState image = image;
-    private readonly AnsiColour foreground = foreground;
-    private readonly AnsiColour background = background;
+    private readonly Colour foreground = foreground ?? Colour.White;
+    private readonly Colour background = background ?? Colour.Black;
 
     public void Execute()
     {
@@ -18,7 +18,7 @@ public class ClearAction(ImageState image, AnsiColour foreground = AnsiColour.Wh
         {
             ImageFormat.T32 => [32, 0, 0, 0],
             ImageFormat.T32FG3BG3 => [32, 0, 0, 0, 56],
-            ImageFormat.T32FG24U8BG24U8 => [32, 0, 0, 0, 255, 255, 255, 0, 0, 0, 0, 0],
+            ImageFormat.T32FG24U8BG24U8 => [32, 0, 0, 0, 255, 255, 255, 0, 255, 0, 0, 0],
             _ => throw new NotImplementedException()
         };
 

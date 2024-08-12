@@ -6,7 +6,6 @@ using Mtgp.Messages.Resources;
 using Mtgp.Shader.Tsl;
 using System.Net;
 using System.Net.Sockets;
-using System.Text.Json;
 
 namespace Mtgp.DemoServer;
 
@@ -70,13 +69,19 @@ public class MtgpServer(ILogger<MtgpServer> logger, ILoggerFactory loggerFactory
 
 			int requestId = 0;
 
-			var resourceResponses = await connection.Send(new CreateResourceRequest(requestId++, [new CreateShaderInfo(uiVertexShaderCode), new CreateShaderInfo(borderFragmentShaderCode), new CreateShaderInfo(mapFragmentShaderCode)]));
-			var uiVertexShader = resourceResponses.Resources[0].ResourceId;
-			var borderFragmentShader = resourceResponses.Resources[1].ResourceId;
-			var mapFragmentShader = resourceResponses.Resources[2].ResourceId;
+			var resourceResponses = await connection.Send(new CreateResourceRequest(requestId++, [new CreateActionListInfo(), new CreatePipeInfo()]));
 
-			var presentImageId = await connection.Send(new GetPresentImageRequest(requestId++));
-			this.logger.LogInformation("Present image ID: {PresentImageId}", presentImageId.ImageId);
+			int actionList = resourceResponses.Resources[0].ResourceId;
+			int pipe = resourceResponses.Resources[1].ResourceId;
+
+			int presentImage = (await connection.Send(new GetPresentImageRequest(requestId++))).ImageId;
+
+			await connection.Send(new AddClearBufferActionRequest(requestId++, actionList, presentImage));
+			await connection.Send(new AddPresentActionRequest(requestId++, actionList));
+
+			await connection.Send(new SetActionTriggerRequest(requestId++, actionList, pipe));
+
+			await connection.Send(new SendRequest(requestId++, pipe, ""));
 		}
 		catch (Exception ex)
 		{

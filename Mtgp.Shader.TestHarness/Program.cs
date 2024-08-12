@@ -156,6 +156,39 @@ try
 		await mtgpStream.WriteMessageAsync(message.CreateResponse(presentImage));
 	});
 
+	AddRequestHandler<AddClearBufferActionRequest>(async message =>
+	{
+		proxy.AddClearBufferAction(message.ActionList, message.Image);
+
+		await mtgpStream.WriteMessageAsync(message.CreateResponse());
+	});
+
+	AddRequestHandler<AddPresentActionRequest>(async message =>
+	{
+		proxy.AddPresentAction(message.ActionList);
+
+		await mtgpStream.WriteMessageAsync(message.CreateResponse());
+	});
+
+	AddRequestHandler<SetActionTriggerRequest>(async message =>
+	{
+		proxy.SetActionTrigger(message.ActionList, message.Pipe);
+
+		await mtgpStream.WriteMessageAsync(message.CreateResponse());
+	});
+
+	AddRequestHandler<SendRequest>(async message =>
+	{
+		proxy.Send(message.Pipe, message.Value);
+
+		await mtgpStream.WriteMessageAsync(message.CreateResponse());
+	});
+
+	Dictionary<int, int> Convert(Dictionary<int, IdOrRef> input)
+	{
+		return new(input.Select(x => new KeyValuePair<int, int>(x.Key, x.Value.Id!.Value)));
+	}
+
 	requestHandlers.Add(CreateResourceRequest.Command, async data =>
 	{
 		var message = JsonSerializer.Deserialize<CreateResourceRequest>(data, Mtgp.Comms.Util.JsonSerializerOptions)!;
@@ -170,7 +203,13 @@ try
 			{
 				result = resource switch
 				{
-					CreateShaderInfo createInfo => new ResourceCreateResult(proxy.CreateShader(createInfo.ShaderData), ResourceCreateResultType.Success),
+					CreateShaderInfo shaderInfo => new ResourceCreateResult(proxy.CreateShader(shaderInfo.ShaderData), ResourceCreateResultType.Success),
+					CreatePipeInfo pipeInfo => new ResourceCreateResult(proxy.CreatePipe(pipeInfo.Discard), ResourceCreateResultType.Success),
+					CreateActionListInfo actionListInfo => new ResourceCreateResult(proxy.CreateActionList(), ResourceCreateResultType.Success),
+					CreateBufferInfo bufferInfo => new ResourceCreateResult(proxy.CreateBuffer(bufferInfo.Size), ResourceCreateResultType.Success),
+					CreateBufferViewInfo bufferViewInfo => new ResourceCreateResult(proxy.CreateBufferView(bufferViewInfo.Buffer.Id!.Value, bufferViewInfo.Offset, bufferViewInfo.Size), ResourceCreateResultType.Success),
+					CreateImageInfo imageInfo => new ResourceCreateResult(proxy.CreateImage((imageInfo.Width, imageInfo.Height, imageInfo.Depth), imageInfo.Format), ResourceCreateResultType.Success),
+					CreateRenderPassInfo renderPassInfo => new ResourceCreateResult(proxy.CreateRenderPass(Convert(renderPassInfo.ImageAttachments), Convert(renderPassInfo.BufferAttachments), renderPassInfo.InputRate, renderPassInfo.PolygonMode, renderPassInfo.VertexShader.Id!.Value, renderPassInfo.FragmentShader.Id!.Value, (renderPassInfo.X, renderPassInfo.Y, renderPassInfo.Width, renderPassInfo.Height)), ResourceCreateResultType.Success),
 					_ => ResourceCreateResult.InvalidRequest
 				};
 			}
@@ -196,13 +235,20 @@ try
 
 			Log.Information("Received message: {@Message}", message);
 
-			if (requestHandlers.TryGetValue(message.Header.Command!, out var handler))
+			try
 			{
-				await handler(block);
+				if (requestHandlers.TryGetValue(message.Header.Command!, out var handler))
+				{
+					await handler(block);
+				}
+				else
+				{
+					Log.Warning("No handler for message: {@Message}", message);
+				}
 			}
-			else
+			catch (Exception ex)
 			{
-				Log.Warning("No handler for message: {@Message}", message);
+				Log.Error(ex, "Error handling message: {@Message}", message);
 			}
 		}
 	}
