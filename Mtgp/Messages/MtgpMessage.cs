@@ -52,6 +52,22 @@ public interface IMtgpRequest<TRequest, TResponse>
 	TRequest Request { get; }
 }
 
+public interface IMtgpRequestWithResponse<TRequest, TResponse>
+	: IMtgpRequest<TRequest, TResponse>
+	where TRequest : MtgpRequest
+	where TResponse : MtgpResponse
+{
+	TResponse CreateResponse();
+}
+
+public interface IMtgpRequestWithResponse<TRequest, TResponse, TResponseField>
+	: IMtgpRequest<TRequest, TResponse>
+	where TRequest : MtgpRequest
+	where TResponse : MtgpResponse
+{
+	TResponse CreateResponse(TResponseField field);
+}
+
 public interface IMtgpRequest
 {
 	MtgpHeader Header { get; }

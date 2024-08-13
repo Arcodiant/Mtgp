@@ -1,7 +1,7 @@
 ﻿namespace Mtgp.Messages;
 
 public class SetActionTriggerRequest(int id, int actionList, int pipe)
-	: MtgpRequest(id, Command), IMtgpRequest<SetActionTriggerRequest, SetActionTriggerResponse>
+	: MtgpRequest(id, Command), IMtgpRequestWithResponse<SetActionTriggerRequest, SetActionTriggerResponse>
 {
     public SetActionTriggerRequest()
 		: this(0, 0, 0)

@@ -138,51 +138,47 @@ try
 
 	var requestHandlers = new Dictionary<string, Func<byte[], Task>>();
 
-	void AddRequestHandler<T>(Func<T, Task> handler)
-		where T : IMtgpRequest
+	void AddRequestHandler<TRequest, TResponse>(Action<TRequest> handler)
+		where TRequest : MtgpRequest, IMtgpRequestWithResponse<TRequest, TResponse>
+		where TResponse : MtgpResponse
 	{
-		requestHandlers.Add(T.Command, async data =>
+		requestHandlers.Add(TRequest.Command, async data =>
 		{
-			var message = JsonSerializer.Deserialize<T>(data, Mtgp.Comms.Util.JsonSerializerOptions)!;
+			var message = JsonSerializer.Deserialize<TRequest>(data, Mtgp.Comms.Util.JsonSerializerOptions)!;
 
-			await handler(message);
+			handler(message);
+
+			await mtgpStream.WriteMessageAsync(message.CreateResponse());
 		});
 	}
-	
-	AddRequestHandler<GetPresentImageRequest>(async message =>
+
+	void AddRequestHandler1<TRequest, TResponse, TResponseField>(Func<TRequest, TResponseField> handler)
+		where TRequest : MtgpRequest, IMtgpRequestWithResponse<TRequest, TResponse, TResponseField>
+		where TResponse : MtgpResponse
 	{
-		int presentImage = proxy.GetPresentImage();
+		requestHandlers.Add(TRequest.Command, async data =>
+		{
+			var message = JsonSerializer.Deserialize<TRequest>(data, Mtgp.Comms.Util.JsonSerializerOptions)!;
 
-		await mtgpStream.WriteMessageAsync(message.CreateResponse(presentImage));
-	});
+			var result = handler(message);
 
-	AddRequestHandler<AddClearBufferActionRequest>(async message =>
-	{
-		proxy.AddClearBufferAction(message.ActionList, message.Image);
+			await mtgpStream.WriteMessageAsync(message.CreateResponse(result));
+		});
+	}
 
-		await mtgpStream.WriteMessageAsync(message.CreateResponse());
-	});
+	AddRequestHandler1<GetPresentImageRequest, GetPresentImageResponse, int>(message => proxy.GetPresentImage());
 
-	AddRequestHandler<AddPresentActionRequest>(async message =>
-	{
-		proxy.AddPresentAction(message.ActionList);
+	AddRequestHandler<AddClearBufferActionRequest, AddClearBufferActionResponse>(message => proxy.AddClearBufferAction(message.ActionList, message.Image));
 
-		await mtgpStream.WriteMessageAsync(message.CreateResponse());
-	});
+	AddRequestHandler<AddDrawActionRequest, AddDrawActionResponse>(message => proxy.AddDrawAction(message.ActionList, message.RenderPass, message.InstanceCount, message.VertexCount));
 
-	AddRequestHandler<SetActionTriggerRequest>(async message =>
-	{
-		proxy.SetActionTrigger(message.ActionList, message.Pipe);
+	AddRequestHandler<AddPresentActionRequest, AddPresentActionResponse>(message => proxy.AddPresentAction(message.ActionList));
 
-		await mtgpStream.WriteMessageAsync(message.CreateResponse());
-	});
+	AddRequestHandler<SetActionTriggerRequest, SetActionTriggerResponse>(message => proxy.SetActionTrigger(message.ActionList, message.Pipe));
 
-	AddRequestHandler<SendRequest>(async message =>
-	{
-		proxy.Send(message.Pipe, message.Value);
+	AddRequestHandler<SendRequest, SendResponse>(message => proxy.Send(message.Pipe, message.Value));
 
-		await mtgpStream.WriteMessageAsync(message.CreateResponse());
-	});
+	AddRequestHandler<SetBufferDataRequest, SetBufferDataResponse>(message => proxy.SetBufferData(message.Buffer, message.Offset, message.Data));
 
 	Dictionary<int, int> Convert(Dictionary<int, IdOrRef> input)
 	{

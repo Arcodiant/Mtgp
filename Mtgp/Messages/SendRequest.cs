@@ -1,7 +1,7 @@
 ﻿namespace Mtgp.Messages;
 
 public class SendRequest(int id, int pipe, string value)
-	: MtgpRequest(id, Command), IMtgpRequest<SendRequest, SendResponse>
+	: MtgpRequest(id, Command), IMtgpRequestWithResponse<SendRequest, SendResponse>
 {
     public SendRequest()
 		: this(0, 0, string.Empty)

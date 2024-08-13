@@ -13,7 +13,7 @@ struct Input
 
 func Output BorderMain(Input input)
 {
-    result.colour = Vec(input.x / 80.0, 1 - Abs(input.y / 24.0 - input.x / 80.0), input.y / 24.0);
+    result.colour = Vec(input.x / 79.0, 1 - Abs(input.y / 23.0 - input.x / 79.0), input.y / 23.0);
     result.background = Vec(0.0, 0.0, 0.0);
     result.character = 42;
 }

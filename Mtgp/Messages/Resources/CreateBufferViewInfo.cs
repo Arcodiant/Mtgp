@@ -3,7 +3,7 @@
 public record CreateBufferViewInfo(IdOrRef Buffer, int Offset, int Size, string? Reference = null)
 	: ResourceInfo(Reference), ICreateResourceInfo
 {
-	static string ICreateResourceInfo.ResourceType => ResourceType;
+    static string ICreateResourceInfo.ResourceType => ResourceType;
 
 	public const string ResourceType = "bufferView";
 }

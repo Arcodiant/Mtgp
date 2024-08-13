@@ -37,7 +37,7 @@ public class MtgpConnection(ILogger<MtgpConnection> logger, Stream stream)
 		}
 	}
 
-	public async Task<TResponse> Send<TRequest, TResponse>(IMtgpRequest<TRequest, TResponse> request)
+	public async Task<TResponse> SendAsync<TRequest, TResponse>(IMtgpRequest<TRequest, TResponse> request)
 		where TRequest : MtgpRequest
 		where TResponse : MtgpResponse
 	{

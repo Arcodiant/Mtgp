@@ -1,7 +1,7 @@
 ﻿namespace Mtgp.Messages;
 
 public class GetPresentImageRequest(int id)
-	: MtgpRequest(id, Command), IMtgpRequest<GetPresentImageRequest, GetPresentImageResponse>
+	: MtgpRequest(id, Command), IMtgpRequestWithResponse<GetPresentImageRequest, GetPresentImageResponse, int>
 {
 	public GetPresentImageRequest()
 		: this(0)

@@ -1,7 +1,7 @@
 ﻿namespace Mtgp.Messages;
 
 public class AddPresentActionRequest(int id, int actionList)
-	: MtgpRequest(id, Command), IMtgpRequest<AddPresentActionRequest, AddPresentActionResponse>
+	: MtgpRequest(id, Command), IMtgpRequestWithResponse<AddPresentActionRequest, AddPresentActionResponse>
 {
 	public AddPresentActionRequest()
 		: this(0, 0)

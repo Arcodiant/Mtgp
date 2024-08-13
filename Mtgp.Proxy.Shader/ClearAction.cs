@@ -18,7 +18,7 @@ public class ClearAction(ImageState image, Colour? foreground = null, Colour? ba
         {
             ImageFormat.T32 => [32, 0, 0, 0],
             ImageFormat.T32FG3BG3 => [32, 0, 0, 0, 56],
-            ImageFormat.T32FG24U8BG24U8 => [32, 0, 0, 0, 255, 255, 255, 0, 255, 0, 0, 0],
+            ImageFormat.T32FG24U8BG24U8 => [32, 0, 0, 0, 255, 255, 255, 0, 0, 0, 0, 0],
             _ => throw new NotImplementedException()
         };
 

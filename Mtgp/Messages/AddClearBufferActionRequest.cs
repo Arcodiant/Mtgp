@@ -1,7 +1,7 @@
 ﻿namespace Mtgp.Messages;
 
 public class AddClearBufferActionRequest(int id, int actionList, int image)
-	: MtgpRequest(id, Command), IMtgpRequest<AddClearBufferActionRequest, AddClearBufferActionResponse>
+	: MtgpRequest(id, Command), IMtgpRequestWithResponse<AddClearBufferActionRequest, AddClearBufferActionResponse>
 {
     public AddClearBufferActionRequest()
 		: this(0, 0, 0)
