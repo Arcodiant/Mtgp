@@ -88,6 +88,9 @@ internal class ProxyHost(TcpClient client)
 	public int CreateActionList()
 		=> AddResource(this.actionLists, []);
 
+	public void ResetActionList(int actionList)
+		=> this.actionLists[actionList].Clear();
+
 	public void AddRunPipelineAction(int actionList, int pipeline)
 		=> this.actionLists[actionList].Add(new RunPipelineAction(this.fixedFunctionPipelines[pipeline]));
 
@@ -127,6 +130,39 @@ internal class ProxyHost(TcpClient client)
 			}
 
 			client.Draw(deltas.ToArray());
+		}
+	}
+
+	public void AddCopyBufferToImageAction(int actionList, int buffer, ImageFormat bufferFormat, int image, Messages.AddCopyBufferToImageActionRequest.CopyRegion[] copyRegions)
+		=> this.actionLists[actionList].Add(new CopyBufferToImageAction(this.buffers[buffer], bufferFormat, this.images[image], copyRegions));
+
+	private class CopyBufferToImageAction(byte[] buffer, ImageFormat bufferFormat, ImageState image, Messages.AddCopyBufferToImageActionRequest.CopyRegion[] copyRegions)
+		: IAction
+	{
+		private readonly byte[] buffer = buffer;
+		private readonly ImageFormat bufferFormat = bufferFormat;
+		private readonly ImageState image = image;
+		private readonly Messages.AddCopyBufferToImageActionRequest.CopyRegion[] copyRegions = copyRegions;
+
+		public void Execute()
+		{
+			int bufferStep = TextelUtil.GetSize(bufferFormat);
+			int imageStep = TextelUtil.GetSize(image.Format);
+
+			foreach (var (bufferOffset, bufferRowLength, bufferImageHeight, imageX, imageY, imageWidth, imageHeight) in this.copyRegions)
+			{
+				for (int y = 0; y < imageHeight; y++)
+				{
+					for (int x = 0; x < imageWidth; x++)
+					{
+						var bufferIndex = bufferOffset + (x + y * bufferRowLength) * bufferStep;
+						var imageIndex = (imageX + x + (imageY + y) * image.Size.Width) * imageStep;
+
+						var textel = TextelUtil.Get(buffer.AsSpan(bufferIndex..), bufferFormat);
+						TextelUtil.Set(image.Data.Span[imageIndex..], textel, image.Format);
+					}
+				}
+			}
 		}
 	}
 

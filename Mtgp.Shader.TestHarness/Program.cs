@@ -138,7 +138,7 @@ try
 
 	var requestHandlers = new Dictionary<string, Func<byte[], Task>>();
 
-	void AddRequestHandler<TRequest, TResponse>(Action<TRequest> handler)
+	void AddRequestHandler0<TRequest, TResponse>(Action<TRequest> handler)
 		where TRequest : MtgpRequest, IMtgpRequestWithResponse<TRequest, TResponse>
 		where TResponse : MtgpResponse
 	{
@@ -152,6 +152,10 @@ try
 		});
 	}
 
+	void AddRequestHandler<TRequest>(Action<TRequest> handler)
+		where TRequest : MtgpRequest, IMtgpRequestWithResponse<TRequest, MtgpResponse>
+		=> AddRequestHandler0<TRequest, MtgpResponse>(handler);
+
 	void AddRequestHandler1<TRequest, TResponse, TResponseField>(Func<TRequest, TResponseField> handler)
 		where TRequest : MtgpRequest, IMtgpRequestWithResponse<TRequest, TResponse, TResponseField>
 		where TResponse : MtgpResponse
@@ -160,25 +164,38 @@ try
 		{
 			var message = JsonSerializer.Deserialize<TRequest>(data, Mtgp.Comms.Util.JsonSerializerOptions)!;
 
-			var result = handler(message);
+			try
+			{
+				var result = handler(message);
 
-			await mtgpStream.WriteMessageAsync(message.CreateResponse(result));
+				await mtgpStream.WriteMessageAsync(message.CreateResponse(result));
+			}
+			catch (Exception)
+			{
+				await mtgpStream.WriteMessageAsync(new MtgpResponse(message.Header.Id, "error"));
+			}
 		});
 	}
 
 	AddRequestHandler1<GetPresentImageRequest, GetPresentImageResponse, int>(message => proxy.GetPresentImage());
 
-	AddRequestHandler<AddClearBufferActionRequest, AddClearBufferActionResponse>(message => proxy.AddClearBufferAction(message.ActionList, message.Image));
+	AddRequestHandler<AddClearBufferActionRequest>(message => proxy.AddClearBufferAction(message.ActionList, message.Image));
 
-	AddRequestHandler<AddDrawActionRequest, AddDrawActionResponse>(message => proxy.AddDrawAction(message.ActionList, message.RenderPass, message.InstanceCount, message.VertexCount));
+	AddRequestHandler0<AddDrawActionRequest, AddDrawActionResponse>(message => proxy.AddDrawAction(message.ActionList, message.RenderPass, message.InstanceCount, message.VertexCount));
 
-	AddRequestHandler<AddPresentActionRequest, AddPresentActionResponse>(message => proxy.AddPresentAction(message.ActionList));
+	AddRequestHandler0<AddPresentActionRequest, AddPresentActionResponse>(message => proxy.AddPresentAction(message.ActionList));
 
-	AddRequestHandler<SetActionTriggerRequest, SetActionTriggerResponse>(message => proxy.SetActionTrigger(message.ActionList, message.Pipe));
+	AddRequestHandler0<SetActionTriggerRequest, SetActionTriggerResponse>(message => proxy.SetActionTrigger(message.ActionList, message.Pipe));
 
-	AddRequestHandler<SendRequest, SendResponse>(message => proxy.Send(message.Pipe, message.Value));
+	AddRequestHandler0<SendRequest, SendResponse>(message => proxy.Send(message.Pipe, message.Value));
 
-	AddRequestHandler<SetBufferDataRequest, SetBufferDataResponse>(message => proxy.SetBufferData(message.Buffer, message.Offset, message.Data));
+	AddRequestHandler0<SetBufferDataRequest, SetBufferDataResponse>(message => proxy.SetBufferData(message.Buffer, message.Offset, message.Data));
+
+	AddRequestHandler0<SetTimerTriggerRequest, SetTimerTriggerResponse>(message => proxy.SetTimerTrigger(message.ActionList, message.Milliseconds));
+
+	AddRequestHandler<AddCopyBufferToImageActionRequest>(message => proxy.AddCopyBufferToImageAction(message.ActionList, message.Buffer, message.BufferFormat, message.Image, message.CopyRegions));
+
+	AddRequestHandler<ResetActionListRequest>(message => proxy.ResetActionList(message.ActionList));
 
 	Dictionary<int, int> Convert(Dictionary<int, IdOrRef> input)
 	{
@@ -240,6 +257,7 @@ try
 				else
 				{
 					Log.Warning("No handler for message: {@Message}", message);
+					await mtgpStream.WriteMessageAsync(new MtgpResponse(message.Header.Id, "error"));
 				}
 			}
 			catch (Exception ex)

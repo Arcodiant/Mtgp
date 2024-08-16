@@ -17,6 +17,9 @@ internal static class ExpressionParsers
 	private static readonly TokenListParser<PartType, string> Divide =
 		Token.EqualTo(PartType.Divide).Value("/");
 
+	private static readonly TokenListParser<PartType, string> Modulo =
+		Token.EqualTo(PartType.Percent).Value("%");
+
 	private static readonly TokenListParser<PartType, string> Dot =
 		Token.EqualTo(PartType.Dot).Value(".");
 
@@ -50,7 +53,7 @@ internal static class ExpressionParsers
 
 	private readonly static TokenListParser<PartType, Expression> fieldExpression = Parse.Chain(Dot, operand, (op, left, right) => new BinaryExpression(left, right, op));
 
-	private readonly static TokenListParser<PartType, Expression> term = Parse.Chain(Multiply.Or(Divide), fieldExpression, (op, left, right) => new BinaryExpression(left, right, op));
+	private readonly static TokenListParser<PartType, Expression> term = Parse.Chain(Multiply.Or(Divide).Or(Modulo), fieldExpression, (op, left, right) => new BinaryExpression(left, right, op));
 
 	private readonly static TokenListParser<PartType, Expression> sum = Parse.Chain(Add.Or(Subtract), term, (op, left, right) => new BinaryExpression(left, right, op));
 

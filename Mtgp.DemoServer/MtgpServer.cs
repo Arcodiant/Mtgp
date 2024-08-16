@@ -10,11 +10,11 @@ using System.Net.Sockets;
 
 namespace Mtgp.DemoServer;
 
-public class MtgpServer(ILogger<MtgpServer> logger, ILoggerFactory loggerFactory, IHostApplicationLifetime applicationLifetime)
+public class MtgpServer(ILogger<MtgpServer> logger, Factory factory, IHostApplicationLifetime applicationLifetime)
 	: IHostedService
 {
 	private readonly ILogger<MtgpServer> logger = logger;
-	private readonly ILoggerFactory loggerFactory = loggerFactory;
+	private readonly Factory factory = factory;
 	private readonly IHostApplicationLifetime applicationLifetime = applicationLifetime;
 
 	private readonly TcpListener listener = new(IPAddress.Any, 2323);
@@ -54,53 +54,13 @@ public class MtgpServer(ILogger<MtgpServer> logger, ILoggerFactory loggerFactory
 				return;
 			}
 
-			await networkStream.WriteAsync(new byte[] { 0xFF, 0xFB, 0xAA });
+			await networkStream.WriteAsync(new byte[] { 0xFF, 0xFB, 0xAA }, cancellationToken);
 
 			this.logger.LogInformation("Handshake complete");
 
-			var connection = new MtgpConnection(this.loggerFactory.CreateLogger<MtgpConnection>(), networkStream);
+			var session = new DemoSession(this.factory.Create<MtgpClient, Stream>(networkStream));
 
-			_ = connection.ReceiveLoop(cancellationToken);
-
-			var compiler = new ShaderCompiler();
-
-			var uiVertexShaderCode = compiler.Compile(File.ReadAllText("shaders/ui.vert"));
-			var borderFragmentShaderCode = compiler.Compile(File.ReadAllText("shaders/ui.frag"), "BorderMain");
-			var mapFragmentShaderCode = compiler.Compile(File.ReadAllText("shaders/ui.frag"), "MapMain");
-
-			int requestId = 0;
-
-			var resourceResponses = await connection.SendAsync(new CreateResourceRequest(requestId++, [new CreateActionListInfo(), new CreatePipeInfo(), new CreateShaderInfo(uiVertexShaderCode), new CreateShaderInfo(borderFragmentShaderCode), new CreateBufferInfo(1024)]));
-
-			int actionList = resourceResponses.Resources[0].ResourceId;
-			int pipe = resourceResponses.Resources[1].ResourceId;
-			int uiVertexShader = resourceResponses.Resources[2].ResourceId;
-			int borderFragmentShader = resourceResponses.Resources[3].ResourceId;
-			int vertexBuffer = resourceResponses.Resources[4].ResourceId;
-
-			int bufferView = (await connection.SendAsync(new CreateResourceRequest(requestId++, [new CreateBufferViewInfo(vertexBuffer, 0, 16)]))).Resources[0].ResourceId;
-
-			int presentImage = (await connection.SendAsync(new GetPresentImageRequest(requestId++))).ImageId;
-
-			int renderPass = (await connection.SendAsync(new CreateResourceRequest(requestId++, [new CreateRenderPassInfo(new() { [0] = presentImage }, new() { [1] = bufferView }, InputRate.PerVertex, PolygonMode.Fill, uiVertexShader, borderFragmentShader, 0, 0, 80, 24)]))).Resources[0].ResourceId;
-
-			var vertexData = new byte[16];
-
-			new BitWriter(vertexData)
-				.Write(0)
-				.Write(0)
-				.Write(79)
-				.Write(23);
-
-			await connection.SendAsync(new SetBufferDataRequest(requestId++, vertexBuffer, 0, vertexData));
-
-			await connection.SendAsync(new AddClearBufferActionRequest(requestId++, actionList, presentImage));
-			await connection.SendAsync(new AddDrawActionRequest(requestId++, actionList, renderPass, 1, 2));
-			await connection.SendAsync(new AddPresentActionRequest(requestId++, actionList));
-
-			await connection.SendAsync(new SetActionTriggerRequest(requestId++, actionList, pipe));
-
-			await connection.SendAsync(new SendRequest(requestId++, pipe, ""));
+			await session.RunAsync();
 		}
 		catch (Exception ex)
 		{

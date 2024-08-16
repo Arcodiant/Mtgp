@@ -1,4 +1,5 @@
 ﻿- Vertex output & pixel input
+	- Bind vertex buffers
 - Types in shaders
 	- Vector types
 		- Swizzles
@@ -6,7 +7,5 @@
 		- Proper member access
 - Shader Expressions
 	- Function level variables
-- Bind vertex buffers?
-- MTGP over network
 - Presentation diffs
 - Handle incoming ANSI control codes

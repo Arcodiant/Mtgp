@@ -14,6 +14,7 @@ try
 	Log.Information("Starting host");
 
 	var builder = Host.CreateApplicationBuilder(args);
+	builder.Services.AddTransient<Factory>();
 	builder.Services.AddHostedService<MtgpServer>();
 	builder.Services.AddSerilog();
 

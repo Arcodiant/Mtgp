@@ -48,6 +48,7 @@ public class RenderPass(ShaderInterpreter vertexShader, InputRate inputRate, Pol
 		var attachment = this.BufferAttachments[1];
 
 		int pairCount = vertexCount / 2;
+		int vertexStep = this.vertex.InputSize;
 
 		for (int instanceIndex = 0; instanceIndex < instanceCount; instanceIndex++)
 		{
@@ -61,7 +62,7 @@ public class RenderPass(ShaderInterpreter vertexShader, InputRate inputRate, Pol
 							attachment.Span[(instanceIndex * instanceSize)..][..instanceSize].CopyTo(vertexInput);
 							break;
 						case InputRate.PerVertex:
-							attachment.Span[((pairIndex * 2 + vertexIndex) * 8)..][..8].CopyTo(vertexInput);
+							attachment.Span[((pairIndex * 2 + vertexIndex) * vertexStep)..][..vertexStep].CopyTo(vertexInput);
 							break;
 						default:
 							throw new NotSupportedException();

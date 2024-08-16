@@ -37,6 +37,7 @@ internal enum PartType
 	Divide,
 	And,
 	Or,
+	Percent
 }
 
 internal record Expression();
@@ -90,6 +91,7 @@ public class ShaderCompiler
 														.Match(Character.EqualTo('-'), PartType.Minus)
 														.Match(Character.EqualTo('*'), PartType.Multiply)
 														.Match(Character.EqualTo('/'), PartType.Divide)
+														.Match(Character.EqualTo('%'), PartType.Percent)
 														.Match(Span.EqualTo("struct"), PartType.Struct)
 														.Match(Span.EqualTo("func"), PartType.Func)
 														.Match(Span.EqualTo("uniform"), PartType.Uniform)
@@ -544,6 +546,7 @@ public class ShaderCompiler
 			"-" => WriteSubtractExpression(writer, expression, out id, out type),
 			"*" => WriteMultiplyExpression(writer, expression, out id, out type),
 			"/" => WriteDivideExpression(writer, expression, out id, out type),
+			"%" => WriteModuloExpression(writer, expression, out id, out type),
 			_ => throw new Exception($"Unknown operator: {expression.Operator}")
 		};
 		ShaderWriter WriteIntegerLiteralExpression(ShaderWriter writer, IntegerLiteralExpression expression, out int id, out ShaderType type)
@@ -640,6 +643,14 @@ public class ShaderCompiler
 			id = nextId++;
 
 			return writer.Divide(id, GetTypeId(ref writer, type), leftId, rightId);
+		}
+		ShaderWriter WriteModuloExpression(ShaderWriter writer, BinaryExpression expression, out int id, out ShaderType type)
+		{
+			writer = PrepOperatorExpression(writer, expression, out type, out int leftId, out int rightId);
+
+			id = nextId++;
+
+			return writer.Mod(id, GetTypeId(ref writer, type), leftId, rightId);
 		}
 
 		int GetVarId(BinaryExpression expression) => varNames[(((TokenExpression)expression.Left).Value, ((TokenExpression)expression.Right).Value)];

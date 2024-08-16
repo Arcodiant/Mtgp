@@ -36,7 +36,11 @@ public class ShaderInterpreter
 
 		this.inputMappings = inputs.Select(x => x.Type.ElementType!.Size).RunningOffset().ToArray();
 		this.outputMappings = outputs.Select(x => x.Type.ElementType!.Size).RunningOffset().ToArray();
+
+		this.InputSize = inputs.Sum(x => x.Type.ElementType!.Size);
 	}
+
+	public int InputSize { get; private set; }
 
 	private record ShaderAttribute(ShaderType Type, int Location);
 

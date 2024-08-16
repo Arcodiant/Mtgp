@@ -1,7 +1,7 @@
 ﻿namespace Mtgp.Messages;
 
 public class AddClearBufferActionRequest(int id, int actionList, int image)
-	: MtgpRequest(id, Command), IMtgpRequestWithResponse<AddClearBufferActionRequest, AddClearBufferActionResponse>
+	: MtgpRequest(id, Command), IMtgpRequestWithResponse<AddClearBufferActionRequest, MtgpResponse>
 {
     public AddClearBufferActionRequest()
 		: this(0, 0, 0)
@@ -14,19 +14,10 @@ public class AddClearBufferActionRequest(int id, int actionList, int image)
 
 	static string IMtgpRequest.Command => Command;
 
-	AddClearBufferActionRequest IMtgpRequest<AddClearBufferActionRequest, AddClearBufferActionResponse>.Request => this;
+	AddClearBufferActionRequest IMtgpRequest<AddClearBufferActionRequest, MtgpResponse>.Request => this;
 
-	public AddClearBufferActionResponse CreateResponse()
+	public MtgpResponse CreateResponse()
 		=> new(this.Header.Id);
 
 	public const string Command = "core.shader.addClearBufferAction";
-}
-
-public class AddClearBufferActionResponse(int id)
-	: MtgpResponse(id)
-{
-	public AddClearBufferActionResponse()
-		: this(0)
-	{
-	}
 }

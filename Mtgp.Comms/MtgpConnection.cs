@@ -19,6 +19,8 @@ public class MtgpConnection(ILogger<MtgpConnection> logger, Stream stream)
 
 			var message = JsonSerializer.Deserialize<MtgpMessage>(data, Util.JsonSerializerOptions)!;
 
+			this.logger.LogDebug("Received message: {@Message}", message);
+
 			if (message.Header.Type == MtgpMessageType.Response)
 			{
 				lock (this.pendingResponsesLock)
