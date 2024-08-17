@@ -32,9 +32,9 @@ internal class MtgpClient(Factory factory, Stream mtgpStream)
 		ThrowIfError(result);
 	}
 
-	public async Task AddDrawAction(int actionListId, int renderPipeline, (int Character, int Foreground, int Background) frameBuffer, int instanceCount, int vertexCount)
+	public async Task AddDrawAction(int actionListId, int renderPipeline, int[] imageAttachments, (int Character, int Foreground, int Background) frameBuffer, int instanceCount, int vertexCount)
 	{
-		var result = await this.connection.SendAsync(new AddDrawActionRequest(Interlocked.Increment(ref this.requestId), actionListId, renderPipeline, new(frameBuffer.Character, frameBuffer.Foreground, frameBuffer.Background), instanceCount, vertexCount));
+		var result = await this.connection.SendAsync(new AddDrawActionRequest(Interlocked.Increment(ref this.requestId), actionListId, renderPipeline, imageAttachments, new(frameBuffer.Character, frameBuffer.Foreground, frameBuffer.Background), instanceCount, vertexCount));
 
 		ThrowIfError(result);
 	}
@@ -155,11 +155,12 @@ internal class ResourceBuilder(MtgpClient client)
 	public ResourceBuilder RenderPipeline(out Task<int> task,
 									   CreateRenderPipelineInfo.ShaderStageInfo[] shaderStages,
 									   CreateRenderPipelineInfo.VertexInputInfo vertexInput,
+									   CreateRenderPipelineInfo.FragmentAttribute[] fragmentAttributes,
 									   Rect3D viewport,
 									   Rect3D[]? scissors,
 									   PolygonMode polygonMode,
 									   string? reference = null)
-		=> this.Add(new CreateRenderPipelineInfo(shaderStages, vertexInput, viewport, scissors, polygonMode, reference), out task);
+		=> this.Add(new CreateRenderPipelineInfo(shaderStages, vertexInput, fragmentAttributes, viewport, scissors, polygonMode, reference), out task);
 
 	public ResourceBuilder Shader(out Task<int> task, byte[] data, string? reference = null)
 		=> this.Add(new CreateShaderInfo(data, reference), out task);

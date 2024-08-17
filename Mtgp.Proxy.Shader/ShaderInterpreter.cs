@@ -40,15 +40,17 @@ public class ShaderInterpreter
 		this.InputSize = inputs.Sum(x => x.Type.ElementType!.Size);
 		this.OutputSize = outputs.Sum(x => x.Type.ElementType!.Size);
 
-		this.Inputs = inputs;
+		this.Inputs = inputs.Select(x => new ShaderAttribute(x.Type, x.Location, this.inputMappings[x.Location])).ToArray();
+		this.Outputs = outputs.Select(x => new ShaderAttribute(x.Type, x.Location, this.outputMappings[x.Location])).ToArray();
 	}
 
 	public int InputSize { get; private set; }
 	public int OutputSize { get; private set; }
 
 	public ShaderAttribute[] Inputs { get; private set; }
+	public ShaderAttribute[] Outputs { get; private set; }
 
-	public record ShaderAttribute(ShaderType Type, int Location);
+	public record ShaderAttribute(ShaderType Type, int Location, int Offset);
 
 	private static (ShaderAttribute[] Inputs, ShaderAttribute[] Outputs) GetAttributes(Memory<byte> compiledShader)
 	{
@@ -157,7 +159,7 @@ public class ShaderInterpreter
 				&& variableTypes.TryGetValue(variable, out var type)
 				&& storageClasses.TryGetValue(variable, out var storageClass))
 			{
-				var attribute = new ShaderAttribute(types[type], (int)location);
+				var attribute = new ShaderAttribute(types[type], (int)location, 0);
 
 				if (storageClass == ShaderStorageClass.Input)
 				{

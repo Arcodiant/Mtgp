@@ -122,7 +122,7 @@ try
 
 	AddRequestHandler<AddClearBufferActionRequest>(message => proxy.AddClearBufferAction(message.ActionList, message.Image));
 
-	AddRequestHandler<AddDrawActionRequest>(message => proxy.AddDrawAction(message.ActionList, message.RenderPipeline, (message.FrameBuffer.Character, message.FrameBuffer.Foreground, message.FrameBuffer.Background), message.InstanceCount, message.VertexCount));
+	AddRequestHandler<AddDrawActionRequest>(message => proxy.AddDrawAction(message.ActionList, message.RenderPipeline, message.ImageAttachments, (message.FrameBuffer.Character, message.FrameBuffer.Foreground, message.FrameBuffer.Background), message.InstanceCount, message.VertexCount));
 
 	AddRequestHandler0<AddPresentActionRequest, AddPresentActionResponse>(message => proxy.AddPresentAction(message.ActionList));
 
@@ -176,7 +176,8 @@ try
 					CreateImageInfo imageInfo => new ResourceCreateResult(proxy.CreateImage((imageInfo.Width, imageInfo.Height, imageInfo.Depth), imageInfo.Format), ResourceCreateResultType.Success),
 					CreateRenderPipelineInfo renderPipelineInfo => new ResourceCreateResult(proxy.CreateRenderPipeline(renderPipelineInfo.ShaderStages.ToDictionary(x => x.Stage, x => x.Shader.Id!.Value),
 																										renderPipelineInfo.VertexInput.VertexBufferBindings.Select(x => (x.Binding, x.Stride, x.InputRate)).ToArray(),
-																										renderPipelineInfo.VertexInput.VertexAttributes.Select(x=>(x.Location, x.Binding, x.Type, x.Offset)).ToArray(),
+																										renderPipelineInfo.VertexInput.VertexAttributes.Select(x => (x.Location, x.Binding, x.Type, x.Offset)).ToArray(),
+																										renderPipelineInfo.FragmentAttributes.Select(x => (x.Location, x.Type, x.InterpolationScale)).ToArray(),
 																										renderPipelineInfo.Viewport,
 																										renderPipelineInfo.Scissors,
 																										renderPipelineInfo.PolygonMode), ResourceCreateResultType.Success),

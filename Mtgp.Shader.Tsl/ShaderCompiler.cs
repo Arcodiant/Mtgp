@@ -525,18 +525,13 @@ public class ShaderCompiler
 			var imageType = vars.Single(x => x.Id == imageVarId).Type;
 			var imageElementType = imageType.ElementType!;
 			var imageElementTypeId = GetTypeId(ref writer, imageElementType);
-			var coordId = GetVarId((BinaryExpression)expression.Arguments[1]);
-			var coordIdType = vars.Single(x => x.Id == coordId).Type;
+			writer = WriteExpression(writer, expression.Arguments[1], out int coordId, out var coordIdType);
 			var coordIdTypeId = GetTypeId(ref writer, coordIdType);
-
-			int loadedCoordId = nextId++;
-
-			writer = writer.Load(loadedCoordId, coordIdTypeId, coordId);
 
 			id = nextId++;
 			type = imageElementType;
 
-			return writer.Gather(id, imageElementTypeId, imageVarId, loadedCoordId);
+			return writer.Gather(id, imageElementTypeId, imageVarId, coordId);
 		}
 		ShaderWriter WriteBinaryExpression(ShaderWriter writer, BinaryExpression expression, out int id, out ShaderType type) => expression.Operator switch
 		{

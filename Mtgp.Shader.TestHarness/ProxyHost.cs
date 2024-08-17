@@ -92,10 +92,11 @@ internal class ProxyHost(TcpClient client)
 	public int CreateRenderPipeline(Dictionary<ShaderStage, int> shaderStages,
 								 (int Binding, int Stride, InputRate InputRate)[] vertexBufferBindings,
 								 (int Location, int Binding, ShaderType Type, int Offset)[] vertexAttributes,
+								 (int Location, ShaderType Type, Scale InterpolationScale)[] fragmentAttributes,
 								 Rect3D viewport,
 								 Rect3D[]? scissors,
 								 PolygonMode polygonMode)
-		=> AddResource(this.renderPipelines, new RenderPipeline(shaderStages.ToDictionary(x => x.Key, x => this.shaders[x.Value]), vertexBufferBindings, vertexAttributes, viewport, scissors, polygonMode));
+		=> AddResource(this.renderPipelines, new RenderPipeline(shaderStages.ToDictionary(x => x.Key, x => this.shaders[x.Value]), vertexBufferBindings, vertexAttributes, fragmentAttributes, viewport, scissors, polygonMode));
 
 	public int CreateActionList()
 		=> AddResource(this.actionLists, []);
@@ -112,8 +113,9 @@ internal class ProxyHost(TcpClient client)
 	public void AddIndirectDrawAction(int actionList, int renderPass, int indirectCommandBuffer, int offset)
 		=> throw new NotImplementedException();// this.actionLists[actionList].Add(new IndirectDrawAction(this.renderPasses[renderPass], this.bufferViews[indirectCommandBuffer], offset));
 
-	public void AddDrawAction(int actionList, int renderPipeline, (int Character, int Foreground, int Background) framebuffer, int instanceCount, int vertexCount)
+	public void AddDrawAction(int actionList, int renderPipeline, int[] imageAttachments, (int Character, int Foreground, int Background) framebuffer, int instanceCount, int vertexCount)
 		=> this.actionLists[actionList].Add(new DrawAction(this.renderPipelines[renderPipeline],
+													 imageAttachments.Select(x => this.images[x]).ToArray(),
 													 new(this.images[framebuffer.Character], this.images[framebuffer.Foreground], this.images[framebuffer.Background]),
 													 instanceCount,
 													 vertexCount));
@@ -272,7 +274,7 @@ internal class ProxyHost(TcpClient client)
 	{
 		var pipe = this.pipes[pipeId];
 
-		if(pipe.Discard)
+		if (pipe.Discard)
 		{
 			pipe.Queue.Clear();
 		}

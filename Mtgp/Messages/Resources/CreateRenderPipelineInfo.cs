@@ -4,6 +4,7 @@ namespace Mtgp.Messages.Resources;
 
 public record CreateRenderPipelineInfo(CreateRenderPipelineInfo.ShaderStageInfo[] ShaderStages,
 									   CreateRenderPipelineInfo.VertexInputInfo VertexInput,
+									   CreateRenderPipelineInfo.FragmentAttribute[] FragmentAttributes,
 									   Rect3D Viewport,
 									   Rect3D[]? Scissors,
 									   PolygonMode PolygonMode,
@@ -21,4 +22,6 @@ public record CreateRenderPipelineInfo(CreateRenderPipelineInfo.ShaderStageInfo[
 		public record VertexBufferBinding(int Binding, int Stride, InputRate InputRate);
 		public record VertexAttribute(int Location, int Binding, ShaderType Type, int Offset);
 	}
+
+	public record FragmentAttribute(int Location, ShaderType Type, Scale InterpolationScale);
 }

@@ -17,15 +17,14 @@ internal class DemoSession(MtgpClient client)
 			"2. Do something else",
 		};
 
-		const int vertexStep = 4 * 4 * 2;
+		const int vertexStep = 4 * 4;
 
-		var menuItemsVertices = new byte[vertexStep * menuItems.Count];
+		var menuItemsInstances = new byte[vertexStep * menuItems.Count];
 
 		for (int index = 0; index < menuItems.Count; index++)
 		{
-			new BitWriter(menuItemsVertices.AsSpan()[(vertexStep * index)..])
-				.Write(10).Write(3 * (index + 1)).Write(0).Write(0)
-				.Write(10 + menuItems[index].Length - 1).Write(3 * (index + 1)).Write(menuItems[index].Length - 1).Write(0);
+			new BitWriter(menuItemsInstances.AsSpan()[(vertexStep * index)..])
+				.Write(10).Write(3 * (index + 1)).Write(menuItems.Take(index).Sum(x => x.Length)).Write(menuItems[index].Length);
 		}
 
 		var shaderCompiler = new ShaderCompiler();
@@ -56,7 +55,7 @@ internal class DemoSession(MtgpClient client)
 
 		new BitWriter(menuText).WriteRunes(menuItems.Aggregate((x, y) => x + y));
 
-		await client.SetBufferData(buffer, 0, [.. menuItemsVertices, .. menuText]);
+		await client.SetBufferData(buffer, 0, [.. menuItemsInstances, .. menuText]);
 
 		await client.GetResourceBuilder()
 					.Image(out var menuImageTask, 240, 1, 1, ImageFormat.T32_SInt)
@@ -64,8 +63,8 @@ internal class DemoSession(MtgpClient client)
 
 		int menuImage = await menuImageTask;
 
-		await client.AddCopyBufferToImageAction(actionList, buffer, ImageFormat.T32_SInt, menuImage, [new(menuItemsVertices.Length, menuText.Length, 1, 0, 0, menuText.Length, 1)]);
-		
+		await client.AddCopyBufferToImageAction(actionList, buffer, ImageFormat.T32_SInt, menuImage, [new(menuItemsInstances.Length, menuText.Length, 1, 0, 0, menuText.Length, 1)]);
+
 		await client.SetActionTrigger(pipe, actionList);
 
 		await client.Send(pipe, "");
@@ -74,8 +73,16 @@ internal class DemoSession(MtgpClient client)
 
 		await client.GetResourceBuilder()
 					.RenderPipeline(out var renderPipelineTask,
-						 [new(ShaderStage.Vertex, identityShader, ""), new(ShaderStage.Fragment, simpleShader, "")],
-						 new([new(0, 16, InputRate.PerVertex)], [new(0, 0, ShaderType.Int(4), 0), new(0, 0, ShaderType.Int(4), 4)]),
+						 [new(ShaderStage.Vertex, identityShader, ""), new(ShaderStage.Fragment, textureShader, "")],
+						 new(
+							 [new(0, 16, InputRate.PerInstance)],
+							 [
+								 new(0, 0, ShaderType.Int(4), 0),
+								 new(1, 0, ShaderType.Int(4), 4),
+								 new(2, 0, ShaderType.Int(4), 8),
+								 new(3, 0, ShaderType.Int(4), 12)
+							 ]),
+						 [new(0, ShaderType.Int(4), new(1, 0, 0)), new(1, ShaderType.Int(4), new(0, 1, 0))],
 						 new(new(0, 0, 0), new(80, 24, 1)),
 						 null,
 						 PolygonMode.Fill)
@@ -87,7 +94,7 @@ internal class DemoSession(MtgpClient client)
 		await client.AddClearBufferAction(actionList, presentImage.Foreground);
 		await client.AddClearBufferAction(actionList, presentImage.Background);
 		await client.AddBindVertexBuffers(actionList, 0, [(buffer, 0)]);
-		await client.AddDrawAction(actionList, renderPipeline, presentImage, 1, 2);
+		await client.AddDrawAction(actionList, renderPipeline, [menuImage], presentImage, menuItems.Count, 2);
 		await client.AddPresentAction(actionList);
 
 		await client.Send(pipe, "");

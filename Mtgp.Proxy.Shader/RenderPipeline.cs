@@ -1,4 +1,5 @@
 ﻿using Mtgp.Shader;
+using System;
 using System.Text;
 
 namespace Mtgp.Proxy.Shader;
@@ -6,6 +7,7 @@ namespace Mtgp.Proxy.Shader;
 public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderStages,
 							  (int Binding, int Stride, InputRate InputRate)[] vertexBufferBindings,
 							  (int Location, int Binding, ShaderType Type, int Offset)[] vertexAttributes,
+							  (int Location, ShaderType Type, Scale InterpolationScale)[] fragmentAttributes,
 							  Rect3D viewport,
 							  Rect3D[]? scissors,
 							  PolygonMode polygonMode)
@@ -13,11 +15,12 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 	private readonly Dictionary<ShaderStage, ShaderInterpreter> shaderStages = shaderStages;
 	private readonly (int Binding, int Stride, InputRate InputRate)[] vertexBufferBindings = vertexBufferBindings;
 	private readonly (int Location, int Binding, ShaderType Type, int Offset)[] vertexAttributes = vertexAttributes;
+	private readonly (int Location, ShaderType Type, Scale InterpolationScale)[] fragmentAttributes = fragmentAttributes;
 	private readonly Rect3D viewport = viewport;
 	private readonly Rect3D[]? scissors = scissors;
 	private readonly PolygonMode polygonMode = polygonMode;
 
-	public void Execute(int instanceCount, int vertexCount, (byte[] Buffer, int Offset)[] vertexBuffers, FrameBuffer[] frameBuffers)
+	public void Execute(int instanceCount, int vertexCount, (byte[] Buffer, int Offset)[] vertexBuffers, ImageState[] imageAttachments, FrameBuffer[] frameBuffers)
 	{
 		int timerValue = Environment.TickCount;
 
@@ -26,24 +29,24 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 		var vertex = this.shaderStages[ShaderStage.Vertex];
 		var fragment = this.shaderStages[ShaderStage.Fragment];
 
-		Span<byte> vertexOutput = stackalloc byte[vertex.OutputSize];
+		const int vertexPerPrimitive = 2;
+
+		var vertexOutput = new byte[vertex.OutputSize * vertexPerPrimitive];
 
 		Span<byte> output = stackalloc byte[outputSize];
-
-		Span<byte> fragmentInput = stackalloc byte[fragment.InputSize];
 
 		var inputBuiltins = new ShaderInterpreter.Builtins();
 		Span<ShaderInterpreter.Builtins> vertexOutputBuiltins = stackalloc ShaderInterpreter.Builtins[2];
 
 		var deltaBuffer = new List<RuneDelta>();
 
-		int primitiveCount = vertexCount / 2;
+		int primitiveCount = vertexCount / vertexPerPrimitive;
 
 		for (int instanceIndex = 0; instanceIndex < instanceCount; instanceIndex++)
 		{
 			for (int primitiveIndex = 0; primitiveIndex < primitiveCount; primitiveIndex++)
 			{
-				for (int vertexIndex = 0; vertexIndex < 2; vertexIndex++)
+				for (int vertexIndex = 0; vertexIndex < vertexPerPrimitive; vertexIndex++)
 				{
 					inputBuiltins = new()
 					{
@@ -62,14 +65,14 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 						int bindingOffset = binding.InputRate switch
 						{
 							InputRate.PerInstance => instanceIndex * binding.Stride,
-							InputRate.PerVertex => (primitiveIndex * 2 + vertexIndex) * binding.Stride,
+							InputRate.PerVertex => (primitiveIndex * vertexPerPrimitive + vertexIndex) * binding.Stride,
 							_ => throw new NotSupportedException(),
 						};
 
 						return (ReadOnlyMemory<byte>)buffer.Buffer.AsMemory(buffer.Offset + bindingOffset + attribute.Offset, attribute.Type.Size);
 					}).ToArray();
 
-					vertex.Execute([], [], inputBuiltins, inputs, ref vertexOutputBuiltins[vertexIndex], vertexOutput[(vertexIndex * vertex.OutputSize)..][..vertex.OutputSize]);
+					vertex.Execute(imageAttachments, [], inputBuiltins, inputs, ref vertexOutputBuiltins[vertexIndex], vertexOutput.AsSpan(vertexIndex * vertex.OutputSize, vertex.OutputSize));
 				}
 
 				int fromX = vertexOutputBuiltins[0].PositionX;
@@ -109,7 +112,26 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 							Timer = timerValue,
 						};
 
-						fragment.Execute([], [], inputBuiltins, [], ref outputBuiltins, output);
+						var fragmentInput = new byte[fragment.InputSize];
+
+						var inputs = fragment.Inputs.Select(x =>
+						{
+							var attribute = this.fragmentAttributes[x.Location];
+							var vertexOutputAttribute = vertex.Outputs[x.Location];
+
+							var fromValue = vertexOutput[vertexOutputAttribute.Offset..][..vertexOutputAttribute.Type.Size];
+							var toValue = vertexOutput[(vertex.OutputSize + vertexOutputAttribute.Offset)..][..vertexOutputAttribute.Type.Size];
+
+							var scale = MathsUtil.Normalise(attribute.InterpolationScale);
+
+							var output = fragmentInput.AsMemory(x.Offset, x.Type.Size);
+
+							MathsUtil.Lerp(fromValue, toValue, output.Span, MathsUtil.DotProduct((xNormalised, yNormalised, 0), scale), attribute.Type);
+
+							return (ReadOnlyMemory<byte>)output;
+						}).ToArray();
+
+						fragment.Execute(imageAttachments, [], inputBuiltins, inputs, ref outputBuiltins, output);
 
 						int pixelX = x + this.viewport.Offset.X;
 						int pixelY = y + this.viewport.Offset.Y;

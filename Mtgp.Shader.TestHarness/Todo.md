@@ -1,5 +1,5 @@
 ﻿- Vertex output & pixel input
-	- Bind vertex buffers
+	- Fragment inputs
 - Types in shaders
 	- Vector types
 		- Swizzles
@@ -9,3 +9,5 @@
 	- Function level variables
 - Presentation diffs
 - Handle incoming ANSI control codes
+- Image/Buffer attachments
+- Different telnet clients
