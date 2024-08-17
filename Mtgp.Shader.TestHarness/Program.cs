@@ -42,63 +42,6 @@ try
 
 	await mtgpClient.ConnectAsync("localhost", 2323);
 
-	//Log.Information("Building UI shaders");
-
-	//var (mapVertexShader, mapFragmentShader) = CreateUIShaders(proxy, '#', AnsiColour.Green);
-	//var (borderVertexShader, borderFragmentShader) = CreateUIShaders(proxy, '*');
-
-	//int presentImage = proxy.GetPresentImage();
-
-	//Log.Information("Creating pipelines");
-
-	//var (outputPipe, addOutputActions) = CreateStringSplitPipeline(proxy, presentImage, (1, 1, 59, 19));
-	//var (inputPipe, addInputActions) = CreateStringSplitPipeline(proxy, presentImage, (1, 21, 59, 2), true);
-
-	//var mapVertexBuffer = proxy.CreateBuffer(1024);
-
-	//var setBuffer = new byte[80];
-
-	//new BitWriter(setBuffer)
-	//	.Write(61)
-	//	.Write(1)
-	//	.Write(78)
-	//	.Write(13)
-	//	.Write(0)
-	//	.Write(0)
-	//	.Write(79)
-	//	.Write(23)
-	//	.Write(61)
-	//	.Write(14)
-	//	.Write(79)
-	//	.Write(14)
-	//	.Write(61)
-	//	.Write(0)
-	//	.Write(61)
-	//	.Write(23)
-	//	.Write(0)
-	//	.Write(20)
-	//	.Write(61)
-	//	.Write(20);
-
-	//proxy.SetBufferData(mapVertexBuffer, 0, setBuffer);
-
-	//int mapVertexBufferView = proxy.CreateBufferView(mapVertexBuffer, 0, 16);
-	//int borderVertexBufferView = proxy.CreateBufferView(mapVertexBuffer, 16, 64);
-
-	//int mapRenderPass = proxy.CreateRenderPass(new() { [0] = presentImage }, new() { [1] = mapVertexBufferView }, InputRate.PerVertex, PolygonMode.Fill, mapVertexShader, mapFragmentShader, (0, 0, 80, 24));
-	//int borderRenderPass = proxy.CreateRenderPass(new() { [0] = presentImage }, new() { [1] = borderVertexBufferView }, InputRate.PerVertex, PolygonMode.Line, borderVertexShader, borderFragmentShader, (0, 0, 80, 24));
-
-	//int actionList = proxy.CreateActionList();
-	//proxy.AddClearBufferAction(actionList, presentImage);
-	//addInputActions(actionList);
-	//addOutputActions(actionList);
-	//proxy.AddDrawAction(actionList, mapRenderPass, 1, 2);
-	//proxy.AddDrawAction(actionList, borderRenderPass, 1, 8);
-	//proxy.AddPresentAction(actionList);
-
-	//proxy.SetActionTrigger(actionList, inputPipe);
-	//proxy.SetActionTrigger(actionList, outputPipe);
-
 	Log.Information("Running");
 
 	var mtgpStream = mtgpClient.GetStream();
@@ -177,11 +120,9 @@ try
 		});
 	}
 
-	AddRequestHandler1<GetPresentImageRequest, GetPresentImageResponse, int>(message => proxy.GetPresentImage());
-
 	AddRequestHandler<AddClearBufferActionRequest>(message => proxy.AddClearBufferAction(message.ActionList, message.Image));
 
-	AddRequestHandler0<AddDrawActionRequest, AddDrawActionResponse>(message => proxy.AddDrawAction(message.ActionList, message.RenderPass, message.InstanceCount, message.VertexCount));
+	AddRequestHandler<AddDrawActionRequest>(message => proxy.AddDrawAction(message.ActionList, message.RenderPipeline, (message.FrameBuffer.Character, message.FrameBuffer.Foreground, message.FrameBuffer.Background), message.InstanceCount, message.VertexCount));
 
 	AddRequestHandler0<AddPresentActionRequest, AddPresentActionResponse>(message => proxy.AddPresentAction(message.ActionList));
 
@@ -197,10 +138,21 @@ try
 
 	AddRequestHandler<ResetActionListRequest>(message => proxy.ResetActionList(message.ActionList));
 
+	AddRequestHandler<AddBindVertexBuffersRequest>(message => proxy.AddBindVertexBuffers(message.ActionList, message.FirstBufferIndex, message.Buffers.Select(x => (x.BufferIndex, x.Offset)).ToArray()));
+
 	Dictionary<int, int> Convert(Dictionary<int, IdOrRef> input)
 	{
 		return new(input.Select(x => new KeyValuePair<int, int>(x.Key, x.Value.Id!.Value)));
 	}
+
+	requestHandlers.Add(GetPresentImageRequest.Command, async data =>
+	{
+		var message = JsonSerializer.Deserialize<GetPresentImageRequest>(data, Mtgp.Comms.Util.JsonSerializerOptions)!;
+
+		var (characterImage, foregroundImage, backgroundImage) = proxy.GetPresentImage();
+
+		await mtgpStream.WriteMessageAsync(message.CreateResponse(characterImage, foregroundImage, backgroundImage));
+	});
 
 	requestHandlers.Add(CreateResourceRequest.Command, async data =>
 	{
@@ -222,7 +174,12 @@ try
 					CreateBufferInfo bufferInfo => new ResourceCreateResult(proxy.CreateBuffer(bufferInfo.Size), ResourceCreateResultType.Success),
 					CreateBufferViewInfo bufferViewInfo => new ResourceCreateResult(proxy.CreateBufferView(bufferViewInfo.Buffer.Id!.Value, bufferViewInfo.Offset, bufferViewInfo.Size), ResourceCreateResultType.Success),
 					CreateImageInfo imageInfo => new ResourceCreateResult(proxy.CreateImage((imageInfo.Width, imageInfo.Height, imageInfo.Depth), imageInfo.Format), ResourceCreateResultType.Success),
-					CreateRenderPassInfo renderPassInfo => new ResourceCreateResult(proxy.CreateRenderPass(Convert(renderPassInfo.ImageAttachments), Convert(renderPassInfo.BufferAttachments), renderPassInfo.InputRate, renderPassInfo.PolygonMode, renderPassInfo.VertexShader.Id!.Value, renderPassInfo.FragmentShader.Id!.Value, (renderPassInfo.X, renderPassInfo.Y, renderPassInfo.Width, renderPassInfo.Height)), ResourceCreateResultType.Success),
+					CreateRenderPipelineInfo renderPipelineInfo => new ResourceCreateResult(proxy.CreateRenderPipeline(renderPipelineInfo.ShaderStages.ToDictionary(x => x.Stage, x => x.Shader.Id!.Value),
+																										renderPipelineInfo.VertexInput.VertexBufferBindings.Select(x => (x.Binding, x.Stride, x.InputRate)).ToArray(),
+																										renderPipelineInfo.VertexInput.VertexAttributes.Select(x=>(x.Location, x.Binding, x.Type, x.Offset)).ToArray(),
+																										renderPipelineInfo.Viewport,
+																										renderPipelineInfo.Scissors,
+																										renderPipelineInfo.PolygonMode), ResourceCreateResultType.Success),
 					_ => ResourceCreateResult.InvalidRequest
 				};
 			}
@@ -318,98 +275,13 @@ Log.Information("Finished");
 
 Log.CloseAndFlush();
 
-static (int VertexShader, int FragmentShader) CreateUIShaders(ProxyHost proxy, char character, AnsiColour? colour = null)
-{
-	var compiler = new ShaderCompiler();
-	string colourString = "Vec(input.x / 80.0, 1 - Abs(input.y / 24.0 - input.x / 80.0), input.y / 24.0)";
-
-	if (colour != null)
-	{
-		var colourBuilder = new StringBuilder();
-		colourBuilder.Append("Vec(");
-		if (colour.Value.HasFlag(AnsiColour.Red))
-		{
-			colourBuilder.Append("1.0");
-		}
-		else
-		{
-			colourBuilder.Append("0.0");
-		}
-		colourBuilder.Append(", ");
-		if (colour.Value.HasFlag(AnsiColour.Green))
-		{
-			colourBuilder.Append("1.0");
-		}
-		else
-		{
-			colourBuilder.Append("0.0");
-		}
-		colourBuilder.Append(", ");
-		if (colour.Value.HasFlag(AnsiColour.Blue))
-		{
-			colourBuilder.Append("1.0");
-		}
-		else
-		{
-			colourBuilder.Append("0.0");
-		}
-		colourBuilder.Append(')');
-
-		colourString = colourBuilder.ToString();
-	}
-
-	var fragmentShader = @$"struct Output
-{{
-    [Location=0] int character;
-    [Location=1] vec<float, 3> colour;
-    [Location=2] vec<float, 3> background;
-}}
-
-struct Input
-{{
-    [PositionX] int x;
-    [PositionY] int y;
-}}
-
-func Output Main(Input input)
-{{
-    result.colour = {colourString};
-    result.background = Vec(0.0, 0.0, 0.0);
-    result.character = {(Rune.TryCreate(character, out var rune) ? rune.Value : 0)};
-}}";
-
-	var fragmentShaderCode = compiler.Compile(fragmentShader);
-
-	var vertexShader = @"struct InputVertex
-{
-    [Location=0] int x;
-    [Location=1] int y;
-}
-
-struct Output
-{
-    [PositionX] int x;
-    [PositionY] int y;
-}
-
-func Output Main(InputVertex input)
-{
-	result.x = input.x;
-	result.y = input.y;
-}";
-
-	var vertexShaderCode = compiler.Compile(vertexShader);
-
-	return (proxy.CreateShader(vertexShaderCode), proxy.CreateShader(fragmentShaderCode));
-}
-
 static (int PipeId, Action<int> AddActions) CreateStringSplitPipeline(ProxyHost proxy, int presentImage, (int X, int Y, int Width, int Height) viewport, bool discard = false)
 {
 	int inputPipe = proxy.CreatePipe(discard);
 	int dataBuffer = proxy.CreateBuffer(4096);
 
 	var (textVertexShader, textFragmentShader) = CreateTextShaders(proxy);
-	int textLinesImage = proxy.CreateImage((viewport.Width * viewport.Height, 1, 1), ImageFormat.T32);
+	int textLinesImage = proxy.CreateImage((viewport.Width * viewport.Height, 1, 1), ImageFormat.T32_SInt);
 
 	int linesInstanceBufferView = proxy.CreateBufferView(dataBuffer, 0, 16 * viewport.Height);
 	int indirectCommandBufferView = proxy.CreateBufferView(dataBuffer, 16 * viewport.Height, 8);

@@ -13,7 +13,7 @@ internal class ProxyHost(TcpClient client)
 	private readonly List<(Queue<string> Queue, List<Action> Handlers, bool Discard)> pipes = [];
 	private readonly List<IFixedFunctionPipeline> fixedFunctionPipelines = [];
 	private readonly List<ShaderInterpreter> shaders = [];
-	private readonly List<RenderPass> renderPasses = [];
+	private readonly List<RenderPipeline> renderPipelines = [];
 	private readonly List<List<IAction>> actionLists = [];
 	private readonly Dictionary<DefaultPipe, int> defaultPipes = [];
 	private readonly TelnetClient telnetClient = new(client);
@@ -31,7 +31,9 @@ internal class ProxyHost(TcpClient client)
 		telnetClient.SendCommand(TelnetCommand.DO, TelnetOption.NewEnvironmentOption);
 		telnetClient.SendSubnegotiation(TelnetOption.TerminalType, TelnetSubNegotiationCommand.Send, []);
 
-		this.images.Add(new((80, 24, 1), ImageFormat.T32FG24U8BG24U8));
+		this.images.Add(new((80, 24, 1), ImageFormat.T32_SInt));
+		this.images.Add(new((80, 24, 1), ImageFormat.R32G32B32_SFloat));
+		this.images.Add(new((80, 24, 1), ImageFormat.R32G32B32_SFloat));
 
 		_ = Task.Run(async () =>
 		{
@@ -66,24 +68,34 @@ internal class ProxyHost(TcpClient client)
 	public int CreatePipe(bool discard = false)
 		=> AddResource(this.pipes, ([], [], discard));
 
-	public int GetPresentImage() => 0;
+	public (int, int, int) GetPresentImage() => (0, 1, 2);
 
 	public int CreateRenderPass(Dictionary<int, int> imageAttachments, Dictionary<int, int> bufferAttachments, InputRate inputRate, PolygonMode polygonMode, int vertexShader, int fragmentShader, (int X, int Y, int Width, int Height) viewport)
 	{
-		var pass = new RenderPass(this.shaders[vertexShader], inputRate, polygonMode, this.shaders[fragmentShader], viewport);
+		//var pass = new RenderPass(this.shaders[vertexShader], inputRate, polygonMode, this.shaders[fragmentShader], viewport);
 
-		foreach (var item in bufferAttachments)
-		{
-			pass.BufferAttachments[item.Key] = this.bufferViews[item.Value];
-		}
+		//foreach (var item in bufferAttachments)
+		//{
+		//	pass.BufferAttachments[item.Key] = this.bufferViews[item.Value];
+		//}
 
-		foreach (var item in imageAttachments)
-		{
-			pass.ImageAttachments[item.Key] = this.images[item.Value];
-		}
+		//foreach (var item in imageAttachments)
+		//{
+		//	pass.ImageAttachments[item.Key] = this.images[item.Value];
+		//}
 
-		return AddResource(this.renderPasses, pass);
+		//return AddResource(this.renderPasses, pass);
+
+		throw new InvalidOperationException();
 	}
+
+	public int CreateRenderPipeline(Dictionary<ShaderStage, int> shaderStages,
+								 (int Binding, int Stride, InputRate InputRate)[] vertexBufferBindings,
+								 (int Location, int Binding, ShaderType Type, int Offset)[] vertexAttributes,
+								 Rect3D viewport,
+								 Rect3D[]? scissors,
+								 PolygonMode polygonMode)
+		=> AddResource(this.renderPipelines, new RenderPipeline(shaderStages.ToDictionary(x => x.Key, x => this.shaders[x.Value]), vertexBufferBindings, vertexAttributes, viewport, scissors, polygonMode));
 
 	public int CreateActionList()
 		=> AddResource(this.actionLists, []);
@@ -98,31 +110,72 @@ internal class ProxyHost(TcpClient client)
 		=> this.actionLists[actionList].Add(new ClearAction(this.images[image]));
 
 	public void AddIndirectDrawAction(int actionList, int renderPass, int indirectCommandBuffer, int offset)
-		=> this.actionLists[actionList].Add(new IndirectDrawAction(this.renderPasses[renderPass], this.bufferViews[indirectCommandBuffer], offset));
+		=> throw new NotImplementedException();// this.actionLists[actionList].Add(new IndirectDrawAction(this.renderPasses[renderPass], this.bufferViews[indirectCommandBuffer], offset));
 
-	public void AddDrawAction(int actionList, int renderPass, int instanceCount, int vertexCount)
-		=> this.actionLists[actionList].Add(new DrawAction(this.renderPasses[renderPass], instanceCount, vertexCount));
+	public void AddDrawAction(int actionList, int renderPipeline, (int Character, int Foreground, int Background) framebuffer, int instanceCount, int vertexCount)
+		=> this.actionLists[actionList].Add(new DrawAction(this.renderPipelines[renderPipeline],
+													 new(this.images[framebuffer.Character], this.images[framebuffer.Foreground], this.images[framebuffer.Background]),
+													 instanceCount,
+													 vertexCount));
 
-	public void AddPresentAction(int actionList)
-		=> this.actionLists[actionList].Add(new PresentAction(this.images[0], this.telnetClient));
+	public void AddBindVertexBuffers(int actionList, int firstBinding, (int Buffer, int Offset)[] buffers)
+		=> this.actionLists[actionList].Add(new BindVertexBuffersAction(firstBinding, buffers.Select(x => (this.buffers[x.Buffer], x.Offset)).ToArray()));
 
-	private class PresentAction(ImageState image, TelnetClient client)
+	private class BindVertexBuffersAction
 		: IAction
 	{
-		private readonly ImageState image = image;
+		private readonly int firstBinding;
+		private readonly (byte[] Buffer, int Offset)[] buffers;
+
+		public BindVertexBuffersAction(int firstBinding, (byte[] Buffer, int Offset)[] buffers)
+		{
+			this.firstBinding = firstBinding;
+			this.buffers = buffers;
+		}
+
+		public void Execute(ActionExecutionState state)
+		{
+			var prefix = state.VertexBuffers[..this.firstBinding];
+
+			int suffixIndex = this.firstBinding + this.buffers.Length;
+
+			var suffix = state.VertexBuffers.Count > suffixIndex ? state.VertexBuffers[(this.firstBinding + this.buffers.Length)..] : [];
+
+			state.VertexBuffers.Clear();
+			state.VertexBuffers.AddRange([.. prefix, .. this.buffers, .. suffix]);
+		}
+	}
+
+	public void AddPresentAction(int actionList)
+		=> this.actionLists[actionList].Add(new PresentAction(new(this.images[0], this.images[1], this.images[2]), this.telnetClient));
+
+	private class PresentAction(FrameBuffer frameBuffer, TelnetClient client)
+		: IAction
+	{
+		private readonly FrameBuffer frameBuffer = frameBuffer;
 		private readonly TelnetClient client = client;
 
-		public void Execute()
+		public void Execute(ActionExecutionState state)
 		{
 			var deltas = new List<RuneDelta>();
-			int step = TextelUtil.GetSize(image.Format);
+			int characterStep = TextelUtil.GetSize(frameBuffer.Character!.Format);
+			int foregroundStep = TextelUtil.GetSize(frameBuffer.Foreground!.Format);
+			int backgroundStep = TextelUtil.GetSize(frameBuffer.Background!.Format);
 
-			for (int y = 0; y < image.Size.Height; y++)
+			int height = frameBuffer.Character!.Size.Height;
+			int width = frameBuffer.Character!.Size.Width;
+
+			for (int y = 0; y < height; y++)
 			{
-				for (int x = 0; x < image.Size.Width; x++)
+				for (int x = 0; x < width; x++)
 				{
-					var datum = image.Data.Span[((x + y * image.Size.Width) * step)..];
-					var (rune, foreground, background) = TextelUtil.Get(datum, image.Format);
+					var characterDatum = frameBuffer.Character!.Data.Span[((x + y * width) * characterStep)..];
+					var foregroundDatum = frameBuffer.Foreground!.Data.Span[((x + y * width) * foregroundStep)..];
+					var backgroundDatum = frameBuffer.Background!.Data.Span[((x + y * width) * backgroundStep)..];
+
+					var rune = TextelUtil.GetCharacter(characterDatum, frameBuffer.Character!.Format);
+					var foreground = TextelUtil.GetColour(foregroundDatum, frameBuffer.Foreground!.Format);
+					var background = TextelUtil.GetColour(backgroundDatum, frameBuffer.Background!.Format);
 
 					deltas.Add(new(x, y, rune, foreground, background));
 				}
@@ -144,10 +197,12 @@ internal class ProxyHost(TcpClient client)
 		private readonly ImageState image = image;
 		private readonly Messages.AddCopyBufferToImageActionRequest.CopyRegion[] copyRegions = copyRegions;
 
-		public void Execute()
+		public void Execute(ActionExecutionState state)
 		{
-			int bufferStep = TextelUtil.GetSize(bufferFormat);
-			int imageStep = TextelUtil.GetSize(image.Format);
+			if (bufferFormat != image.Format)
+				throw new InvalidOperationException("Buffer format does not match image");
+
+			int step = TextelUtil.GetSize(bufferFormat);
 
 			foreach (var (bufferOffset, bufferRowLength, bufferImageHeight, imageX, imageY, imageWidth, imageHeight) in this.copyRegions)
 			{
@@ -155,11 +210,10 @@ internal class ProxyHost(TcpClient client)
 				{
 					for (int x = 0; x < imageWidth; x++)
 					{
-						var bufferIndex = bufferOffset + (x + y * bufferRowLength) * bufferStep;
-						var imageIndex = (imageX + x + (imageY + y) * image.Size.Width) * imageStep;
+						var bufferIndex = bufferOffset + (x + y * bufferRowLength) * step;
+						var imageIndex = (imageX + x + (imageY + y) * image.Size.Width) * step;
 
-						var textel = TextelUtil.Get(buffer.AsSpan(bufferIndex..), bufferFormat);
-						TextelUtil.Set(image.Data.Span[imageIndex..], textel, image.Format);
+						this.buffer.AsSpan(bufferIndex, step).CopyTo(this.image.Data.Span[imageIndex..]);
 					}
 				}
 			}
@@ -176,9 +230,11 @@ internal class ProxyHost(TcpClient client)
 	public void SetActionTrigger(int actionList, int pipe)
 		=> this.pipes[pipe].Handlers.Add(() =>
 			{
+				var state = new ActionExecutionState();
+
 				foreach (var action in this.actionLists[actionList])
 				{
-					action.Execute();
+					action.Execute(state);
 				}
 			});
 
@@ -191,9 +247,11 @@ internal class ProxyHost(TcpClient client)
 				await Task.Delay(milliseconds);
 				_ = Task.Run(() =>
 				{
+					var state = new ActionExecutionState();
+
 					foreach (var action in this.actionLists[actionList])
 					{
-						action.Execute();
+						action.Execute(state);
 					}
 				});
 			}

@@ -7,7 +7,7 @@ public class IndirectDrawAction(RenderPass renderPass, Memory<byte> buffer, int 
 	private readonly Memory<byte> buffer = buffer;
 	private readonly int offset = offset;
 
-	public void Execute()
+	public void Execute(ActionExecutionState state)
 	{
 		var instanceCount = BitConverter.ToInt32(buffer.Span[offset..]);
 		var vertexCount = BitConverter.ToInt32(buffer.Span[(offset + 4)..]);

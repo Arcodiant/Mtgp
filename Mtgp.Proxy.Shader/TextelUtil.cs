@@ -8,61 +8,78 @@ public static class TextelUtil
 {
 	public static int GetSize(ImageFormat format) => format switch
 	{
-		ImageFormat.T32 => 4,
-		ImageFormat.T32FG3BG3 => 5,
-		ImageFormat.T32FG24U8BG24U8 => 12,
+		ImageFormat.T32_SInt => 4,
+		ImageFormat.R32G32B32_SFloat => 12,
 		_ => throw new NotImplementedException()
 	};
 
-	public static (Rune Character, Colour Foreground, Colour Background) Get(Span<byte> data, ImageFormat format)
+	public static (Rune, Colour, Colour) Get(Span<byte> characterBuffer,
+										  Span<byte> foregroundBuffer,
+										  Span<byte> backgroundBuffer,
+										  ImageFormat characterFormat,
+										  ImageFormat foregroundFormat,
+										  ImageFormat backgroundFormat,
+										  int index)
 	{
-		Rune rune = Unsafe.As<byte, Rune>(ref data[0]);
+		Rune character = GetCharacter(characterBuffer[(index * GetSize(characterFormat))..], characterFormat);
+		Colour foreground = GetColour(foregroundBuffer[(index * GetSize(foregroundFormat))..], foregroundFormat);
+		Colour background = GetColour(backgroundBuffer[(index * GetSize(backgroundFormat))..], backgroundFormat);
+		return (character, foreground, background);
+	}
 
-		var (foreground, background) = format switch
+	public static Rune GetCharacter(Span<byte> data, ImageFormat format) => format switch
+	{
+		ImageFormat.T32_SInt => Unsafe.As<byte, Rune>(ref data[0]),
+		_ => throw new NotImplementedException()
+	};
+
+	public static Colour GetColour(Span<byte> data, ImageFormat format)
+	{
+		switch(format)
 		{
-			ImageFormat.T32 => (Colour.White, Colour.Black),
-			ImageFormat.T32FG3BG3 => (Colour.White, Colour.Black),
-			ImageFormat.T32FG24U8BG24U8 => GetColoursT32FG24U8BG24U8(data),
-			_ => throw new NotImplementedException()
-		};
-
-		return (rune, foreground, background);
+			case ImageFormat.R32G32B32_SFloat:
+				new BitReader(data).Read(out float r).Read(out float g).Read(out float b);
+				return (r, g, b);
+			default:
+				throw new NotImplementedException();
+		}
 	}
 
-	private static (Colour, Colour) GetColoursT32FG24U8BG24U8(Span<byte> data)
+	public static void Set(Span<byte> characterBuffer,
+						  Span<byte> foregroundBuffer,
+						  Span<byte> backgroundBuffer,
+						  (Rune, Colour, Colour) textel,
+						  ImageFormat characterFormat,
+						  ImageFormat foregroundFormat,
+						  ImageFormat backgroundFormat,
+						  Offset3D offset,
+						  Extent3D imageExtent)
 	{
-		new BitReader(data[4..])
-			.Read(out byte foregroundRed)
-			.Read(out byte foregroundGreen)
-			.Read(out byte foregroundBlue)
-			.Read(out byte _)
-			.Read(out byte backgroundRed)
-			.Read(out byte backgroundGreen)
-			.Read(out byte backgroundBlue);
+		int index = offset.X + offset.Y * imageExtent.Width + offset.Z * imageExtent.Width * imageExtent.Depth;
 
-		return ((foregroundRed / 255f, foregroundGreen / 255f, foregroundBlue / 255f), (backgroundRed / 255f, backgroundGreen / 255f, backgroundBlue / 255f));
+		SetCharacter(characterBuffer[(index * GetSize(characterFormat))..], textel.Item1, characterFormat);
+		SetColour(foregroundBuffer[(index * GetSize(foregroundFormat))..], textel.Item2, foregroundFormat);
+		SetColour(backgroundBuffer[(index * GetSize(backgroundFormat))..], textel.Item3, backgroundFormat);
 	}
 
-	public static void Set(Span<byte> data, (Rune Character, Colour Foreground, Colour Background) textel, ImageFormat format)
+	public static void SetCharacter(Span<byte> data, Rune character, ImageFormat format)
 	{
-		data[..GetSize(format)].Clear();
-
-		Unsafe.WriteUnaligned(ref data[0], textel.Character);
-
 		switch (format)
 		{
-			case ImageFormat.T32:
+			case ImageFormat.T32_SInt:
+				Unsafe.WriteUnaligned(ref data[0], character);
 				break;
-			case ImageFormat.T32FG3BG3:
-				byte foreground = (byte)AnsiColour.White;
-				byte background = (byte)AnsiColour.Black;
+			default:
+				throw new NotImplementedException();
+		}
+	}
 
-				data[4] = (byte)((foreground << 3) | background);
-				break;
-			case ImageFormat.T32FG24U8BG24U8:
-				data[4] = (byte)(textel.Foreground.R * 255);
-				data[5] = (byte)(textel.Foreground.G * 255);
-				data[6] = (byte)(textel.Foreground.B * 255);
+	public static void SetColour(Span<byte> data, Colour colour, ImageFormat format)
+	{
+		switch (format)
+		{
+			case ImageFormat.R32G32B32_SFloat:
+				new BitWriter(data).Write(colour.R).Write(colour.G).Write(colour.B);
 				break;
 			default:
 				throw new NotImplementedException();

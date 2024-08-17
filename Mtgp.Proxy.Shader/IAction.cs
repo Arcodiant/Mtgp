@@ -2,5 +2,10 @@
 
 public interface IAction
 {
-	void Execute();
+	void Execute(ActionExecutionState state);
+}
+
+public class ActionExecutionState
+{
+	public readonly List<(byte[] Buffer, int Offset)> VertexBuffers = [];
 }

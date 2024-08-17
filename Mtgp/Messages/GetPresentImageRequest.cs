@@ -1,7 +1,7 @@
 ﻿namespace Mtgp.Messages;
 
 public class GetPresentImageRequest(int id)
-	: MtgpRequest(id, Command), IMtgpRequestWithResponse<GetPresentImageRequest, GetPresentImageResponse, int>
+	: MtgpRequest(id, Command), IMtgpRequest<GetPresentImageRequest, GetPresentImageResponse>
 {
 	public GetPresentImageRequest()
 		: this(0)
@@ -12,19 +12,20 @@ public class GetPresentImageRequest(int id)
 
 	GetPresentImageRequest IMtgpRequest<GetPresentImageRequest, GetPresentImageResponse>.Request => this;
 
-	public GetPresentImageResponse CreateResponse(int imageId)
-		=> new(this.Header.Id, imageId);
+	public GetPresentImageResponse CreateResponse(int characterImageId, int foregroundImageId, int backgroundImageId)
+		=> new(this.Header.Id, characterImageId, foregroundImageId, backgroundImageId);
 
 	public const string Command = "core.shader.getPresentImage";
 }
 
-public class GetPresentImageResponse(int id, int imageId)
+public class GetPresentImageResponse(int id, int characterImageId, int foregroundImageId, int backgroundImageId)
 	: MtgpResponse(id)
 {
 	public GetPresentImageResponse()
-		: this(0, 0)
+		: this(0, 0, 0, 0)
 	{
 	}
-
-	public int ImageId { get; init; } = imageId;
+	public int CharacterImageId { get; init; } = characterImageId;
+	public int ForegroundImageId { get; init; } = foregroundImageId;
+	public int BackgroundImageId { get; init; } = backgroundImageId;
 }

@@ -1,7 +1,5 @@
-﻿using Mtgp.Messages.Resources;
-using Mtgp.Shader;
+﻿using Mtgp.Shader;
 using Mtgp.Shader.Tsl;
-using System.Text;
 
 namespace Mtgp.DemoServer;
 
@@ -34,8 +32,9 @@ internal class DemoSession(MtgpClient client)
 
 		var identityShaderCode = shaderCompiler.Compile(File.ReadAllText("./Shaders/identity.vert"));
 		var textureShaderCode = shaderCompiler.Compile(File.ReadAllText("./Shaders/texture.frag"));
+		var simpleShaderCode = shaderCompiler.Compile(File.ReadAllText("./Shaders/simple.frag"));
 
-		int presentImage = await client.GetPresentImage();
+		var presentImage = await client.GetPresentImage();
 
 		await client.GetResourceBuilder()
 					.ActionList(out var actionListTask)
@@ -43,6 +42,7 @@ internal class DemoSession(MtgpClient client)
 					.Buffer(out var bufferTask, 1024)
 					.Shader(out var identityShaderTask, identityShaderCode)
 					.Shader(out var textureShaderTask, textureShaderCode)
+					.Shader(out var simpleShaderTask, simpleShaderCode)
 					.BuildAsync();
 
 		int actionList = await actionListTask;
@@ -50,6 +50,7 @@ internal class DemoSession(MtgpClient client)
 		int buffer = await bufferTask;
 		int identityShader = await identityShaderTask;
 		int textureShader = await textureShaderTask;
+		int simpleShader = await simpleShaderTask;
 
 		var menuText = new byte[menuItems.Sum(x => x.Length) * 4];
 
@@ -58,14 +59,12 @@ internal class DemoSession(MtgpClient client)
 		await client.SetBufferData(buffer, 0, [.. menuItemsVertices, .. menuText]);
 
 		await client.GetResourceBuilder()
-					.BufferView(out var menuVertexBufferViewTask, buffer, 0, menuItemsVertices.Length)
-					.Image(out var menuImageTask, 240, 1, 1, ImageFormat.T32)
+					.Image(out var menuImageTask, 240, 1, 1, ImageFormat.T32_SInt)
 					.BuildAsync();
 
-		int menuVertexBufferView = await menuVertexBufferViewTask;
 		int menuImage = await menuImageTask;
 
-		await client.AddCopyBufferToImageAction(actionList, buffer, ImageFormat.T32, menuImage, [new(menuItemsVertices.Length, menuText.Length, 1, 0, 0, menuText.Length, 1)]);
+		await client.AddCopyBufferToImageAction(actionList, buffer, ImageFormat.T32_SInt, menuImage, [new(menuItemsVertices.Length, menuText.Length, 1, 0, 0, menuText.Length, 1)]);
 		
 		await client.SetActionTrigger(pipe, actionList);
 
@@ -74,13 +73,21 @@ internal class DemoSession(MtgpClient client)
 		await client.ResetActionList(actionList);
 
 		await client.GetResourceBuilder()
-					.RenderPass(out var renderPassTask, new() { [0] = presentImage, [1] = menuImage }, new() { [1] = menuVertexBufferView }, InputRate.PerVertex, PolygonMode.Fill, identityShader, textureShader, 0, 0, 80, 24)
+					.RenderPipeline(out var renderPipelineTask,
+						 [new(ShaderStage.Vertex, identityShader, ""), new(ShaderStage.Fragment, simpleShader, "")],
+						 new([new(0, 16, InputRate.PerVertex)], [new(0, 0, ShaderType.Int(4), 0), new(0, 0, ShaderType.Int(4), 4)]),
+						 new(new(0, 0, 0), new(80, 24, 1)),
+						 null,
+						 PolygonMode.Fill)
 					.BuildAsync();
 
-		int renderPass = await renderPassTask;
+		int renderPipeline = await renderPipelineTask;
 
-		await client.AddClearBufferAction(actionList, presentImage);
-		await client.AddDrawAction(actionList, renderPass, 1, 2);
+		await client.AddClearBufferAction(actionList, presentImage.Character);
+		await client.AddClearBufferAction(actionList, presentImage.Foreground);
+		await client.AddClearBufferAction(actionList, presentImage.Background);
+		await client.AddBindVertexBuffers(actionList, 0, [(buffer, 0)]);
+		await client.AddDrawAction(actionList, renderPipeline, presentImage, 1, 2);
 		await client.AddPresentAction(actionList);
 
 		await client.Send(pipe, "");

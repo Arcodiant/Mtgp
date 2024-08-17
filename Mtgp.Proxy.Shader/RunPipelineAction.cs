@@ -5,7 +5,7 @@ public class RunPipelineAction(IFixedFunctionPipeline pipeline)
 {
 	private readonly IFixedFunctionPipeline pipeline = pipeline;
 
-	public void Execute()
+	public void Execute(ActionExecutionState state)
 	{
 		this.pipeline.Execute();
 	}

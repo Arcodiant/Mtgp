@@ -16,13 +16,13 @@ internal class MtgpClient(Factory factory, Stream mtgpStream)
 		_ = this.connection.ReceiveLoop(CancellationToken.None);
 	}
 
-	public async Task<int> GetPresentImage()
+	public async Task<(int Character, int Foreground, int Background)> GetPresentImage()
 	{
 		var result = await this.connection.SendAsync(new GetPresentImageRequest(Interlocked.Increment(ref this.requestId)));
 
 		ThrowIfError(result);
 
-		return result.ImageId;
+		return (result.CharacterImageId, result.ForegroundImageId, result.BackgroundImageId);
 	}
 
 	public async Task AddClearBufferAction(int actionListId, int image)
@@ -32,9 +32,16 @@ internal class MtgpClient(Factory factory, Stream mtgpStream)
 		ThrowIfError(result);
 	}
 
-	public async Task AddDrawAction(int actionListId, int renderPass, int instanceCount, int vertexCount)
+	public async Task AddDrawAction(int actionListId, int renderPipeline, (int Character, int Foreground, int Background) frameBuffer, int instanceCount, int vertexCount)
 	{
-		var result = await this.connection.SendAsync(new AddDrawActionRequest(Interlocked.Increment(ref this.requestId), actionListId, renderPass, instanceCount, vertexCount));
+		var result = await this.connection.SendAsync(new AddDrawActionRequest(Interlocked.Increment(ref this.requestId), actionListId, renderPipeline, new(frameBuffer.Character, frameBuffer.Foreground, frameBuffer.Background), instanceCount, vertexCount));
+
+		ThrowIfError(result);
+	}
+
+	public async Task AddBindVertexBuffers(int actionList, int firstBufferIndex, (int Buffer, int Offset)[] buffers)
+	{
+		var result = await this.connection.SendAsync(new AddBindVertexBuffersRequest(Interlocked.Increment(ref this.requestId), actionList, firstBufferIndex, buffers.Select(x => new AddBindVertexBuffersRequest.VertexBufferBinding(x.Buffer, x.Offset)).ToArray()));
 
 		ThrowIfError(result);
 	}
@@ -142,8 +149,17 @@ internal class ResourceBuilder(MtgpClient client)
 	public ResourceBuilder Image(out Task<int> task, int width, int height, int depth, ImageFormat format, string? reference = null)
 		=> this.Add(new CreateImageInfo(width, height, depth, format, reference), out task);
 
-	public ResourceBuilder RenderPass(out Task<int> task, Dictionary<int, IdOrRef> imageAttachments, Dictionary<int, IdOrRef> bufferAttachments, InputRate inputRate, PolygonMode polygonMode, IdOrRef vertexShader, IdOrRef fragmentShader, int x, int y, int width, int height, string? reference = null)
-		=> this.Add(new CreateRenderPassInfo(imageAttachments, bufferAttachments, inputRate, polygonMode, vertexShader, fragmentShader, x, y, width, height, reference), out task);
+	//public ResourceBuilder RenderPass(out Task<int> task, Dictionary<int, IdOrRef> imageAttachments, Dictionary<int, IdOrRef> bufferAttachments, InputRate inputRate, PolygonMode polygonMode, IdOrRef vertexShader, IdOrRef fragmentShader, int x, int y, int width, int height, string? reference = null)
+	//	=> this.Add(new CreateRenderPassInfo(imageAttachments, bufferAttachments, inputRate, polygonMode, vertexShader, fragmentShader, x, y, width, height, reference), out task);
+
+	public ResourceBuilder RenderPipeline(out Task<int> task,
+									   CreateRenderPipelineInfo.ShaderStageInfo[] shaderStages,
+									   CreateRenderPipelineInfo.VertexInputInfo vertexInput,
+									   Rect3D viewport,
+									   Rect3D[]? scissors,
+									   PolygonMode polygonMode,
+									   string? reference = null)
+		=> this.Add(new CreateRenderPipelineInfo(shaderStages, vertexInput, viewport, scissors, polygonMode, reference), out task);
 
 	public ResourceBuilder Shader(out Task<int> task, byte[] data, string? reference = null)
 		=> this.Add(new CreateShaderInfo(data, reference), out task);

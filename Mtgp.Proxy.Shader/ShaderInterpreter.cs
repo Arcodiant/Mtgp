@@ -38,11 +38,17 @@ public class ShaderInterpreter
 		this.outputMappings = outputs.Select(x => x.Type.ElementType!.Size).RunningOffset().ToArray();
 
 		this.InputSize = inputs.Sum(x => x.Type.ElementType!.Size);
+		this.OutputSize = outputs.Sum(x => x.Type.ElementType!.Size);
+
+		this.Inputs = inputs;
 	}
 
 	public int InputSize { get; private set; }
+	public int OutputSize { get; private set; }
 
-	private record ShaderAttribute(ShaderType Type, int Location);
+	public ShaderAttribute[] Inputs { get; private set; }
+
+	public record ShaderAttribute(ShaderType Type, int Location);
 
 	private static (ShaderAttribute[] Inputs, ShaderAttribute[] Outputs) GetAttributes(Memory<byte> compiledShader)
 	{
@@ -184,7 +190,7 @@ public class ShaderInterpreter
 		public int Timer = timer;
 	}
 
-	public void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, Builtins inputBuiltins, ReadOnlySpan<byte> input, ref Builtins outputBuiltins, Span<byte> output)
+	public void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, Builtins inputBuiltins, ReadOnlyMemory<byte>[] input, ref Builtins outputBuiltins, Span<byte> output)
 	{
 		bool isRunning = true;
 
@@ -335,11 +341,11 @@ public class ShaderInterpreter
 								{
 									if (type.Size == 4)
 									{
-										results[result] = MemoryMarshal.AsRef<Field>(input[this.inputMappings[(int)variableInfo.Location!]..]);
+										results[result] = MemoryMarshal.AsRef<Field>(input[variableInfo.Location!.Value].Span);
 									}
 									else if (type.Size == 8)
 									{
-										results2[result] = MemoryMarshal.AsRef<(Field, Field)>(input[this.inputMappings[(int)variableInfo.Location!]..]);
+										results2[result] = MemoryMarshal.AsRef<(Field, Field)>(input[variableInfo.Location!.Value].Span);
 									}
 									else
 									{

@@ -1,33 +1,27 @@
 ﻿namespace Mtgp.Messages;
 
-public class AddDrawActionRequest(int id, int actionList, int renderPass, int instanceCount, int vertexCount)
-	: MtgpRequest(id, Command), IMtgpRequestWithResponse<AddDrawActionRequest, AddDrawActionResponse>
+public class AddDrawActionRequest(int id, int actionList, int renderPipeline, AddDrawActionRequest.FrameBufferInfo framebuffer, int instanceCount, int vertexCount)
+	: MtgpRequest(id, Command), IMtgpRequestWithResponse<AddDrawActionRequest, MtgpResponse>
 {
 	public AddDrawActionRequest()
-		: this(0, 0, 0, 0, 0)
+		: this(0, 0, 0, new (0, 0, 0), 0, 0)
 	{
 	}
 
 	public int ActionList { get; init; } = actionList;
-	public int RenderPass { get; init; } = renderPass;
+	public int RenderPipeline { get; init; } = renderPipeline;
+	public FrameBufferInfo FrameBuffer { get; init; } = framebuffer;
 	public int InstanceCount { get; init; } = instanceCount;
 	public int VertexCount { get; init; } = vertexCount;
 
 	static string IMtgpRequest.Command => Command;
 
-	AddDrawActionRequest IMtgpRequest<AddDrawActionRequest, AddDrawActionResponse>.Request => this;
+	AddDrawActionRequest IMtgpRequest<AddDrawActionRequest, MtgpResponse>.Request => this;
 
-	public AddDrawActionResponse CreateResponse()
+	public MtgpResponse CreateResponse()
 		=> new(this.Header.Id);
 
 	public const string Command = "core.shader.addDrawAction";
-}
 
-public class AddDrawActionResponse(int id)
-	: MtgpResponse(id)
-{
-	public AddDrawActionResponse()
-		: this(0)
-	{
-	}
+	public record class FrameBufferInfo(int Character, int Foreground, int Background);
 }

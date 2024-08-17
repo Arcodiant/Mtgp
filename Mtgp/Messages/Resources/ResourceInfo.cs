@@ -7,7 +7,7 @@ namespace Mtgp.Messages.Resources;
 [JsonDerivedType(typeof(CreateBufferInfo), CreateBufferInfo.ResourceType)]
 [JsonDerivedType(typeof(CreateBufferViewInfo), CreateBufferViewInfo.ResourceType)]
 [JsonDerivedType(typeof(CreateImageInfo), CreateImageInfo.ResourceType)]
-[JsonDerivedType(typeof(CreateRenderPassInfo), CreateRenderPassInfo.ResourceType)]
+[JsonDerivedType(typeof(CreateRenderPipelineInfo), CreateRenderPipelineInfo.ResourceType)]
 [JsonDerivedType(typeof(CreateActionListInfo), CreateActionListInfo.ResourceType)]
 [JsonDerivedType(typeof(CreatePipeInfo), CreatePipeInfo.ResourceType)]
 [JsonDerivedType(typeof(CreateStringSplitPipelineInfo), CreateStringSplitPipelineInfo.ResourceType)]

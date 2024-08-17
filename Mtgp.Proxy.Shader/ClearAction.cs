@@ -2,23 +2,27 @@
 
 namespace Mtgp.Proxy.Shader;
 
-public class ClearAction(ImageState image, Colour? foreground = null, Colour? background = null)
+public class ClearAction(ImageState image)
     : IAction
 {
     private readonly ImageState image = image;
-    private readonly Colour foreground = foreground ?? Colour.White;
-    private readonly Colour background = background ?? Colour.Black;
 
-    public void Execute()
+    public void Execute(ActionExecutionState state)
     {
         int step = TextelUtil.GetSize(image.Format);
         int size = image.Size.Width * image.Size.Height * image.Size.Depth * step;
 
+        Span<byte> float3Clear = stackalloc byte[12];
+
+        new BitWriter(float3Clear)
+			.Write(0f)
+			.Write(0f)
+			.Write(0f);
+
         Span<byte> clearValue = image.Format switch
         {
-            ImageFormat.T32 => [32, 0, 0, 0],
-            ImageFormat.T32FG3BG3 => [32, 0, 0, 0, 56],
-            ImageFormat.T32FG24U8BG24U8 => [32, 0, 0, 0, 255, 255, 255, 0, 0, 0, 0, 0],
+            ImageFormat.T32_SInt => [32, 0, 0, 0],
+            ImageFormat.R32G32B32_SFloat => float3Clear,
             _ => throw new NotImplementedException()
         };
 

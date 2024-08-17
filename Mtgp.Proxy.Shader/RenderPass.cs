@@ -3,18 +3,6 @@ using System.Text;
 
 namespace Mtgp.Proxy.Shader;
 
-public record ImageState((int Width, int Height, int Depth) Size, ImageFormat Format)
-{
-	public (int Width, int Height, int Depth) Size { get; private set; } = Size;
-    public Memory<byte> Data { get; private set; } = new byte[TextelUtil.GetSize(Format) * Size.Width * Size.Height * Size.Depth];
-
-	public void Resize((int Width, int Height, int Depth) newSize)
-	{
-		this.Size = newSize;
-		this.Data = new byte[TextelUtil.GetSize(Format) * Size.Width * Size.Height * Size.Depth];
-    }
-}
-
 public class RenderPass(ShaderInterpreter vertexShader, InputRate inputRate, PolygonMode polygonMode, ShaderInterpreter fragmentShader, (int X, int Y, int Width, int Height) viewport)
 {
 	private readonly ShaderInterpreter vertex = vertexShader;
@@ -74,7 +62,7 @@ public class RenderPass(ShaderInterpreter vertexShader, InputRate inputRate, Pol
 						Timer = timerValue,
 					};
 
-					this.vertex.Execute(this.ImageAttachments, this.BufferAttachments, inputBuiltins, vertexInput, ref vertexOutputBuiltins[vertexIndex], vertexOutput[(vertexIndex * 8)..][..8]);
+					//this.vertex.Execute(this.ImageAttachments, this.BufferAttachments, inputBuiltins, vertexInput, ref vertexOutputBuiltins[vertexIndex], vertexOutput[(vertexIndex * 8)..][..8]);
 				}
 
 				(float X, float Y, float W) uScale = (1f, 0f, 0f);
@@ -136,7 +124,7 @@ public class RenderPass(ShaderInterpreter vertexShader, InputRate inputRate, Pol
 							.Write(u)
 							.Write(v);
 
-						this.fragment.Execute(this.ImageAttachments, this.BufferAttachments, inputBuiltins, fragmentInput, ref outputBuiltins, output);
+						//this.fragment.Execute(this.ImageAttachments, this.BufferAttachments, inputBuiltins, fragmentInput, ref outputBuiltins, output);
 
 						var frameBuffer = this.ImageAttachments[0];
 
@@ -156,7 +144,7 @@ public class RenderPass(ShaderInterpreter vertexShader, InputRate inputRate, Pol
 							.Read(out float backgroundGreen)
 							.Read(out float backgroundBlue);
 
-						TextelUtil.Set(pixelTarget, (character, (foregroundRed, foregroundGreen, foregroundBlue), (backgroundRed, backgroundGreen, backgroundBlue)), frameBuffer.Format);
+						//TextelUtil.Set(pixelTarget, (character, (foregroundRed, foregroundGreen, foregroundBlue), (backgroundRed, backgroundGreen, backgroundBlue)), frameBuffer.Format);
 					}
 				}
 			}

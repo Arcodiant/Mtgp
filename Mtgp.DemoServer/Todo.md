@@ -5,3 +5,5 @@
 - Parallax stars
 - Loading screen
 - Data types for Send/Pipes
+- Default pipes
+- Refs in resource creation
