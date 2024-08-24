@@ -93,7 +93,7 @@ public class TelnetClient
                         return builder;
                     }).ToString();
 
-                    Log.Verbose("Received: {value}", cleanedLine);
+                    Log.Debug("Received: {value}", cleanedLine);
 
                     var lines = stringEvent.Value.Split('\n');
 
@@ -146,16 +146,19 @@ public class TelnetClient
 
     public void SendCommand(TelnetCommand command, TelnetOption option)
     {
+        Log.Debug("Sending command: {Command} {Option}", command, option);
         this.stream.Write([(byte)TelnetCommand.IAC, (byte)command, (byte)option]);
     }
 
     public void SendSubnegotiation(TelnetOption option, ReadOnlySpan<byte> data)
     {
+        Log.Debug("Sending subnegotiation: {Option} {Data}", option, data.ToArray());
         this.stream.Write([(byte)TelnetCommand.IAC, (byte)TelnetCommand.SB, (byte)option, .. data, (byte)TelnetCommand.IAC, (byte)TelnetCommand.SE]);
     }
 
     public void SendSubnegotiation(TelnetOption option, TelnetSubNegotiationCommand subCommand, ReadOnlySpan<byte> data)
     {
+        Log.Debug("Sending subnegotiation: {Option} {SubCommand} {Data}", option, subCommand, data.ToArray());
         this.stream.Write([(byte)TelnetCommand.IAC, (byte)TelnetCommand.SB, (byte)option, (byte)subCommand, .. data, (byte)TelnetCommand.IAC, (byte)TelnetCommand.SE]);
     }
 

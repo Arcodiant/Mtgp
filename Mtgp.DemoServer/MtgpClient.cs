@@ -1,19 +1,81 @@
-﻿using Mtgp.Comms;
+﻿using Microsoft.Extensions.Logging;
+using Mtgp.Comms;
 using Mtgp.Messages;
 using Mtgp.Messages.Resources;
 using Mtgp.Shader;
+using System.Text.Json;
 
 namespace Mtgp.DemoServer;
 
-internal class MtgpClient(Factory factory, Stream mtgpStream)
+internal class MtgpClient(Factory factory, Stream mtgpStream, ILogger<MtgpClient> logger)
 {
 	private readonly MtgpConnection connection = factory.Create<MtgpConnection, Stream>(mtgpStream);
+	private readonly Stream mtgpStream = mtgpStream;
+	private readonly ILogger<MtgpClient> logger = logger;
 
 	private int requestId = 0;
 
-	public void Start()
+	public async Task StartAsync(bool isServer = false)
 	{
-		_ = this.connection.ReceiveLoop(CancellationToken.None);
+		if (isServer)
+		{
+			var handshake = new byte[3];
+
+			var timeoutCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+			try
+			{
+				await this.mtgpStream.ReadExactlyAsync(handshake, timeoutCancellation.Token);
+			}
+			catch (OperationCanceledException)
+			{
+				this.logger.LogWarning("Client did not send handshake in time or connection was cancelled");
+
+				return;
+			}
+
+			if (handshake[0] != 0xFF || handshake[1] != 0xFD || handshake[2] != 0xAA)
+			{
+				this.logger.LogWarning("Client did not send correct handshake: {Handshake}", handshake);
+				return;
+			}
+
+			await this.mtgpStream.WriteAsync(new byte[] { 0xFF, 0xFB, 0xAA });
+
+			this.logger.LogInformation("Handshake complete");
+		}
+		else
+		{
+			throw new NotImplementedException();
+		}
+
+		this.connection.Receive += this.Connection_ReceiveAsync;
+
+		_ = Task.Run(() => this.connection.ReceiveLoop(CancellationToken.None));
+	}
+
+	private async Task Connection_ReceiveAsync((MtgpMessage Message, byte[] Data) obj)
+	{
+		try
+		{
+			if (obj.Message.Header.Command == SendRequest.Command)
+			{
+				this.SendReceived?.Invoke(JsonSerializer.Deserialize<SendRequest>(obj.Data, Util.JsonSerializerOptions)!);
+			}
+		}
+		finally
+		{
+			await this.connection.SendResponseAsync(obj.Message.Header.Id, "ok");
+		}
+    }
+
+	public event Action<SendRequest> SendReceived;
+
+	public async Task SetDefaultPipe(DefaultPipe pipe, int pipeId)
+	{
+		var result = await this.connection.SendAsync(new SetDefaultPipeRequest(Interlocked.Increment(ref this.requestId), pipe, pipeId));
+
+		ThrowIfError(result);
 	}
 
 	public async Task<(int Character, int Foreground, int Background)> GetPresentImage()

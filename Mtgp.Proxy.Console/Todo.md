@@ -1,6 +1,4 @@
-﻿- Vertex output & pixel input
-	- Fragment inputs
-- Types in shaders
+﻿- Types in shaders
 	- Vector types
 		- Swizzles
 	- Struct types

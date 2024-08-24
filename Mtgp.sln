@@ -5,8 +5,6 @@ VisualStudioVersion = 17.5.002.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Mtgp.Shader", "Mtgp.Shader\Mtgp.Shader.csproj", "{9C5FC5C2-50F0-432B-94DA-D944600C81E6}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Mtgp.Shader.TestHarness", "Mtgp.Shader.TestHarness\Mtgp.Shader.TestHarness.csproj", "{6FCC3E99-8A7F-4001-8B26-4C8A98C5E2EF}"
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{043FB339-6570-4038-B2E6-20C4DB725ED0}"
 	ProjectSection(SolutionItems) = preProject
 		.editorconfig = .editorconfig
@@ -18,11 +16,13 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Mtgp", "Mtgp\Mtgp.csproj", 
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Mtgp.Shader.Tsl", "Mtgp.Shader.Tsl\Mtgp.Shader.Tsl.csproj", "{2D467DEA-CD07-4D97-9D2C-7D4DD9395448}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mtgp.DemoServer", "Mtgp.DemoServer\Mtgp.DemoServer.csproj", "{B6CA65A7-2D01-418B-8388-FFB7DD804DB2}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Mtgp.DemoServer", "Mtgp.DemoServer\Mtgp.DemoServer.csproj", "{B6CA65A7-2D01-418B-8388-FFB7DD804DB2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mtgp.Comms", "Mtgp.Comms\Mtgp.Comms.csproj", "{E8E86592-CE9E-4CBD-8916-264A31915053}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Mtgp.Comms", "Mtgp.Comms\Mtgp.Comms.csproj", "{E8E86592-CE9E-4CBD-8916-264A31915053}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mtgp.Proxy.Shader", "Mtgp.Proxy.Shader\Mtgp.Proxy.Shader.csproj", "{BDDC848B-00C2-4004-8208-3B4F1944BDA7}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Mtgp.Proxy.Shader", "Mtgp.Proxy.Shader\Mtgp.Proxy.Shader.csproj", "{BDDC848B-00C2-4004-8208-3B4F1944BDA7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mtgp.Proxy.Console", "Mtgp.Proxy.Console\Mtgp.Proxy.Console.csproj", "{2790C151-A8D0-4015-8B66-73B52BEAEB87}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -37,12 +37,6 @@ Global
 		{9C5FC5C2-50F0-432B-94DA-D944600C81E6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9C5FC5C2-50F0-432B-94DA-D944600C81E6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9C5FC5C2-50F0-432B-94DA-D944600C81E6}.Release|Any CPU.Build.0 = Release|Any CPU
-		{6FCC3E99-8A7F-4001-8B26-4C8A98C5E2EF}.CI|Any CPU.ActiveCfg = Release|Any CPU
-		{6FCC3E99-8A7F-4001-8B26-4C8A98C5E2EF}.CI|Any CPU.Build.0 = Release|Any CPU
-		{6FCC3E99-8A7F-4001-8B26-4C8A98C5E2EF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{6FCC3E99-8A7F-4001-8B26-4C8A98C5E2EF}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{6FCC3E99-8A7F-4001-8B26-4C8A98C5E2EF}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{6FCC3E99-8A7F-4001-8B26-4C8A98C5E2EF}.Release|Any CPU.Build.0 = Release|Any CPU
 		{B468951D-3B02-4D57-804A-9678A3E6E427}.CI|Any CPU.ActiveCfg = Debug|Any CPU
 		{B468951D-3B02-4D57-804A-9678A3E6E427}.CI|Any CPU.Build.0 = Debug|Any CPU
 		{B468951D-3B02-4D57-804A-9678A3E6E427}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
@@ -79,6 +73,12 @@ Global
 		{BDDC848B-00C2-4004-8208-3B4F1944BDA7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{BDDC848B-00C2-4004-8208-3B4F1944BDA7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{BDDC848B-00C2-4004-8208-3B4F1944BDA7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2790C151-A8D0-4015-8B66-73B52BEAEB87}.CI|Any CPU.ActiveCfg = Debug|Any CPU
+		{2790C151-A8D0-4015-8B66-73B52BEAEB87}.CI|Any CPU.Build.0 = Debug|Any CPU
+		{2790C151-A8D0-4015-8B66-73B52BEAEB87}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2790C151-A8D0-4015-8B66-73B52BEAEB87}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2790C151-A8D0-4015-8B66-73B52BEAEB87}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2790C151-A8D0-4015-8B66-73B52BEAEB87}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

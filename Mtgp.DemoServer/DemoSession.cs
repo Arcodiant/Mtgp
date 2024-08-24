@@ -1,15 +1,23 @@
 ﻿using Mtgp.Shader;
 using Mtgp.Shader.Tsl;
+using System.Net.Sockets;
 
 namespace Mtgp.DemoServer;
 
-internal class DemoSession(MtgpClient client)
+internal class DemoSession(Factory factory, TcpClient client)
 {
-	private readonly MtgpClient client = client;
+	private readonly MtgpClient client = factory.Create<MtgpClient, Stream>(client.GetStream());
 
 	public async Task RunAsync()
 	{
-		client.Start();
+		var runLock = new TaskCompletionSource();
+
+		client.SendReceived += message =>
+		{
+			runLock.SetResult();
+		};
+
+		await client.StartAsync(true);
 
 		var menuItems = new List<string>
 		{
@@ -98,5 +106,9 @@ internal class DemoSession(MtgpClient client)
 		await client.AddPresentAction(actionList);
 
 		await client.Send(pipe, "");
+
+		await client.SetDefaultPipe(DefaultPipe.Input, 1);
+
+		await runLock.Task;
 	}
 }

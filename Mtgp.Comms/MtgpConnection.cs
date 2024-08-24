@@ -36,8 +36,22 @@ public class MtgpConnection(ILogger<MtgpConnection> logger, Stream stream)
 					}
 				}
 			}
+			else if (message.Header.Type == MtgpMessageType.Request)
+			{
+				await this.Receive?.Invoke((message, data))!;
+			}
+			else
+			{
+				this.logger.LogWarning("Unknown message type: {Type}", message.Header.Type);
+			}
+
 		}
 	}
+
+	public event Func<(MtgpMessage Message, byte[] Data), Task> Receive;
+
+	public async Task SendResponseAsync(int id, string result)
+		=> await this.stream.WriteMessageAsync(new MtgpMessage(new MtgpHeader(id, MtgpMessageType.Response, Result: result)));
 
 	public async Task<TResponse> SendAsync<TRequest, TResponse>(IMtgpRequest<TRequest, TResponse> request)
 		where TRequest : MtgpRequest

@@ -1,39 +1,37 @@
 ﻿using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using System.Net;
 using System.Net.Sockets;
+using System.Net;
+using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Mtgp.DemoServer;
+namespace Mtgp.Proxy.Console;
 
-public class MtgpServer(ILogger<MtgpServer> logger, Factory factory, IHostApplicationLifetime applicationLifetime)
+internal class ProxyServer(ILogger<ProxyServer> logger, ILoggerFactory loggerFactory, IHostApplicationLifetime applicationLifetime)
 	: IHostedService
 {
-	private readonly ILogger<MtgpServer> logger = logger;
-	private readonly Factory factory = factory;
+	private readonly ILogger<ProxyServer> logger = logger;
 	private readonly IHostApplicationLifetime applicationLifetime = applicationLifetime;
 
-	private readonly TcpListener listener = new(IPAddress.Any, 2323);
+	private readonly TcpListener listener = new(IPAddress.Any, 12345);
 	private readonly CancellationTokenSource runCancellationSource = new();
 
 	private async Task RunAsync(CancellationToken cancellationToken)
 	{
 		try
 		{
-			using var client = await listener.AcceptTcpClientAsync(cancellationToken);
+			var client = listener.AcceptTcpClient();
 
-			this.logger.LogInformation("Client connected: {RemoteEndPoint}", client.Client.RemoteEndPoint);
-
-			var session = this.factory.Create<DemoSession, TcpClient>(client);
+			var session = new ProxySession(client, loggerFactory.CreateLogger<ProxySession>());
 
 			await session.RunAsync();
 		}
 		catch (Exception ex)
 		{
-			this.logger.LogError(ex, "Error in client connection");
+			this.logger.LogError(ex, "Error running session");
 		}
 		finally
 		{
-			applicationLifetime.StopApplication();
+			this.applicationLifetime.StopApplication();
 		}
 	}
 
