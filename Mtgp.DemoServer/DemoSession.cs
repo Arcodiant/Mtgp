@@ -35,11 +35,7 @@ internal class DemoSession(Factory factory, TcpClient client)
 				.Write(10).Write(3 * (index + 1)).Write(menuItems.Take(index).Sum(x => x.Length)).Write(menuItems[index].Length);
 		}
 
-		var shaderCompiler = new ShaderCompiler();
-
-		var identityShaderCode = shaderCompiler.Compile(File.ReadAllText("./Shaders/identity.vert"));
-		var textureShaderCode = shaderCompiler.Compile(File.ReadAllText("./Shaders/texture.frag"));
-		var simpleShaderCode = shaderCompiler.Compile(File.ReadAllText("./Shaders/simple.frag"));
+		var shaderManager = new ShaderManager(client);
 
 		var presentImage = await client.GetPresentImage();
 
@@ -47,17 +43,15 @@ internal class DemoSession(Factory factory, TcpClient client)
 					.ActionList(out var actionListTask)
 					.Pipe(out var pipeTask)
 					.Buffer(out var bufferTask, 1024)
-					.Shader(out var identityShaderTask, identityShaderCode)
-					.Shader(out var textureShaderTask, textureShaderCode)
-					.Shader(out var simpleShaderTask, simpleShaderCode)
 					.BuildAsync();
 
 		int actionList = await actionListTask;
 		int pipe = await pipeTask;
 		int buffer = await bufferTask;
-		int identityShader = await identityShaderTask;
-		int textureShader = await textureShaderTask;
-		int simpleShader = await simpleShaderTask;
+
+		int identityShader = await shaderManager.CreateShaderFromFileAsync("./Shaders/identity.vert");
+		int textureShader = await shaderManager.CreateShaderFromFileAsync("./Shaders/texture.frag");
+		int simpleShader = await shaderManager.CreateShaderFromFileAsync("./Shaders/simple.frag");
 
 		var menuText = new byte[menuItems.Sum(x => x.Length) * 4];
 
@@ -66,7 +60,7 @@ internal class DemoSession(Factory factory, TcpClient client)
 		await client.SetBufferData(buffer, 0, [.. menuItemsInstances, .. menuText]);
 
 		await client.GetResourceBuilder()
-					.Image(out var menuImageTask, 240, 1, 1, ImageFormat.T32_SInt)
+					.Image(out var menuImageTask, (240, 1, 1), ImageFormat.T32_SInt)
 					.BuildAsync();
 
 		int menuImage = await menuImageTask;

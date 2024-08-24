@@ -6,13 +6,6 @@ namespace Mtgp.Proxy.Shader;
 
 public static class TextelUtil
 {
-	public static int GetSize(ImageFormat format) => format switch
-	{
-		ImageFormat.T32_SInt => 4,
-		ImageFormat.R32G32B32_SFloat => 12,
-		_ => throw new NotImplementedException()
-	};
-
 	public static (Rune, Colour, Colour) Get(Span<byte> characterBuffer,
 										  Span<byte> foregroundBuffer,
 										  Span<byte> backgroundBuffer,
@@ -21,9 +14,9 @@ public static class TextelUtil
 										  ImageFormat backgroundFormat,
 										  int index)
 	{
-		Rune character = GetCharacter(characterBuffer[(index * GetSize(characterFormat))..], characterFormat);
-		Colour foreground = GetColour(foregroundBuffer[(index * GetSize(foregroundFormat))..], foregroundFormat);
-		Colour background = GetColour(backgroundBuffer[(index * GetSize(backgroundFormat))..], backgroundFormat);
+		Rune character = GetCharacter(characterBuffer[(index * characterFormat.GetSize())..], characterFormat);
+		Colour foreground = GetColour(foregroundBuffer[(index * foregroundFormat.GetSize())..], foregroundFormat);
+		Colour background = GetColour(backgroundBuffer[(index * backgroundFormat.GetSize())..], backgroundFormat);
 		return (character, foreground, background);
 	}
 
@@ -57,9 +50,9 @@ public static class TextelUtil
 	{
 		int index = offset.X + offset.Y * imageExtent.Width + offset.Z * imageExtent.Width * imageExtent.Depth;
 
-		SetCharacter(characterBuffer[(index * GetSize(characterFormat))..], textel.Item1, characterFormat);
-		SetColour(foregroundBuffer[(index * GetSize(foregroundFormat))..], textel.Item2, foregroundFormat);
-		SetColour(backgroundBuffer[(index * GetSize(backgroundFormat))..], textel.Item3, backgroundFormat);
+		SetCharacter(characterBuffer[(index * characterFormat.GetSize())..], textel.Item1, characterFormat);
+		SetColour(foregroundBuffer[(index * foregroundFormat.GetSize())..], textel.Item2, foregroundFormat);
+		SetColour(backgroundBuffer[(index * backgroundFormat.GetSize())..], textel.Item3, backgroundFormat);
 	}
 
 	public static void SetCharacter(Span<byte> data, Rune character, ImageFormat format)

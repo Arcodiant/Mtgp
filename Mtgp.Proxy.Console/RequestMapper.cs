@@ -79,7 +79,7 @@ internal class RequestMapper
 						CreateActionListInfo actionListInfo => new ResourceCreateResult(proxy.CreateActionList(), ResourceCreateResultType.Success),
 						CreateBufferInfo bufferInfo => new ResourceCreateResult(proxy.CreateBuffer(bufferInfo.Size), ResourceCreateResultType.Success),
 						CreateBufferViewInfo bufferViewInfo => new ResourceCreateResult(proxy.CreateBufferView(bufferViewInfo.Buffer.Id!.Value, bufferViewInfo.Offset, bufferViewInfo.Size), ResourceCreateResultType.Success),
-						CreateImageInfo imageInfo => new ResourceCreateResult(proxy.CreateImage((imageInfo.Width, imageInfo.Height, imageInfo.Depth), imageInfo.Format), ResourceCreateResultType.Success),
+						CreateImageInfo imageInfo => new ResourceCreateResult(proxy.CreateImage(imageInfo.Size, imageInfo.Format), ResourceCreateResultType.Success),
 						CreateRenderPipelineInfo renderPipelineInfo => new ResourceCreateResult(proxy.CreateRenderPipeline(renderPipelineInfo.ShaderStages.ToDictionary(x => x.Stage, x => x.Shader.Id!.Value),
 																											renderPipelineInfo.VertexInput.VertexBufferBindings.Select(x => (x.Binding, x.Stride, x.InputRate)).ToArray(),
 																											renderPipelineInfo.VertexInput.VertexAttributes.Select(x => (x.Location, x.Binding, x.Type, x.Offset)).ToArray(),

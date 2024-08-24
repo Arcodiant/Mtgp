@@ -150,9 +150,9 @@ internal class ProxyHost(TcpClient client)
 		public void Execute(ActionExecutionState state)
 		{
 			var deltas = new List<RuneDelta>();
-			int characterStep = TextelUtil.GetSize(frameBuffer.Character!.Format);
-			int foregroundStep = TextelUtil.GetSize(frameBuffer.Foreground!.Format);
-			int backgroundStep = TextelUtil.GetSize(frameBuffer.Background!.Format);
+			int characterStep = frameBuffer.Character!.Format.GetSize();
+			int foregroundStep = frameBuffer.Foreground!.Format.GetSize();
+			int backgroundStep = frameBuffer.Background!.Format.GetSize();
 
 			int height = frameBuffer.Character!.Size.Height;
 			int width = frameBuffer.Character!.Size.Width;
@@ -189,7 +189,7 @@ internal class ProxyHost(TcpClient client)
 			if (bufferFormat != image.Format)
 				throw new InvalidOperationException("Buffer format does not match image");
 
-			int step = TextelUtil.GetSize(bufferFormat);
+			int step = bufferFormat.GetSize();
 
 			foreach (var (bufferOffset, bufferRowLength, bufferImageHeight, imageX, imageY, imageWidth, imageHeight) in copyRegions)
 			{

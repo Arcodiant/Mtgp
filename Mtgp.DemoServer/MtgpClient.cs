@@ -150,7 +150,7 @@ internal class MtgpClient(Factory factory, Stream mtgpStream, ILogger<MtgpClient
 		ThrowIfError(result);
 	}
 
-	public async Task<Task<int>[]> CreateResources(params ResourceInfo[] resources)
+	public async Task<Task<int>[]> CreateResourcesAsync(params ResourceInfo[] resources)
 	{
 		var result = await this.connection.SendAsync(new CreateResourceRequest(Interlocked.Increment(ref this.requestId), resources));
 
@@ -208,11 +208,8 @@ internal class ResourceBuilder(MtgpClient client)
 	public ResourceBuilder BufferView(out Task<int> task, IdOrRef buffer, int offset, int size, string? reference = null)
 		=> this.Add(new CreateBufferViewInfo(buffer, offset, size, reference), out task);
 
-	public ResourceBuilder Image(out Task<int> task, int width, int height, int depth, ImageFormat format, string? reference = null)
-		=> this.Add(new CreateImageInfo(width, height, depth, format, reference), out task);
-
-	//public ResourceBuilder RenderPass(out Task<int> task, Dictionary<int, IdOrRef> imageAttachments, Dictionary<int, IdOrRef> bufferAttachments, InputRate inputRate, PolygonMode polygonMode, IdOrRef vertexShader, IdOrRef fragmentShader, int x, int y, int width, int height, string? reference = null)
-	//	=> this.Add(new CreateRenderPassInfo(imageAttachments, bufferAttachments, inputRate, polygonMode, vertexShader, fragmentShader, x, y, width, height, reference), out task);
+	public ResourceBuilder Image(out Task<int> task, Extent3D size, ImageFormat format, string? reference = null)
+		=> this.Add(new CreateImageInfo(size, format, reference), out task);
 
 	public ResourceBuilder RenderPipeline(out Task<int> task,
 									   CreateRenderPipelineInfo.ShaderStageInfo[] shaderStages,
@@ -229,7 +226,7 @@ internal class ResourceBuilder(MtgpClient client)
 
 	public async Task BuildAsync()
 	{
-		var results = await this.client.CreateResources(this.resources.Select(x => x.Info).ToArray());
+		var results = await this.client.CreateResourcesAsync(this.resources.Select(x => x.Info).ToArray());
 
 		for (var i = 0; i < results.Length; i++)
 		{

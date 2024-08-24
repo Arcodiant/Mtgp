@@ -23,9 +23,12 @@ public class MtgpServer(ILogger<MtgpServer> logger, Factory factory, IHostApplic
 
 			this.logger.LogInformation("Client connected: {RemoteEndPoint}", client.Client.RemoteEndPoint);
 
-			var session = this.factory.Create<DemoSession, TcpClient>(client);
+			var (scope, session) = this.factory.CreateWithScope<DemoSession, TcpClient>(client);
 
-			await session.RunAsync();
+			using (scope)
+			{
+				await session.RunAsync();
+			}
 		}
 		catch (Exception ex)
 		{

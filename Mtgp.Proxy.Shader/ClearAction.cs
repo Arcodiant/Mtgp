@@ -9,7 +9,7 @@ public class ClearAction(ImageState image)
 
     public void Execute(ActionExecutionState state)
     {
-        int step = TextelUtil.GetSize(image.Format);
+        int step = image.Format.GetSize();
         int size = image.Size.Width * image.Size.Height * image.Size.Depth * step;
 
         Span<byte> float3Clear = stackalloc byte[12];

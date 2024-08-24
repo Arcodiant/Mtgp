@@ -2,7 +2,7 @@
 
 namespace Mtgp.Messages.Resources;
 
-public record CreateImageInfo(int Width, int Height, int Depth, ImageFormat Format, string? Reference = null)
+public record CreateImageInfo(Extent3D Size, ImageFormat Format, string? Reference = null)
 	: ResourceInfo(Reference), ICreateResourceInfo
 {
 	static string ICreateResourceInfo.ResourceType => ResourceType;
