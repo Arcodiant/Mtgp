@@ -18,6 +18,11 @@ try
 	builder.Services.AddTransient<Factory>();
 	builder.Services.AddHostedService<MtgpServer>();
 	builder.Services.AddSerilog();
+	builder.Services.Configure<Auth0Options>(options =>
+	{
+		options.ClientId = builder.Configuration.GetSection("auth0")["clientId"]!;
+		options.Domain = builder.Configuration.GetSection("auth0")["domain"]!;
+	});
 
 	var host = builder.Build();
 

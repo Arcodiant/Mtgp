@@ -69,6 +69,9 @@ internal class ProxyHost(TcpClient client)
 		}
 	}
 
+	public void OpenUrl(OpenUrlRequest request)
+		=> System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = request.Url, UseShellExecute = true });
+
 	public void AddDataProvider(string scheme, Func<string, string?> provider)
 		=> this.dataProviders[scheme] = provider;
 

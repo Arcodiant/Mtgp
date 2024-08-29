@@ -1,9 +1,14 @@
-﻿using Mtgp.Shader;
+﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Mtgp.Shader;
+using System.Net;
 using System.Net.Sockets;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Mtgp.DemoServer;
 
-internal class DemoSession(Factory factory, TcpClient client)
+internal class DemoSession(Factory factory, TcpClient client, ILogger<DemoSession> logger, IOptions<Auth0Options> options)
 {
 	private readonly MtgpClient client = factory.Create<MtgpClient, Stream>(client.GetStream());
 
@@ -13,6 +18,86 @@ internal class DemoSession(Factory factory, TcpClient client)
 
 		await client.StartAsync(true);
 
+		client.SendReceived += async message =>
+		{
+			if (message.Value.Contains('\n'))
+			{
+				runLock.SetResult();
+			}
+		};
+
+		try
+		{
+			var auth0Client = new HttpClient();
+
+			var deviceCodeRequestData = new FormUrlEncodedContent(new Dictionary<string, string>
+			{
+				["client_id"] = options.Value.ClientId,
+				["scope"] = "profile openid email"
+			});
+
+			var deviceCodeRequest = new HttpRequestMessage(HttpMethod.Post, $"https://{options.Value.Domain}/oauth/device/code")
+			{
+				Content = deviceCodeRequestData
+			};
+
+			var auth0Response = await auth0Client.SendAsync(deviceCodeRequest);
+
+			var response = JsonSerializer.Deserialize<JsonObject>(await auth0Response.Content.ReadAsStringAsync())!;
+
+			await client.OpenUrl(response["verification_uri_complete"]!.ToString());
+
+			int pollInterval = Convert.ToInt32(response["interval"]!.ToString());
+
+			bool authorised = false;
+
+			while (!authorised)
+			{
+				await Task.Delay(TimeSpan.FromSeconds(pollInterval));
+
+				var tokenRequestData = new FormUrlEncodedContent(new Dictionary<string, string>
+				{
+					["client_id"] = options.Value.ClientId,
+					["device_code"] = response["device_code"]!.ToString(),
+					["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code"
+				});
+
+				var tokenResponse = await auth0Client.PostAsync($"https://{options.Value.Domain}/oauth/token", tokenRequestData);
+
+				var tokenResponseString = await tokenResponse.Content.ReadAsStringAsync();
+
+				var tokenResponseContent = JsonSerializer.Deserialize<JsonObject>(tokenResponseString)!;
+
+				switch (tokenResponse.StatusCode)
+				{
+					case HttpStatusCode.OK:
+						authorised = true;
+						break;
+					case HttpStatusCode.Forbidden:
+						if (tokenResponseContent["error"]!.ToString() != "authorization_pending")
+						{
+							logger.LogError("Login failed with error {ErrorCode}: {ErrorDescription}", tokenResponseContent["error"]!.ToString(), tokenResponseContent["error_description"]!.ToString());
+							throw new Exception("Login failed");
+						}
+						break;
+					default:
+						logger.LogError("Login failed with error {ErrorCode}", tokenResponse.StatusCode);
+						throw new Exception("Login failed");
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			logger.LogError(ex, "Login failed with exception");
+		}
+
+		await client.SetDefaultPipe(DefaultPipe.Input, 1);
+
+		await runLock.Task;
+	}
+
+	private async Task RunMenu()
+	{
 		var menuItems = new List<string>
 		{
 			"1. Do something",
@@ -56,26 +141,6 @@ internal class DemoSession(Factory factory, TcpClient client)
 
 		int menuItemSelected = 0;
 
-		client.SendReceived += async message =>
-		{
-			if (message.Value.Contains('\n'))
-			{
-				runLock.SetResult();
-			}
-			else
-			{
-				menuItemSelected = message.Value switch
-				{
-					"1" => 0,
-					"2" => 1,
-					_ => menuItemSelected
-				};
-
-				await client.SetBufferData(uniformBuffer, 0, [(byte)menuItemSelected, 0, 0, 0]);
-				await client.Send(pipe, "");
-			}
-		};
-
 		await client.GetResourceBuilder()
 					.BufferView(out var uniformBufferViewTask, uniformBuffer, 0, 4)
 					.BuildAsync();
@@ -111,9 +176,5 @@ internal class DemoSession(Factory factory, TcpClient client)
 		await client.AddPresentAction(actionList);
 
 		await client.Send(pipe, "");
-
-		await client.SetDefaultPipe(DefaultPipe.Input, 1);
-
-		await runLock.Task;
 	}
 }

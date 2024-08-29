@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Mtgp.DemoServer": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}

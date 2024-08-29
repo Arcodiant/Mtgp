@@ -54,6 +54,8 @@ internal class RequestMapper
 
 		AddRequestHandler<SetDefaultPipeRequest>((proxy, message) => proxy.SetDefaultPipe(message.Pipe, message.PipeId));
 
+		AddRequestHandler<OpenUrlRequest>((proxy, message) => proxy.OpenUrl(message));
+
 		requestHandlers.Add(GetPresentImageRequest.Command, async (mtgpStream, proxy, data) =>
 		{
 			var message = JsonSerializer.Deserialize<GetPresentImageRequest>(data, Comms.Util.JsonSerializerOptions)!;

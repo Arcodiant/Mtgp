@@ -83,6 +83,13 @@ internal class MtgpClient(Factory factory, Stream mtgpStream, ILogger<MtgpClient
 		ThrowIfError(result);
 	}
 
+	public async Task OpenUrl(string url)
+	{
+		var result = await this.connection.SendAsync(new OpenUrlRequest(Interlocked.Increment(ref this.requestId), url));
+
+		ThrowIfError(result);
+	}
+
 	public async Task<(int Character, int Foreground, int Background)> GetPresentImage()
 	{
 		var result = await this.connection.SendAsync(new GetPresentImageRequest(Interlocked.Increment(ref this.requestId)));
