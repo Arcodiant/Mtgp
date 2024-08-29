@@ -12,7 +12,9 @@
     <PackageReference Include="Serilog.Expressions" Version="5.0.0" />
     <PackageReference Include="Serilog.Extensions.Hosting" Version="8.0.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageReference Include="Serilog.Sinks.Seq" Version="8.0.0" />
     <PackageReference Include="System.Text.Json" Version="8.0.4" />
+    <PackageReference Include="TaskTupleAwaiter" Version="2.1.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -23,7 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="Shaders\Texture.frag">
+    <None Update="Shaders\Menu.frag">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="Shaders\Simple.frag">
@@ -32,7 +34,7 @@
     <None Update="Shaders\UI.frag">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="Shaders\Identity.vert">
+    <None Update="Shaders\Menu.vert">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

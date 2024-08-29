@@ -116,12 +116,13 @@ internal class ProxyHost(TcpClient client)
 													 new(this.images[framebuffer.Character], this.images[framebuffer.Foreground], this.images[framebuffer.Background]),
 													 this.bufferViews[indirectCommandBuffer], offset));
 
-	public void AddDrawAction(int actionList, int renderPipeline, int[] imageAttachments, (int Character, int Foreground, int Background) framebuffer, int instanceCount, int vertexCount)
-		=> this.actionLists[actionList].Add(new DrawAction(this.renderPipelines[renderPipeline],
-													 imageAttachments.Select(x => this.images[x]).ToArray(),
-													 new(this.images[framebuffer.Character], this.images[framebuffer.Foreground], this.images[framebuffer.Background]),
-													 instanceCount,
-													 vertexCount));
+	public void AddDrawAction(AddDrawActionRequest request)
+		=> this.actionLists[request.ActionList].Add(new DrawAction(this.renderPipelines[request.RenderPipeline],
+													 request.ImageAttachments.Select(x => this.images[x]).ToArray(),
+													 request.BufferViewAttachments.Select(x => this.bufferViews[x]).ToArray(),
+													 new(this.images[request.FrameBuffer.Character], this.images[request.FrameBuffer.Foreground], this.images[request.FrameBuffer.Background]),
+													 request.InstanceCount,
+													 request.VertexCount));
 
 	public void AddBindVertexBuffers(AddBindVertexBuffersRequest request)
 		=> this.actionLists[request.ActionList].Add(new BindVertexBuffersAction(request.FirstBufferIndex, request.Buffers.Select(x => (this.buffers[x.BufferIndex], x.Offset)).ToArray()));

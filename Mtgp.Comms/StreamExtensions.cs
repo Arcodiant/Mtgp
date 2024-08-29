@@ -1,11 +1,14 @@
-﻿using Mtgp.Comms;
+﻿using Microsoft.Extensions.Logging;
+using Mtgp.Comms;
 using System.Text.Json;
 
 namespace System;
 
 public static class StreamExtensions
 {
-	public static async Task<byte[]> ReadBlockAsync(this Stream stream)
+	private readonly static SemaphoreSlim writeSemaphore = new(1);
+
+	public static async Task<byte[]> ReadBlockAsync(this Stream stream, ILogger logger)
 	{
 		byte[] header = new byte[4];
 
@@ -17,16 +20,21 @@ public static class StreamExtensions
 
 		await stream.ReadExactlyAsync(block);
 
+		logger.LogTrace("Read {BlockSize} bytes {Data}", blockSize, block);
+
 		return block;
 	}
 
-	public static async Task WriteMessageAsync<T>(this Stream stream, T message)
+	public static async Task WriteMessageAsync<T>(this Stream stream, T message, ILogger logger)
 	{
 		byte[] messageBytes = JsonSerializer.SerializeToUtf8Bytes(message, Util.JsonSerializerOptions);
 
 		byte[] header = BitConverter.GetBytes(messageBytes.Length);
 
-		await stream.WriteAsync(header);
-		await stream.WriteAsync(messageBytes);
+		logger.LogTrace("Writing {MessageBytes} bytes {Data}", messageBytes.Length, messageBytes);
+
+		byte[] payload = [.. header, .. messageBytes];
+
+		await stream.WriteAsync(payload);
 	}
 }

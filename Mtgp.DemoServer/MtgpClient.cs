@@ -60,16 +60,21 @@ internal class MtgpClient(Factory factory, Stream mtgpStream, ILogger<MtgpClient
 		{
 			if (obj.Message.Header.Command == SendRequest.Command)
 			{
-				this.SendReceived?.Invoke(JsonSerializer.Deserialize<SendRequest>(obj.Data, Util.JsonSerializerOptions)!);
+				var eventTask = this.SendReceived?.Invoke(JsonSerializer.Deserialize<SendRequest>(obj.Data, Util.JsonSerializerOptions)!);
+
+				if (eventTask != null)
+				{
+					await Task.Run(() => eventTask);
+				}
 			}
 		}
 		finally
 		{
 			await this.connection.SendResponseAsync(obj.Message.Header.Id, "ok");
 		}
-    }
+	}
 
-	public event Action<SendRequest> SendReceived;
+	public event Func<SendRequest, Task> SendReceived;
 
 	public async Task SetDefaultPipe(DefaultPipe pipe, int pipeId)
 	{
@@ -94,9 +99,9 @@ internal class MtgpClient(Factory factory, Stream mtgpStream, ILogger<MtgpClient
 		ThrowIfError(result);
 	}
 
-	public async Task AddDrawAction(int actionListId, int renderPipeline, int[] imageAttachments, (int Character, int Foreground, int Background) frameBuffer, int instanceCount, int vertexCount)
+	public async Task AddDrawAction(int actionListId, int renderPipeline, int[] imageAttachments, int[] bufferViewAttachments, (int Character, int Foreground, int Background) frameBuffer, int instanceCount, int vertexCount)
 	{
-		var result = await this.connection.SendAsync(new AddDrawActionRequest(Interlocked.Increment(ref this.requestId), actionListId, renderPipeline, imageAttachments, new(frameBuffer.Character, frameBuffer.Foreground, frameBuffer.Background), instanceCount, vertexCount));
+		var result = await this.connection.SendAsync(new AddDrawActionRequest(Interlocked.Increment(ref this.requestId), actionListId, renderPipeline, imageAttachments, bufferViewAttachments, new(frameBuffer.Character, frameBuffer.Foreground, frameBuffer.Background), instanceCount, vertexCount));
 
 		ThrowIfError(result);
 	}

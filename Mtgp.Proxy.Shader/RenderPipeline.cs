@@ -12,22 +12,15 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 							  Rect3D[]? scissors,
 							  PolygonMode polygonMode)
 {
-	private readonly Dictionary<ShaderStage, ShaderInterpreter> shaderStages = shaderStages;
-	private readonly (int Binding, int Stride, InputRate InputRate)[] vertexBufferBindings = vertexBufferBindings;
-	private readonly (int Location, int Binding, ShaderType Type, int Offset)[] vertexAttributes = vertexAttributes;
-	private readonly (int Location, ShaderType Type, Scale InterpolationScale)[] fragmentAttributes = fragmentAttributes;
-	private readonly Rect3D viewport = viewport;
-	private readonly Rect3D[]? scissors = scissors;
-	private readonly PolygonMode polygonMode = polygonMode;
 
-	public void Execute(int instanceCount, int vertexCount, (byte[] Buffer, int Offset)[] vertexBuffers, ImageState[] imageAttachments, FrameBuffer[] frameBuffers)
+	public void Execute(int instanceCount, int vertexCount, (byte[] Buffer, int Offset)[] vertexBuffers, ImageState[] imageAttachments, Memory<byte>[] bufferViewAttachments, FrameBuffer[] frameBuffers)
 	{
 		int timerValue = Environment.TickCount;
 
 		int outputSize = ShaderType.Textel.Size;
 
-		var vertex = this.shaderStages[ShaderStage.Vertex];
-		var fragment = this.shaderStages[ShaderStage.Fragment];
+		var vertex = shaderStages[ShaderStage.Vertex];
+		var fragment = shaderStages[ShaderStage.Fragment];
 
 		const int vertexPerPrimitive = 2;
 
@@ -56,11 +49,11 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 
 					var inputs = vertex.Inputs.Select(x =>
 					{
-						var attribute = this.vertexAttributes[x.Location];
+						var attribute = vertexAttributes[x.Location];
 
 						var buffer = vertexBuffers[attribute.Binding];
 
-						var binding = this.vertexBufferBindings[attribute.Binding];
+						var binding = vertexBufferBindings[attribute.Binding];
 
 						int bindingOffset = binding.InputRate switch
 						{
@@ -72,7 +65,7 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 						return (ReadOnlyMemory<byte>)buffer.Buffer.AsMemory(buffer.Offset + bindingOffset + attribute.Offset, attribute.Type.Size);
 					}).ToArray();
 
-					vertex.Execute(imageAttachments, [], inputBuiltins, inputs, ref vertexOutputBuiltins[vertexIndex], vertexOutput.AsSpan(vertexIndex * vertex.OutputSize, vertex.OutputSize));
+					vertex.Execute(imageAttachments, bufferViewAttachments, inputBuiltins, inputs, ref vertexOutputBuiltins[vertexIndex], vertexOutput.AsSpan(vertexIndex * vertex.OutputSize, vertex.OutputSize));
 				}
 
 				int fromX = vertexOutputBuiltins[0].PositionX;
@@ -94,7 +87,7 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 							continue;
 						}
 
-						if (!MathsUtil.IsWithin((x, y), (0, 0), (this.viewport.Extent.Width - 1, this.viewport.Extent.Height - 1)))
+						if (!MathsUtil.IsWithin((x, y), (0, 0), (viewport.Extent.Width - 1, viewport.Extent.Height - 1)))
 						{
 							continue;
 						}
@@ -116,7 +109,7 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 
 						var inputs = fragment.Inputs.Select(x =>
 						{
-							var attribute = this.fragmentAttributes[x.Location];
+							var attribute = fragmentAttributes[x.Location];
 							var vertexOutputAttribute = vertex.Outputs[x.Location];
 
 							var fromValue = vertexOutput[vertexOutputAttribute.Offset..][..vertexOutputAttribute.Type.Size];
@@ -131,10 +124,10 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 							return (ReadOnlyMemory<byte>)output;
 						}).ToArray();
 
-						fragment.Execute(imageAttachments, [], inputBuiltins, inputs, ref outputBuiltins, output);
+						fragment.Execute(imageAttachments, bufferViewAttachments, inputBuiltins, inputs, ref outputBuiltins, output);
 
-						int pixelX = x + this.viewport.Offset.X;
-						int pixelY = y + this.viewport.Offset.Y;
+						int pixelX = x + viewport.Offset.X;
+						int pixelY = y + viewport.Offset.Y;
 
 						new BitReader(output)
 							.Read(out Rune character)

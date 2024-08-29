@@ -1,5 +1,4 @@
 ﻿using Mtgp.Shader;
-using Mtgp.Shader.Tsl;
 using System.Net.Sockets;
 
 namespace Mtgp.DemoServer;
@@ -11,11 +10,6 @@ internal class DemoSession(Factory factory, TcpClient client)
 	public async Task RunAsync()
 	{
 		var runLock = new TaskCompletionSource();
-
-		client.SendReceived += message =>
-		{
-			runLock.SetResult();
-		};
 
 		await client.StartAsync(true);
 
@@ -35,47 +29,62 @@ internal class DemoSession(Factory factory, TcpClient client)
 				.Write(10).Write(3 * (index + 1)).Write(menuItems.Take(index).Sum(x => x.Length)).Write(menuItems[index].Length);
 		}
 
-		var shaderManager = new ShaderManager(client);
+		var shaderManager = await ShaderManager.Create(client);
 
 		var presentImage = await client.GetPresentImage();
 
 		await client.GetResourceBuilder()
 					.ActionList(out var actionListTask)
 					.Pipe(out var pipeTask)
-					.Buffer(out var bufferTask, 1024)
+					.Buffer(out var vertexBufferTask, 1024)
+					.Buffer(out var uniformBufferTask, 4)
 					.BuildAsync();
 
-		int actionList = await actionListTask;
-		int pipe = await pipeTask;
-		int buffer = await bufferTask;
+		var (actionList, pipe, vertexBuffer, uniformBuffer) = (await actionListTask, await pipeTask, await vertexBufferTask, await uniformBufferTask);
 
-		int identityShader = await shaderManager.CreateShaderFromFileAsync("./Shaders/identity.vert");
-		int textureShader = await shaderManager.CreateShaderFromFileAsync("./Shaders/texture.frag");
-		int simpleShader = await shaderManager.CreateShaderFromFileAsync("./Shaders/simple.frag");
+		int menuVertexShader = await shaderManager.CreateShaderFromFileAsync("./Shaders/Menu.vert");
+		int menuFragmentShader = await shaderManager.CreateShaderFromFileAsync("./Shaders/Menu.frag");
 
 		var menuText = new byte[menuItems.Sum(x => x.Length) * 4];
 
 		new BitWriter(menuText).WriteRunes(menuItems.Aggregate((x, y) => x + y));
 
-		await client.SetBufferData(buffer, 0, [.. menuItemsInstances, .. menuText]);
+		int menuImage = await shaderManager.CreateImageFromData(menuText, (menuText.Length / 4, 1, 1), ImageFormat.T32_SInt);
+
+		await client.SetBufferData(vertexBuffer, 0, [.. menuItemsInstances]);
+		await client.SetBufferData(uniformBuffer, 0, [0, 0, 0, 0]);
+
+		int menuItemSelected = 0;
+
+		client.SendReceived += async message =>
+		{
+			if (message.Value.Contains('\n'))
+			{
+				runLock.SetResult();
+			}
+			else
+			{
+				menuItemSelected = message.Value switch
+				{
+					"1" => 0,
+					"2" => 1,
+					_ => menuItemSelected
+				};
+
+				await client.SetBufferData(uniformBuffer, 0, [(byte)menuItemSelected, 0, 0, 0]);
+				await client.Send(pipe, "");
+			}
+		};
 
 		await client.GetResourceBuilder()
-					.Image(out var menuImageTask, (240, 1, 1), ImageFormat.T32_SInt)
+					.BufferView(out var uniformBufferViewTask, uniformBuffer, 0, 4)
 					.BuildAsync();
 
-		int menuImage = await menuImageTask;
-
-		await client.AddCopyBufferToImageAction(actionList, buffer, ImageFormat.T32_SInt, menuImage, [new(menuItemsInstances.Length, menuText.Length, 1, 0, 0, menuText.Length, 1)]);
-
-		await client.SetActionTrigger(pipe, actionList);
-
-		await client.Send(pipe, "");
-
-		await client.ResetActionList(actionList);
+		int uniformBufferView = await uniformBufferViewTask;
 
 		await client.GetResourceBuilder()
 					.RenderPipeline(out var renderPipelineTask,
-						 [new(ShaderStage.Vertex, identityShader, ""), new(ShaderStage.Fragment, textureShader, "")],
+						 [new(ShaderStage.Vertex, menuVertexShader, ""), new(ShaderStage.Fragment, menuFragmentShader, "")],
 						 new(
 							 [new(0, 16, InputRate.PerInstance)],
 							 [
@@ -90,13 +99,15 @@ internal class DemoSession(Factory factory, TcpClient client)
 						 PolygonMode.Fill)
 					.BuildAsync();
 
+		await client.SetActionTrigger(pipe, actionList);
+
 		int renderPipeline = await renderPipelineTask;
 
 		await client.AddClearBufferAction(actionList, presentImage.Character);
 		await client.AddClearBufferAction(actionList, presentImage.Foreground);
 		await client.AddClearBufferAction(actionList, presentImage.Background);
-		await client.AddBindVertexBuffers(actionList, 0, [(buffer, 0)]);
-		await client.AddDrawAction(actionList, renderPipeline, [menuImage], presentImage, menuItems.Count, 2);
+		await client.AddBindVertexBuffers(actionList, 0, [(vertexBuffer, 0)]);
+		await client.AddDrawAction(actionList, renderPipeline, [menuImage], [uniformBufferView], presentImage, menuItems.Count, 2);
 		await client.AddPresentAction(actionList);
 
 		await client.Send(pipe, "");

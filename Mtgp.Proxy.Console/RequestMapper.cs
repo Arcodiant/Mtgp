@@ -1,16 +1,19 @@
-﻿using Mtgp.Messages;
+﻿using Microsoft.Extensions.Logging;
+using Mtgp.Messages;
 using Mtgp.Messages.Resources;
-using Serilog;
 using System.Text.Json;
 
 namespace Mtgp.Proxy.Console;
 
 internal class RequestMapper
 {
-	private Dictionary<string, Func<Stream, ProxyHost, byte[], Task>> requestHandlers = [];
+	private readonly Dictionary<string, Func<Stream, ProxyHost, byte[], Task>> requestHandlers = [];
+	private readonly ILogger logger;
 
-	public RequestMapper()
+	public RequestMapper(ILogger logger)
 	{
+		this.logger = logger;
+
 		void AddRequestHandler0<TRequest, TResponse>(Action<ProxyHost, TRequest> handler)
 			where TRequest : MtgpRequest, IMtgpRequestWithResponse<TRequest, TResponse>
 			where TResponse : MtgpResponse
@@ -21,7 +24,7 @@ internal class RequestMapper
 
 				handler(proxy, message);
 
-				await mtgpStream.WriteMessageAsync(message.CreateResponse());
+				await mtgpStream.WriteMessageAsync(message.CreateResponse(), logger);
 			});
 		}
 
@@ -31,7 +34,7 @@ internal class RequestMapper
 
 		AddRequestHandler<AddClearBufferActionRequest>((proxy, message) => proxy.AddClearBufferAction(message.ActionList, message.Image));
 
-		AddRequestHandler<AddDrawActionRequest>((proxy, message) => proxy.AddDrawAction(message.ActionList, message.RenderPipeline, message.ImageAttachments, (message.FrameBuffer.Character, message.FrameBuffer.Foreground, message.FrameBuffer.Background), message.InstanceCount, message.VertexCount));
+		AddRequestHandler<AddDrawActionRequest>((proxy, message) => proxy.AddDrawAction(message));
 
 		AddRequestHandler0<AddPresentActionRequest, AddPresentActionResponse>((proxy, message) => proxy.AddPresentAction(message.ActionList));
 
@@ -57,7 +60,7 @@ internal class RequestMapper
 
 			var (characterImage, foregroundImage, backgroundImage) = proxy.GetPresentImage();
 
-			await mtgpStream.WriteMessageAsync(message.CreateResponse(characterImage, foregroundImage, backgroundImage));
+			await mtgpStream.WriteMessageAsync(message.CreateResponse(characterImage, foregroundImage, backgroundImage), logger);
 		});
 
 		requestHandlers.Add(CreateResourceRequest.Command, async (mtgpStream, proxy, data) =>
@@ -92,14 +95,14 @@ internal class RequestMapper
 				}
 				catch (Exception ex)
 				{
-					Log.Error(ex, "Error creating resource: {@CreateInfo}", resource);
+					logger.LogError(ex, "Error creating resource: {@CreateInfo}", resource);
 					result = ResourceCreateResult.InternalError;
 				}
 
 				results.Add(result);
 			}
 
-			await mtgpStream.WriteMessageAsync(message.CreateResponse([.. results]));
+			await mtgpStream.WriteMessageAsync(message.CreateResponse([.. results]), logger);
 		});
 	}
 
@@ -107,7 +110,12 @@ internal class RequestMapper
 	{
 		var message = JsonSerializer.Deserialize<MtgpMessage>(data, Comms.Util.JsonSerializerOptions)!;
 
-		Log.Information("Received message: {@Message}", message);
+		this.logger.LogInformation("Received message: {@Message}", message);
+
+		if (message.Header.Type == MtgpMessageType.Response)
+		{
+			return;
+		}
 
 		try
 		{
@@ -117,14 +125,14 @@ internal class RequestMapper
 			}
 			else
 			{
-				Log.Warning("No handler for message: {@Message}", message);
-				await mtgpStream.WriteMessageAsync(new MtgpResponse(message.Header.Id, "error"));
+				this.logger.LogWarning("No handler for message: {@Message}", message);
+				await mtgpStream.WriteMessageAsync(new MtgpResponse(message.Header.Id, "error"), logger);
 			}
 		}
 		catch (Exception ex)
 		{
-			Log.Error(ex, "Error handling message: {@Message}", message);
-			await mtgpStream.WriteMessageAsync(new MtgpResponse(message.Header.Id, "error"));
+			this.logger.LogError(ex, "Error handling message: {@Message}", message);
+			await mtgpStream.WriteMessageAsync(new MtgpResponse(message.Header.Id, "error"), logger);
 		}
 	}
 }

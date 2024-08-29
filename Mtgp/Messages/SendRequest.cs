@@ -8,9 +8,9 @@ public class SendRequest(int id, int pipe, string value)
 	{
 	}
 
-    public int Pipe { get; } = pipe;
+    public int Pipe { get; init; } = pipe;
 
-	public string Value { get; } = value;
+	public string Value { get; init; } = value;
 
 	static string IMtgpRequest.Command => Command;
 

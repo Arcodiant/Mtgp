@@ -51,16 +51,16 @@ namespace Mtgp.Proxy.Console
 
 			proxy.OnMessageAsync += async (message) =>
 			{
-				await mtgpStream.WriteMessageAsync(new SendRequest(requestId++, message.Pipe, message.Message));
+				await mtgpStream.WriteMessageAsync(new SendRequest(requestId++, message.Pipe, message.Message), logger);
 			};
 
-			var mapper = new RequestMapper();
+			var mapper = new RequestMapper(logger);
 
 			try
 			{
 				while (mtgpClient.Connected)
 				{
-					var block = await mtgpStream.ReadBlockAsync()!;
+					var block = await mtgpStream.ReadBlockAsync(logger)!;
 
 					await mapper.HandleAsync(mtgpStream, proxy, block);
 				}

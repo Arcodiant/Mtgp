@@ -161,6 +161,17 @@ public static class ShaderDisassembler
 						assembly.AppendLine($"({result}, {type}, {condition}, {trueValue}, {falseValue})");
 					}
 					break;
+				case ShaderOp.CompositeConstruct:
+					{
+						shaderReader.CompositeConstruct(out int count);
+
+						var constituents = new int[count];
+
+						shaderReader.CompositeConstruct(out int result, out int type, constituents, out _);
+
+						assembly.AppendLine($"({result}, {type}, {string.Join(", ", constituents)})");
+					}
+					break;
 				case ShaderOp.Return:
 					{
 						assembly.AppendLine();

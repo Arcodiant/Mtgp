@@ -15,7 +15,7 @@ public class MtgpConnection(ILogger<MtgpConnection> logger, Stream stream)
 	{
 		while (!cancellationToken.IsCancellationRequested)
 		{
-			var data = await this.stream.ReadBlockAsync();
+			var data = await this.stream.ReadBlockAsync(logger);
 
 			var message = JsonSerializer.Deserialize<MtgpMessage>(data, Util.JsonSerializerOptions)!;
 
@@ -38,7 +38,7 @@ public class MtgpConnection(ILogger<MtgpConnection> logger, Stream stream)
 			}
 			else if (message.Header.Type == MtgpMessageType.Request)
 			{
-				await this.Receive?.Invoke((message, data))!;
+				_ = Task.Run(async () => await this.Receive?.Invoke((message, data))!);
 			}
 			else
 			{
@@ -51,7 +51,7 @@ public class MtgpConnection(ILogger<MtgpConnection> logger, Stream stream)
 	public event Func<(MtgpMessage Message, byte[] Data), Task> Receive;
 
 	public async Task SendResponseAsync(int id, string result)
-		=> await this.stream.WriteMessageAsync(new MtgpMessage(new MtgpHeader(id, MtgpMessageType.Response, Result: result)));
+		=> await this.stream.WriteMessageAsync(new MtgpMessage(new MtgpHeader(id, MtgpMessageType.Response, Result: result)), logger);
 
 	public async Task<TResponse> SendAsync<TRequest, TResponse>(IMtgpRequest<TRequest, TResponse> request)
 		where TRequest : MtgpRequest
@@ -69,7 +69,7 @@ public class MtgpConnection(ILogger<MtgpConnection> logger, Stream stream)
 			this.pendingResponses[request.Header.Id] = responseCompletionSource;
 		}
 
-		await this.stream.WriteMessageAsync(request.Request);
+		await this.stream.WriteMessageAsync(request.Request, logger);
 
 		var responseData = await responseCompletionSource.Task;
 

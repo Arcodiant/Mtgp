@@ -359,6 +359,23 @@ public class ShaderInterpreter
 									throw new InvalidOperationException("Input variable has no target decoration");
 								}
 								break;
+							case ShaderStorageClass.UniformConstant:
+								if (variableInfo.Binding is not null)
+								{
+									if (type.Size == 4)
+									{
+										results[result] = BitConverter.ToInt32(bufferAttachments[(int)variableInfo.Binding].Span);
+									}
+									else
+									{
+										throw new InvalidOperationException("Invalid uniform size");
+									}
+								}
+								else
+								{
+									throw new InvalidOperationException("Uniform variable has no binding decoration");
+								}
+								break;
 							default:
 								throw new InvalidOperationException($"Invalid storage class {variableInfo.StorageClass}");
 						}
@@ -562,7 +579,20 @@ public class ShaderInterpreter
 							throw new InvalidOperationException("Conditional true and false values must have the same type");
 						}
 
-						results[result] = (int)results[condition] == 0 ? results[trueValue] : results[falseValue];
+						switch (types[type].Size)
+						{
+							case 4:
+								results[result] = (int)results[condition] == 0 ? results[trueValue] : results[falseValue];
+								break;
+							case 8:
+								results2[result] = (int)results[condition] == 0 ? results2[trueValue] : results2[falseValue];
+								break;
+							case 12:
+								results3[result] = (int)results[condition] == 0 ? results3[trueValue] : results3[falseValue];
+								break;
+							default:
+								throw new InvalidOperationException("Unsupported conditional type size");
+						}
 						types[result] = types[type];
 						break;
 					}

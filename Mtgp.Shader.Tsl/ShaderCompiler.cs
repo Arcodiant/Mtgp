@@ -416,6 +416,7 @@ public class ShaderCompiler
 			{
 				writer = expression switch
 				{
+					TokenExpression tokenExpression => WriteTokenExpression(writer, tokenExpression, out id, out type),
 					IntegerLiteralExpression integerLiteralExpression => WriteIntegerLiteralExpression(writer, integerLiteralExpression, out id, out type),
 					BinaryExpression binaryExpression => WriteBinaryExpression(writer, binaryExpression, out id, out type),
 					FunctionExpression functionExpression => WriteFunctionExpression(writer, functionExpression, out id, out type),
@@ -433,6 +434,16 @@ public class ShaderCompiler
 			}
 
 			return writer;
+		}
+
+		ShaderWriter WriteTokenExpression(ShaderWriter writer, TokenExpression expression, out int id, out ShaderType type)
+		{
+			int varId = GetTokenVarId(expression);
+			type = vars.Single(x => x.Id == varId).Type;
+
+			id = nextId++;
+
+			return writer.Load(id, GetTypeId(ref writer, type), varId);
 		}
 
 		ShaderWriter WriteTernaryExpression(ShaderWriter writer, TernaryExpression expression, out int id, out ShaderType type)
@@ -649,6 +660,7 @@ public class ShaderCompiler
 		}
 
 		int GetVarId(BinaryExpression expression) => varNames[(((TokenExpression)expression.Left).Value, ((TokenExpression)expression.Right).Value)];
+		int GetTokenVarId(TokenExpression expression) => varNames[(expression.Value, "")];
 
 		byte[] result = [.. shaderHeader[..headerWriter.Writer.WriteCount], .. shaderCode[..writer.Writer.WriteCount]];
 
