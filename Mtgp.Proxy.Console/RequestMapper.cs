@@ -20,7 +20,7 @@ internal class RequestMapper
 		{
 			requestHandlers.Add(TRequest.Command, async (mtgpStream, proxy, data) =>
 			{
-				var message = JsonSerializer.Deserialize<TRequest>(data, Mtgp.Comms.Util.JsonSerializerOptions)!;
+				var message = JsonSerializer.Deserialize<TRequest>(data, Mtgp.Comms.Shared.JsonSerializerOptions)!;
 
 				handler(proxy, message);
 
@@ -58,7 +58,7 @@ internal class RequestMapper
 
 		requestHandlers.Add(GetPresentImageRequest.Command, async (mtgpStream, proxy, data) =>
 		{
-			var message = JsonSerializer.Deserialize<GetPresentImageRequest>(data, Comms.Util.JsonSerializerOptions)!;
+			var message = JsonSerializer.Deserialize<GetPresentImageRequest>(data, Comms.Shared.JsonSerializerOptions)!;
 
 			var (characterImage, foregroundImage, backgroundImage) = proxy.GetPresentImage();
 
@@ -67,7 +67,7 @@ internal class RequestMapper
 
 		requestHandlers.Add(CreateResourceRequest.Command, async (mtgpStream, proxy, data) =>
 		{
-			var message = JsonSerializer.Deserialize<CreateResourceRequest>(data, Mtgp.Comms.Util.JsonSerializerOptions)!;
+			var message = JsonSerializer.Deserialize<CreateResourceRequest>(data, Mtgp.Comms.Shared.JsonSerializerOptions)!;
 
 			var results = new List<ResourceCreateResult>();
 
@@ -110,7 +110,7 @@ internal class RequestMapper
 
 	public async Task HandleAsync(Stream mtgpStream, ProxyHost proxy, byte[] data)
 	{
-		var message = JsonSerializer.Deserialize<MtgpMessage>(data, Comms.Util.JsonSerializerOptions)!;
+		var message = JsonSerializer.Deserialize<MtgpMessage>(data, Comms.Shared.JsonSerializerOptions)!;
 
 		this.logger.LogInformation("Received message: {@Message}", message);
 

@@ -1,8 +1,10 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Mtgp.DemoServer;
+using Mtgp.Comms;
 using Mtgp.Server;
+using Mtgp.WorldSeed;
 using Serilog;
+using System.Net.Sockets;
 
 Log.Logger = new LoggerConfiguration()
 	.Enrich.FromLogContext()
@@ -16,8 +18,10 @@ try
 	Log.Information("Starting host");
 
 	var builder = Host.CreateApplicationBuilder(args);
-	builder.Services.AddTransient<Factory>();
 	builder.Services.AddHostedService<MtgpServer>();
+	builder.Services.AddImplementingFactory<IMtgpSession, UserSession, TcpClient>();
+	builder.Services.AddFactory<MtgpClient, Stream>();
+	builder.Services.AddFactory<MtgpConnection, Stream>();
 	builder.Services.AddSerilog();
 	builder.Services.Configure<Auth0Options>(options =>
 	{

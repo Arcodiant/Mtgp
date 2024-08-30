@@ -1,6 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 
-namespace Mtgp.DemoServer;
+namespace Mtgp.Server;
 
 public class Factory(IServiceProvider provider)
 {

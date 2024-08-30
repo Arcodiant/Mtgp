@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Mtgp.Comms\Mtgp.Comms.csproj" />
+    <ProjectReference Include="..\Mtgp.Server\Mtgp.Server.csproj" />
     <ProjectReference Include="..\Mtgp.Shader.Tsl\Mtgp.Shader.Tsl.csproj" />
     <ProjectReference Include="..\Mtgp.Shader\Mtgp.Shader.csproj" />
     <ProjectReference Include="..\Mtgp\Mtgp.csproj" />

@@ -27,7 +27,9 @@ public static class StreamExtensions
 
 	public static async Task WriteMessageAsync<T>(this Stream stream, T message, ILogger logger)
 	{
-		byte[] messageBytes = JsonSerializer.SerializeToUtf8Bytes(message, Util.JsonSerializerOptions);
+		logger.LogDebug("Writing message {@Message}", message);
+
+		byte[] messageBytes = JsonSerializer.SerializeToUtf8Bytes(message, Shared.JsonSerializerOptions);
 
 		byte[] header = BitConverter.GetBytes(messageBytes.Length);
 

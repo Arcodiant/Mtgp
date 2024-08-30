@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace Mtgp.Comms;
 
-public static class Util
+public static class Shared
 {
 	public static JsonSerializerOptions JsonSerializerOptions { get; } = new()
 	{

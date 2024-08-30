@@ -1,9 +1,9 @@
 ﻿using Mtgp.Shader;
 using Mtgp.Shader.Tsl;
 
-namespace Mtgp.DemoServer;
+namespace Mtgp.Server;
 
-internal class ShaderManager
+public class ShaderManager
 {
 	private readonly MtgpClient client;
 	private readonly int transferActionList;

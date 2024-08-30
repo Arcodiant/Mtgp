@@ -1,4 +1,4 @@
-﻿namespace Mtgp.DemoServer;
+﻿namespace Mtgp.Server;
 
 public class Auth0Options
 {

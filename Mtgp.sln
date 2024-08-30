@@ -22,7 +22,11 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Mtgp.Comms", "Mtgp.Comms\Mt
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Mtgp.Proxy.Shader", "Mtgp.Proxy.Shader\Mtgp.Proxy.Shader.csproj", "{BDDC848B-00C2-4004-8208-3B4F1944BDA7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mtgp.Proxy.Console", "Mtgp.Proxy.Console\Mtgp.Proxy.Console.csproj", "{2790C151-A8D0-4015-8B66-73B52BEAEB87}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Mtgp.Proxy.Console", "Mtgp.Proxy.Console\Mtgp.Proxy.Console.csproj", "{2790C151-A8D0-4015-8B66-73B52BEAEB87}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mtgp.WorldSeed", "Mtgp.WorldSeed\Mtgp.WorldSeed.csproj", "{D1B67990-3BFB-41DB-B634-FBD5ED0681C5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mtgp.Server", "Mtgp.Server\Mtgp.Server.csproj", "{0B7A61D4-B3C5-470E-B055-4C8A617A29CA}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -79,6 +83,18 @@ Global
 		{2790C151-A8D0-4015-8B66-73B52BEAEB87}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2790C151-A8D0-4015-8B66-73B52BEAEB87}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2790C151-A8D0-4015-8B66-73B52BEAEB87}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D1B67990-3BFB-41DB-B634-FBD5ED0681C5}.CI|Any CPU.ActiveCfg = Debug|Any CPU
+		{D1B67990-3BFB-41DB-B634-FBD5ED0681C5}.CI|Any CPU.Build.0 = Debug|Any CPU
+		{D1B67990-3BFB-41DB-B634-FBD5ED0681C5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D1B67990-3BFB-41DB-B634-FBD5ED0681C5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D1B67990-3BFB-41DB-B634-FBD5ED0681C5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D1B67990-3BFB-41DB-B634-FBD5ED0681C5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0B7A61D4-B3C5-470E-B055-4C8A617A29CA}.CI|Any CPU.ActiveCfg = Debug|Any CPU
+		{0B7A61D4-B3C5-470E-B055-4C8A617A29CA}.CI|Any CPU.Build.0 = Debug|Any CPU
+		{0B7A61D4-B3C5-470E-B055-4C8A617A29CA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0B7A61D4-B3C5-470E-B055-4C8A617A29CA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0B7A61D4-B3C5-470E-B055-4C8A617A29CA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0B7A61D4-B3C5-470E-B055-4C8A617A29CA}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -17,7 +17,7 @@ public class MtgpConnection(ILogger<MtgpConnection> logger, Stream stream)
 		{
 			var data = await this.stream.ReadBlockAsync(logger);
 
-			var message = JsonSerializer.Deserialize<MtgpMessage>(data, Util.JsonSerializerOptions)!;
+			var message = JsonSerializer.Deserialize<MtgpMessage>(data, Shared.JsonSerializerOptions)!;
 
 			this.logger.LogDebug("Received message: {@Message}", message);
 
@@ -73,6 +73,6 @@ public class MtgpConnection(ILogger<MtgpConnection> logger, Stream stream)
 
 		var responseData = await responseCompletionSource.Task;
 
-		return JsonSerializer.Deserialize<TResponse>(responseData, Util.JsonSerializerOptions)!;
+		return JsonSerializer.Deserialize<TResponse>(responseData, Shared.JsonSerializerOptions)!;
 	}
 }

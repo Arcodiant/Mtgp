@@ -3,13 +3,14 @@ using Mtgp.Comms;
 using Mtgp.Messages;
 using Mtgp.Messages.Resources;
 using Mtgp.Shader;
+using Mtgp.Util;
 using System.Text.Json;
 
-namespace Mtgp.DemoServer;
+namespace Mtgp.Server;
 
-internal class MtgpClient(Factory factory, Stream mtgpStream, ILogger<MtgpClient> logger)
+public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stream mtgpStream, ILogger<MtgpClient> logger)
 {
-	private readonly MtgpConnection connection = factory.Create<MtgpConnection, Stream>(mtgpStream);
+	private readonly MtgpConnection connection = connectionFactory.Create(mtgpStream);
 	private readonly Stream mtgpStream = mtgpStream;
 	private readonly ILogger<MtgpClient> logger = logger;
 
@@ -60,7 +61,7 @@ internal class MtgpClient(Factory factory, Stream mtgpStream, ILogger<MtgpClient
 		{
 			if (obj.Message.Header.Command == SendRequest.Command)
 			{
-				var eventTask = this.SendReceived?.Invoke(JsonSerializer.Deserialize<SendRequest>(obj.Data, Util.JsonSerializerOptions)!);
+				var eventTask = this.SendReceived?.Invoke(JsonSerializer.Deserialize<SendRequest>(obj.Data, Shared.JsonSerializerOptions)!);
 
 				if (eventTask != null)
 				{
@@ -192,7 +193,7 @@ internal class MtgpClient(Factory factory, Stream mtgpStream, ILogger<MtgpClient
 	}
 }
 
-internal class ResourceBuilder(MtgpClient client)
+public class ResourceBuilder(MtgpClient client)
 {
 	private readonly MtgpClient client = client;
 	private readonly List<(ResourceInfo Info, TaskCompletionSource<int> TaskSource)> resources = [];
