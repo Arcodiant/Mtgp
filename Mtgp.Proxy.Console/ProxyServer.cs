@@ -1,12 +1,12 @@
 ﻿using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using System.Net.Sockets;
+using Mtgp.Util;
 using System.Net;
-using Microsoft.Extensions.Logging.Abstractions;
+using System.Net.Sockets;
 
 namespace Mtgp.Proxy.Console;
 
-internal class ProxyServer(ILogger<ProxyServer> logger, ILoggerFactory loggerFactory, IHostApplicationLifetime applicationLifetime)
+internal class ProxyServer(IFactory<ProxySession, TcpClient> sessionFactory, ILogger<ProxyServer> logger, IHostApplicationLifetime applicationLifetime)
 	: IHostedService
 {
 	private readonly ILogger<ProxyServer> logger = logger;
@@ -21,7 +21,9 @@ internal class ProxyServer(ILogger<ProxyServer> logger, ILoggerFactory loggerFac
 		{
 			var client = listener.AcceptTcpClient();
 
-			var session = new ProxySession(client, loggerFactory.CreateLogger<ProxySession>());
+			logger.LogInformation("Accepted client {Client}", client.Client.RemoteEndPoint);
+
+			var session = sessionFactory.Create(client);
 
 			await session.RunAsync();
 		}

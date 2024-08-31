@@ -1,13 +1,4 @@
 ﻿namespace Mtgp.Messages;
 
-public class CapabilitiesRequest(int id, string serverDescription, int[] serverVersion)
-	: MtgpRequest(id, "core.capabilities")
-{
-    public CapabilitiesRequest()
-        : this(default, "", [])
-    {
-    }
-
-    public string ServerDescription { get; init; } = serverDescription;
-	public int[] ServerVersion { get; init; } = serverVersion;
-};
+public record CapabilitiesRequest(int Id, string ServerDescription, int[] ServerVersion)
+	: MtgpRequest(Id, "core.capabilities");

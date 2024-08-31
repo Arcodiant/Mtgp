@@ -59,19 +59,19 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 	{
 		try
 		{
-			if (obj.Message.Header.Command == SendRequest.Command)
-			{
-				var eventTask = this.SendReceived?.Invoke(JsonSerializer.Deserialize<SendRequest>(obj.Data, Shared.JsonSerializerOptions)!);
+			//if (obj.Message.Command == SendRequest.Command)
+			//{
+			//	var eventTask = this.SendReceived?.Invoke(JsonSerializer.Deserialize<SendRequest>(obj.Data, Shared.JsonSerializerOptions)!);
 
-				if (eventTask != null)
-				{
-					await Task.Run(() => eventTask);
-				}
-			}
+			//	if (eventTask != null)
+			//	{
+			//		await Task.Run(() => eventTask);
+			//	}
+			//}
 		}
 		finally
 		{
-			await this.connection.SendResponseAsync(obj.Message.Header.Id, "ok");
+			await this.connection.SendResponseAsync(obj.Message.Id, "ok");
 		}
 	}
 
@@ -93,7 +93,7 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 
 	public async Task<(int Character, int Foreground, int Background)> GetPresentImage()
 	{
-		var result = await this.connection.SendAsync(new GetPresentImageRequest(Interlocked.Increment(ref this.requestId)));
+		var result = await this.connection.SendAsync<GetPresentImageResponse>(new GetPresentImageRequest(Interlocked.Increment(ref this.requestId)));
 
 		ThrowIfError(result);
 
@@ -165,7 +165,7 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 
 	public async Task<Task<int>[]> CreateResourcesAsync(params ResourceInfo[] resources)
 	{
-		var result = await this.connection.SendAsync(new CreateResourceRequest(Interlocked.Increment(ref this.requestId), resources));
+		var result = await this.connection.SendAsync<CreateResourceResponse>(new CreateResourceRequest(Interlocked.Increment(ref this.requestId), resources));
 
 		ThrowIfError(result);
 
@@ -186,9 +186,9 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 
 	private static void ThrowIfError(MtgpResponse response)
 	{
-		if (response.Header.Result != "ok")
+		if (response.Result != "ok")
 		{
-			throw new Exception($"Mtgp request failed with '{response.Header.Result}'");
+			throw new Exception($"Mtgp request failed with '{response.Result}'");
 		}
 	}
 }

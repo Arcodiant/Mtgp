@@ -15,6 +15,8 @@ public class TelnetClient
 
     private readonly Channel<string> incomingBuffer = Channel.CreateUnbounded<string>();
 
+    private readonly Dictionary<TelnetOption, TaskCompletionSource<byte[]>> waitingSubnegotiations = [];
+
     public TelnetClient(TcpClient client)
     {
         this.client = client;
@@ -22,8 +24,6 @@ public class TelnetClient
         this.stream = client.GetStream();
 
         this.writer = new StreamWriter(this.stream) { AutoFlush = true };
-
-        this.writer.Write("\x1B[?7h");
 
         _ = Task.Run(this.ReadLoop);
     }
@@ -63,6 +63,12 @@ public class TelnetClient
                                 Log.Debug("Received subnegotiation: {Command} {Option} {Data}", commandEvent.Command, commandEvent.Option, commandEvent.Data);
                                 break;
                         }
+
+                        if (commandEvent.Option.HasValue && this.waitingSubnegotiations.TryGetValue(commandEvent.Option.Value, out var tcs))
+						{
+                            this.waitingSubnegotiations.Remove(commandEvent.Option.Value);
+							tcs.SetResult(commandEvent.Data!);
+						}
                     }
                     else if (commandEvent.Data is not null)
                     {
@@ -133,9 +139,6 @@ public class TelnetClient
 			};
 
         this.SetColour(Extract(foreground), Extract(background));
-
-        //this.writer.Write($"\x1B[{(int)foreground + 90}m");
-        //this.writer.Write($"\x1B[{(int)background + 40}m");
     }
 
     private void SetColour(Colour foreground, Colour background)
@@ -155,6 +158,25 @@ public class TelnetClient
         Log.Debug("Sending subnegotiation: {Option} {Data}", option, data.ToArray());
         this.stream.Write([(byte)TelnetCommand.IAC, (byte)TelnetCommand.SB, (byte)option, .. data, (byte)TelnetCommand.IAC, (byte)TelnetCommand.SE]);
     }
+
+    public async Task<byte[]> SendSubnegotiationAndWait(TelnetOption option, TelnetSubNegotiationCommand subCommand, byte[] data)
+	{
+        var tcs = new TaskCompletionSource<byte[]>();
+
+        this.waitingSubnegotiations[option] = tcs;
+
+		Log.Debug("Sending subnegotiation: {Option} {SubCommand} {Data}", option, subCommand, data);
+		this.stream.Write([(byte)TelnetCommand.IAC, (byte)TelnetCommand.SB, (byte)option, (byte)subCommand, .. data, (byte)TelnetCommand.IAC, (byte)TelnetCommand.SE]);
+
+		return await tcs.Task;
+	}
+
+    public async Task<string> GetTerminalType()
+	{
+		var data = await this.SendSubnegotiationAndWait(TelnetOption.TerminalType, TelnetSubNegotiationCommand.Send, []);
+
+		return Encoding.UTF8.GetString(data[1..]);
+	}
 
     public void SendSubnegotiation(TelnetOption option, TelnetSubNegotiationCommand subCommand, ReadOnlySpan<byte> data)
     {
@@ -203,6 +225,11 @@ public class TelnetClient
 
         GC.SuppressFinalize(this);
     }
+
+    public void Send(string message)
+	{
+		this.writer.Write(message);
+	}
 
     public void Draw(ReadOnlySpan<RuneDelta> value)
     {

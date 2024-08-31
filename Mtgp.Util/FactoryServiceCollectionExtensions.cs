@@ -4,6 +4,11 @@ namespace Microsoft.Extensions.DependencyInjection;
 
 public static class FactoryServiceCollectionExtensions
 {
+	public static IServiceCollection AddDefaultFactories(this IServiceCollection services)
+		=> services.AddTransient(typeof(IFactory<>), typeof(SimpleFactory<>))
+			.AddTransient(typeof(IFactory<,>), typeof(SimpleFactory<,>))
+			.AddTransient(typeof(IFactory<,,>), typeof(SimpleFactory<,,>));
+
 	public static IServiceCollection AddFactory<T>(this IServiceCollection services)
 		where T : class
 		=> services.AddTransient<IFactory<T>>(provider => new SimpleFactory<T>(provider));

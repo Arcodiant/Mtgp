@@ -1,11 +1,12 @@
-﻿using Mtgp.Messages;
+﻿using Microsoft.Extensions.Logging;
+using Mtgp.Messages;
 using Mtgp.Proxy.Shader;
 using Mtgp.Shader;
 using System.Net.Sockets;
 
 namespace Mtgp;
 
-internal class ProxyHost(TcpClient client)
+internal class ProxyHost(TelnetClient telnetClient)
 	: ICoreExtension, IShaderExtension, IDisposable
 {
 	private readonly List<byte[]> buffers = [];
@@ -17,21 +18,47 @@ internal class ProxyHost(TcpClient client)
 	private readonly List<RenderPipeline> renderPipelines = [];
 	private readonly List<List<IAction>> actionLists = [];
 	private readonly Dictionary<DefaultPipe, int> defaultPipes = [];
-	private readonly TelnetClient telnetClient = new(client);
 	private readonly Dictionary<string, Func<string, string?>> dataProviders = [];
 	private bool disposedValue;
 
+	public static async Task<ProxyHost> BuildAsync(TcpClient client, ILogger logger)
+	{
+		var telnetClient = new TelnetClient(client);
+
+		telnetClient.SendCommand(TelnetCommand.DO, TelnetOption.TerminalType);
+
+		var firstTerminalType = await telnetClient.GetTerminalType();
+
+		var terminalTypes = new List<string>() { firstTerminalType };
+
+		while(true)
+		{
+			var terminalType = await telnetClient.GetTerminalType();
+
+			if(terminalType == firstTerminalType)
+			{
+				break;
+			}
+
+			terminalTypes.Add(terminalType);
+		}
+
+		logger.LogInformation("Terminal types: {TerminalTypes}", terminalTypes);
+
+		return new ProxyHost(telnetClient);
+	}
+
 	public void Start()
 	{
-		telnetClient.HideCursor();
+		//telnetClient.HideCursor();
 
-		telnetClient.SendCommand(TelnetCommand.WILL, TelnetOption.Echo);
-		telnetClient.SendCommand(TelnetCommand.WILL, TelnetOption.SuppressGoAhead);
-		telnetClient.SendCommand(TelnetCommand.DO, TelnetOption.SuppressGoAhead);
-		telnetClient.SendCommand(TelnetCommand.DO, TelnetOption.NegotiateAboutWindowSize);
-		telnetClient.SendCommand(TelnetCommand.DO, TelnetOption.TerminalType);
-		telnetClient.SendCommand(TelnetCommand.DO, TelnetOption.NewEnvironmentOption);
-		telnetClient.SendSubnegotiation(TelnetOption.TerminalType, TelnetSubNegotiationCommand.Send, []);
+		//telnetClient.SendCommand(TelnetCommand.WILL, TelnetOption.Echo);
+		//telnetClient.SendCommand(TelnetCommand.WILL, TelnetOption.SuppressGoAhead);
+		//telnetClient.SendCommand(TelnetCommand.DO, TelnetOption.SuppressGoAhead);
+		//telnetClient.SendCommand(TelnetCommand.DO, TelnetOption.NegotiateAboutWindowSize);
+		//telnetClient.SendCommand(TelnetCommand.DO, TelnetOption.TerminalType);
+		//telnetClient.SendCommand(TelnetCommand.DO, TelnetOption.NewEnvironmentOption);
+		//telnetClient.SendSubnegotiation(TelnetOption.TerminalType, TelnetSubNegotiationCommand.Send, []);
 
 		this.images.Add(new((80, 24, 1), ImageFormat.T32_SInt));
 		this.images.Add(new((80, 24, 1), ImageFormat.R32G32B32_SFloat));
@@ -123,93 +150,18 @@ internal class ProxyHost(TcpClient client)
 		=> this.actionLists[request.ActionList].Add(new DrawAction(this.renderPipelines[request.RenderPipeline],
 													 request.ImageAttachments.Select(x => this.images[x]).ToArray(),
 													 request.BufferViewAttachments.Select(x => this.bufferViews[x]).ToArray(),
-													 new(this.images[request.FrameBuffer.Character], this.images[request.FrameBuffer.Foreground], this.images[request.FrameBuffer.Background]),
+													 new(this.images[request.Framebuffer.Character], this.images[request.Framebuffer.Foreground], this.images[request.Framebuffer.Background]),
 													 request.InstanceCount,
 													 request.VertexCount));
 
 	public void AddBindVertexBuffers(AddBindVertexBuffersRequest request)
 		=> this.actionLists[request.ActionList].Add(new BindVertexBuffersAction(request.FirstBufferIndex, request.Buffers.Select(x => (this.buffers[x.BufferIndex], x.Offset)).ToArray()));
 
-	private class BindVertexBuffersAction(int firstBinding, (byte[] Buffer, int Offset)[] buffers) : IAction
-	{
-		public void Execute(ActionExecutionState state)
-		{
-			var prefix = state.VertexBuffers[..firstBinding];
-
-			int suffixIndex = firstBinding + buffers.Length;
-
-			var suffix = state.VertexBuffers.Count > suffixIndex ? state.VertexBuffers[(firstBinding + buffers.Length)..] : [];
-
-			state.VertexBuffers.Clear();
-			state.VertexBuffers.AddRange([.. prefix, .. buffers, .. suffix]);
-		}
-	}
-
 	public void AddPresentAction(int actionList)
-		=> this.actionLists[actionList].Add(new PresentAction(new(this.images[0], this.images[1], this.images[2]), this.telnetClient));
-
-	private class PresentAction(FrameBuffer frameBuffer, TelnetClient client)
-		: IAction
-	{
-		public void Execute(ActionExecutionState state)
-		{
-			var deltas = new List<RuneDelta>();
-			int characterStep = frameBuffer.Character!.Format.GetSize();
-			int foregroundStep = frameBuffer.Foreground!.Format.GetSize();
-			int backgroundStep = frameBuffer.Background!.Format.GetSize();
-
-			int height = frameBuffer.Character!.Size.Height;
-			int width = frameBuffer.Character!.Size.Width;
-
-			for (int y = 0; y < height; y++)
-			{
-				for (int x = 0; x < width; x++)
-				{
-					var characterDatum = frameBuffer.Character!.Data.Span[((x + y * width) * characterStep)..];
-					var foregroundDatum = frameBuffer.Foreground!.Data.Span[((x + y * width) * foregroundStep)..];
-					var backgroundDatum = frameBuffer.Background!.Data.Span[((x + y * width) * backgroundStep)..];
-
-					var rune = TextelUtil.GetCharacter(characterDatum, frameBuffer.Character!.Format);
-					var foreground = TextelUtil.GetColour(foregroundDatum, frameBuffer.Foreground!.Format);
-					var background = TextelUtil.GetColour(backgroundDatum, frameBuffer.Background!.Format);
-
-					deltas.Add(new(x, y, rune, foreground, background));
-				}
-
-			}
-
-			client.Draw(deltas.ToArray());
-		}
-	}
+		=> this.actionLists[actionList].Add(new PresentAction(new(this.images[0], this.images[1], this.images[2]), telnetClient));
 
 	public void AddCopyBufferToImageAction(int actionList, int buffer, ImageFormat bufferFormat, int image, Messages.AddCopyBufferToImageActionRequest.CopyRegion[] copyRegions)
 		=> this.actionLists[actionList].Add(new CopyBufferToImageAction(this.buffers[buffer], bufferFormat, this.images[image], copyRegions));
-
-	private class CopyBufferToImageAction(byte[] buffer, ImageFormat bufferFormat, ImageState image, Messages.AddCopyBufferToImageActionRequest.CopyRegion[] copyRegions)
-		: IAction
-	{
-		public void Execute(ActionExecutionState state)
-		{
-			if (bufferFormat != image.Format)
-				throw new InvalidOperationException("Buffer format does not match image");
-
-			int step = bufferFormat.GetSize();
-
-			foreach (var (bufferOffset, bufferRowLength, bufferImageHeight, imageX, imageY, imageWidth, imageHeight) in copyRegions)
-			{
-				for (int y = 0; y < imageHeight; y++)
-				{
-					for (int x = 0; x < imageWidth; x++)
-					{
-						var bufferIndex = bufferOffset + (x + y * bufferRowLength) * step;
-						var imageIndex = (imageX + x + (imageY + y) * image.Size.Width) * step;
-
-						buffer.AsSpan(bufferIndex, step).CopyTo(image.Data.Span[imageIndex..]);
-					}
-				}
-			}
-		}
-	}
 
 	public void SetDefaultPipe(DefaultPipe pipe, int pipeId)
 		=> this.defaultPipes[pipe] = pipe switch
@@ -284,7 +236,7 @@ internal class ProxyHost(TcpClient client)
 		{
 			if (disposing)
 			{
-				this.telnetClient.Dispose();
+				telnetClient.Dispose();
 			}
 
 			disposedValue = true;

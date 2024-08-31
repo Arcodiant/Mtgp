@@ -2,7 +2,6 @@
 using Microsoft.Extensions.Hosting;
 using Mtgp.Proxy.Console;
 using Serilog;
-using System.Diagnostics;
 
 Log.Logger = new LoggerConfiguration()
 	.Enrich.FromLogContext()
@@ -17,14 +16,15 @@ try
 
 	var builder = Host.CreateApplicationBuilder(args);
 	builder.Services.AddHostedService<ProxyServer>();
+	builder.Services.AddDefaultFactories();
 	builder.Services.AddSerilog();
 
 	var host = builder.Build();
 
-	_ = Task.Run(() =>
-	{
-		Process.Start(new ProcessStartInfo("putty", $"-telnet localhost 12345"));
-	});
+	//_ = Task.Run(() =>
+	//{
+	//	Process.Start(new ProcessStartInfo("putty", $"-telnet localhost 12345"));
+	//});
 
 	await host.RunAsync();
 }

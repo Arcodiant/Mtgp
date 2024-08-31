@@ -21,28 +21,28 @@ public class MtgpConnection(ILogger<MtgpConnection> logger, Stream stream)
 
 			this.logger.LogDebug("Received message: {@Message}", message);
 
-			if (message.Header.Type == MtgpMessageType.Response)
+			if (message.Type == MtgpMessageType.Response)
 			{
 				lock (this.pendingResponsesLock)
 				{
-					if (this.pendingResponses.TryGetValue(message.Header.Id, out var responseCompletionSource))
+					if (this.pendingResponses.TryGetValue(message.Id, out var responseCompletionSource))
 					{
 						responseCompletionSource.SetResult(data);
-						this.pendingResponses.Remove(message.Header.Id);
+						this.pendingResponses.Remove(message.Id);
 					}
 					else
 					{
-						this.logger.LogWarning("Response with no matching request - ID {ID}", message.Header.Id);
+						this.logger.LogWarning("Response with no matching request - ID {ID}", message.Id);
 					}
 				}
 			}
-			else if (message.Header.Type == MtgpMessageType.Request)
+			else if (message.Type == MtgpMessageType.Request)
 			{
 				_ = Task.Run(async () => await this.Receive?.Invoke((message, data))!);
 			}
 			else
 			{
-				this.logger.LogWarning("Unknown message type: {Type}", message.Header.Type);
+				this.logger.LogWarning("Unknown message type: {Type}", message.Type);
 			}
 
 		}
@@ -51,25 +51,26 @@ public class MtgpConnection(ILogger<MtgpConnection> logger, Stream stream)
 	public event Func<(MtgpMessage Message, byte[] Data), Task> Receive;
 
 	public async Task SendResponseAsync(int id, string result)
-		=> await this.stream.WriteMessageAsync(new MtgpMessage(new MtgpHeader(id, MtgpMessageType.Response, Result: result)), logger);
+		=> await this.stream.WriteMessageAsync(new MtgpResponse(id, result), logger);
 
-	public async Task<TResponse> SendAsync<TRequest, TResponse>(IMtgpRequest<TRequest, TResponse> request)
-		where TRequest : MtgpRequest
-		where TResponse : MtgpResponse
+	public async Task<MtgpResponse> SendAsync(MtgpRequest request)
+		=> await this.SendAsync<MtgpResponse>(request);
+
+	public async Task<TResponse> SendAsync<TResponse>(MtgpRequest request)
 	{
 		TaskCompletionSource<byte[]> responseCompletionSource = new();
 
 		lock (this.pendingResponsesLock)
 		{
-			if (this.pendingResponses.ContainsKey(request.Header.Id))
+			if (this.pendingResponses.ContainsKey(request.Id))
 			{
 				throw new InvalidOperationException("Request with same ID already pending");
 			}
 
-			this.pendingResponses[request.Header.Id] = responseCompletionSource;
+			this.pendingResponses[request.Id] = responseCompletionSource;
 		}
 
-		await this.stream.WriteMessageAsync(request.Request, logger);
+		await this.stream.WriteMessageAsync(request, logger);
 
 		var responseData = await responseCompletionSource.Task;
 
