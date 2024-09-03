@@ -3,7 +3,7 @@ using Mtgp.Shader;
 
 namespace Mtgp.Proxy.Console;
 
-internal class LineModeExtension
+internal class LineModeExtension(TelnetClient telnetClient)
 	: IProxyExtension
 {
 	private readonly Dictionary<DefaultPipe, int> defaultPipeBindings = [];
@@ -12,6 +12,7 @@ internal class LineModeExtension
 	public void RegisterMessageHandlers(ProxyController proxy)
 	{
 		proxy.RegisterMessageHandler<SetDefaultPipeRequest>(SetDefaultPipe);
+		proxy.RegisterMessageHandler<SendRequest>(Send);
 
 		proxy.OnDefaultPipeSend += async (pipe, message) =>
 		{
@@ -30,10 +31,18 @@ internal class LineModeExtension
 		return new MtgpResponse(0, "ok");
 	}
 
-	private void SendRequest(SendRequest request)
+	private MtgpResponse Send(SendRequest request)
 	{
 		if (this.defaultPipeLookup.TryGetValue(request.Pipe, out var pipe))
 		{
+			if (pipe == DefaultPipe.Output)
+			{
+				telnetClient.Send(request.Value);
+
+				return new MtgpResponse(0, "ok");
+			}
 		}
+
+		return new MtgpResponse(0, "invalidRequest");
 	}
 }

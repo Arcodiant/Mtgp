@@ -5,7 +5,9 @@ namespace Mtgp.Proxy.Console;
 
 internal class ProxyController(Func<MtgpRequest, Task<MtgpResponse>> sendRequest)
 {
-	private Dictionary<Type, Func<MtgpRequest, MtgpResponse>> messageHandlers = [];
+	private readonly Dictionary<Type, Func<MtgpRequest, MtgpResponse>> messageHandlers = [];
+
+	private int requestId = 0;
 
 	public event Func<DefaultPipe, string, Task>? OnDefaultPipeSend;
 
@@ -38,5 +40,5 @@ internal class ProxyController(Func<MtgpRequest, Task<MtgpResponse>> sendRequest
 	}
 
 	public async Task<MtgpResponse> SendOutgoingRequestAsync(MtgpRequest request)
-		=> await sendRequest(request with { Id = 10 });
+		=> await sendRequest(request with { Id = requestId++ });
 }

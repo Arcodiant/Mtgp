@@ -55,19 +55,19 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 		_ = Task.Run(() => this.connection.ReceiveLoop(CancellationToken.None));
 	}
 
-	private async Task Connection_ReceiveAsync((MtgpMessage Message, byte[] Data) obj)
+	private async Task Connection_ReceiveAsync((MtgpRequest Message, byte[] Data) obj)
 	{
 		try
 		{
-			//if (obj.Message.Command == SendRequest.Command)
-			//{
-			//	var eventTask = this.SendReceived?.Invoke(JsonSerializer.Deserialize<SendRequest>(obj.Data, Shared.JsonSerializerOptions)!);
+			if (obj.Message is SendRequest request)
+			{
+				var eventTask = this.SendReceived?.Invoke(request);
 
-			//	if (eventTask != null)
-			//	{
-			//		await Task.Run(() => eventTask);
-			//	}
-			//}
+				if (eventTask != null)
+				{
+					await Task.Run(() => eventTask);
+				}
+			}
 		}
 		finally
 		{

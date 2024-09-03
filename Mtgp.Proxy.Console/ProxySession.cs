@@ -1,7 +1,9 @@
 ﻿using Microsoft.Extensions.Logging;
+using Mtgp.Comms;
 using Mtgp.Messages;
 using Mtgp.Shader;
 using System.Net.Sockets;
+using System.Text.Json;
 
 namespace Mtgp.Proxy.Console
 {
@@ -9,21 +11,19 @@ namespace Mtgp.Proxy.Console
 	{
 		public async Task RunAsync()
 		{
-			var runLock = new TaskCompletionSource();
-
 			using var telnetClient = new TelnetClient(telnetTcpClient);
 
 			telnetClient.SendCommand(TelnetCommand.DONT, TelnetOption.Echo);
 			telnetClient.SendCommand(TelnetCommand.WILL, TelnetOption.Echo);
 
-			var proxy = new ProxyController(async request =>
+			Func<MtgpRequest, Task<MtgpResponse>> sendRequest = async request =>
 			{
-				runLock.SetResult();
+				return new MtgpResponse(request.Id, "error");
+			};
 
-				return new MtgpResponse(request.Id, "ok");
-			});
+			var proxy = new ProxyController(async request => await sendRequest(request));
 
-			proxy.AddExtension(new LineModeExtension());
+			proxy.AddExtension(new LineModeExtension(telnetClient));
 
 			_ = Task.Run(async () =>
 			{
@@ -35,65 +35,61 @@ namespace Mtgp.Proxy.Console
 
 			proxy.HandleMessage(new SetDefaultPipeRequest(1, DefaultPipe.Input, 1));
 
-			//proxy.OnMessageAsync += async (message) =>
-			//{
-			//	runLock.SetResult();
-			//};
+			proxy.HandleMessage(new SetDefaultPipeRequest(2, DefaultPipe.Output, 2));
 
-			//proxy.Start();
+			proxy.HandleMessage(new SendRequest(3, 2, "Hello, world!"));
 
-			//proxy.SetDefaultPipe(Mtgp.Shader.DefaultPipe.Input, 1);
+			using var mtgpClient = new TcpClient();
 
-			await runLock.Task;
+			await mtgpClient.ConnectAsync("localhost", 2323);
 
-			telnetClient.Send("Done");
+			logger.LogInformation("Running");
 
-			//var mtgpClient = new TcpClient();
+			using var mtgpStream = mtgpClient.GetStream();
 
-			//await mtgpClient.ConnectAsync("localhost", 2323);
+			await mtgpStream.WriteAsync(new byte[] { 0xFF, 0xFD, 0xAA });
 
-			//this.logger.LogInformation("Running");
+			var handshake = new byte[3];
 
-			//using var mtgpStream = mtgpClient.GetStream();
+			await mtgpStream.ReadExactlyAsync(handshake);
 
-			//await mtgpStream.WriteAsync(new byte[] { 0xFF, 0xFD, 0xAA });
+			if (!handshake.AsSpan().SequenceEqual(new byte[] { 0xFF, 0xFB, 0xAA }))
+			{
+				logger.LogWarning("Server did not send correct handshake: {Handshake}", handshake);
 
-			//var handshake = new byte[3];
+				return;
+			}
 
-			//await mtgpStream.ReadExactlyAsync(handshake);
+			logger.LogInformation("Handshake complete");
 
-			//if (!handshake.AsSpan().SequenceEqual(new byte[] { 0xFF, 0xFB, 0xAA }))
-			//{
-			//	this.logger.LogWarning("Server did not send correct handshake: {Handshake}", handshake);
+			sendRequest = async request =>
+			{
+				await mtgpStream.WriteMessageAsync(request, logger);
 
-			//	return;
-			//}
+				return new MtgpResponse(request.Id, "ok");
+			};
 
-			//this.logger.LogInformation("Handshake complete");
+			try
+			{
+				while (mtgpClient.Connected)
+				{
+					var block = await mtgpStream.ReadBlockAsync(logger)!;
 
-			//int requestId = 0;
+					var message = JsonSerializer.Deserialize<MtgpMessage>(block, Shared.JsonSerializerOptions)!;
 
-			//proxy.OnMessageAsync += async (message) =>
-			//{
-			//	await mtgpStream.WriteMessageAsync(new SendRequest(requestId++, message.Pipe, message.Message), logger);
-			//};
+					if (message.Type == MtgpMessageType.Request)
+					{
+						var response = proxy.HandleMessage(JsonSerializer.Deserialize<MtgpRequest>(block, Shared.JsonSerializerOptions)!);
 
-			//var mapper = new RequestMapper(logger);
+						await mtgpStream.WriteMessageAsync(response, logger);
+					}
+				}
+			}
+			catch (Exception)
+			{
+			}
 
-			//try
-			//{
-			//	while (mtgpClient.Connected)
-			//	{
-			//		var block = await mtgpStream.ReadBlockAsync(logger)!;
-
-			//		await mapper.HandleAsync(mtgpStream, proxy, block);
-			//	}
-			//}
-			//catch (Exception)
-			//{
-			//}
-
-			//mtgpClient.Close();
+			mtgpClient.Close();
 		}
 	}
 }

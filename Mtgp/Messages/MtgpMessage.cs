@@ -1,8 +1,10 @@
-﻿namespace Mtgp.Messages;
+﻿using System.Text.Json.Serialization;
+
+namespace Mtgp.Messages;
 
 public record MtgpMessage(int Id, MtgpMessageType Type);
 
-public record MtgpRequest(int Id, string Command)
+public record MtgpRequest(int Id, [property:JsonIgnore]string Command)
 	: MtgpMessage(Id, MtgpMessageType.Request);
 
 public record MtgpResponse(int Id, string Result)

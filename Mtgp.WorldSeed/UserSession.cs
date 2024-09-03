@@ -19,10 +19,7 @@ internal class UserSession(IFactory<MtgpClient, Stream> mtgpClientFactory, TcpCl
 
 		client.SendReceived += async message =>
 		{
-			if (message.Value.Contains('\n'))
-			{
-				runLock.SetResult();
-			}
+			runLock.SetResult();
 		};
 
 		//try
