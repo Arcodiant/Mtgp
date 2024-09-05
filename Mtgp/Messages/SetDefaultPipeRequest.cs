@@ -2,8 +2,5 @@
 
 namespace Mtgp.Messages;
 
-public record SetDefaultPipeRequest(int Id, DefaultPipe Pipe, int PipeId)
-	: MtgpRequest(Id, "core.shader.setDefaultPipeline")
-{
-	public record VertexBufferBinding(int BufferIndex, int Offset);
-}
+public record SetDefaultPipeRequest(int Id, DefaultPipe Pipe, int PipeId, Dictionary<ChannelType, ImageFormat> ChannelSet)
+	: MtgpRequest(Id, "core.shader.setDefaultPipeline");

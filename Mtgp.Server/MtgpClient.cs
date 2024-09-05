@@ -77,9 +77,9 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 
 	public event Func<SendRequest, Task> SendReceived;
 
-	public async Task SetDefaultPipe(DefaultPipe pipe, int pipeId)
+	public async Task SetDefaultPipe(DefaultPipe pipe, int pipeId, Dictionary<ChannelType, ImageFormat> channelSet)
 	{
-		var result = await this.connection.SendAsync(new SetDefaultPipeRequest(Interlocked.Increment(ref this.requestId), pipe, pipeId));
+		var result = await this.connection.SendAsync(new SetDefaultPipeRequest(Interlocked.Increment(ref this.requestId), pipe, pipeId, channelSet));
 
 		ThrowIfError(result);
 	}
@@ -156,7 +156,7 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 		ThrowIfError(result);
 	}
 
-	public async Task Send(int pipe, string value)
+	public async Task Send(int pipe, byte[] value)
 	{
 		var result = await this.connection.SendAsync(new SendRequest(Interlocked.Increment(ref this.requestId), pipe, value));
 

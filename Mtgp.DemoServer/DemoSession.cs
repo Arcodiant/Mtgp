@@ -4,6 +4,7 @@ using Mtgp.Server;
 using Mtgp.Shader;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -21,7 +22,7 @@ internal class DemoSession(Factory factory, TcpClient client, ILogger<DemoSessio
 
 		client.SendReceived += async message =>
 		{
-			if (message.Value.Contains('\n'))
+			if (Encoding.UTF32.GetString(message.Value).Contains('\n'))
 			{
 				runLock.SetResult();
 			}
@@ -92,7 +93,7 @@ internal class DemoSession(Factory factory, TcpClient client, ILogger<DemoSessio
 			logger.LogError(ex, "Login failed with exception");
 		}
 
-		await client.SetDefaultPipe(DefaultPipe.Input, 1);
+		await client.SetDefaultPipe(DefaultPipe.Input, 1, new() { [ChannelType.Character] = ImageFormat.T32_SInt });
 
 		await runLock.Task;
 	}
@@ -176,6 +177,6 @@ internal class DemoSession(Factory factory, TcpClient client, ILogger<DemoSessio
 		await client.AddDrawAction(actionList, renderPipeline, [menuImage], [uniformBufferView], presentImage, menuItems.Count, 2);
 		await client.AddPresentAction(actionList);
 
-		await client.Send(pipe, "");
+		await client.Send(pipe, []);
 	}
 }

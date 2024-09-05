@@ -141,7 +141,7 @@ public class TelnetClient
         this.SetColour(Extract(foreground), Extract(background));
     }
 
-    private void SetColour(Colour foreground, Colour background)
+    public void SetColour(Colour foreground, Colour background)
     {
         this.writer.Write($"\x1B[38;2;{(int)(foreground.R * 255)};{(int)(foreground.G * 255)};{(int)(foreground.B * 255)}m");
         this.writer.Write($"\x1B[48;2;{(int)(background.R * 255)};{(int)(background.G * 255)};{(int)(background.B * 255)}m");

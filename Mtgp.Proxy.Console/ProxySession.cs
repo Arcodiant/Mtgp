@@ -33,12 +33,6 @@ namespace Mtgp.Proxy.Console
 				}
 			});
 
-			proxy.HandleMessage(new SetDefaultPipeRequest(1, DefaultPipe.Input, 1));
-
-			proxy.HandleMessage(new SetDefaultPipeRequest(2, DefaultPipe.Output, 2));
-
-			proxy.HandleMessage(new SendRequest(3, 2, "Hello, world!"));
-
 			using var mtgpClient = new TcpClient();
 
 			await mtgpClient.ConnectAsync("localhost", 2323);

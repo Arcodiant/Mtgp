@@ -1,5 +1,6 @@
 ﻿using Mtgp.Shader;
 using Mtgp.Shader.Tsl;
+using System.Text;
 
 namespace Mtgp.Server;
 
@@ -72,7 +73,7 @@ public class ShaderManager
 		await client.ResetActionList(transferActionList);
 		await client.AddCopyBufferToImageAction(transferActionList, transferBuffer!.Value, format, image, [new(0, size.Width, size.Height, 0, 0, size.Width, size.Height)]);
 
-		await client.Send(transferPipe, "");
+		await client.Send(transferPipe, []);
 
 		return image;
 	}
