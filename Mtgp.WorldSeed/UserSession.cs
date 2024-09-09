@@ -4,6 +4,7 @@ using Mtgp.Shader;
 using Mtgp.Util;
 using Mtgp.WorldSeed.World;
 using System.Net.Sockets;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace Mtgp.WorldSeed;
@@ -52,19 +53,41 @@ internal class UserSession(IFactory<MtgpClient, Stream> mtgpClientFactory, TcpCl
 			return result;
 		}
 
+		async Task Send(string message, Colour? foreground = null, Colour? background = null)
+			=> await client.Send(outputPipe, EncodeOutput(message, foreground ?? Colour.White, background ?? Colour.Black));
+
+		async Task SendParts(params (string text, Colour foreground)[] parts)
+		{
+			var result = new byte[parts.Sum(x => x.text.Length) * 28];
+			int offset = 0;
+
+			foreach (var (text, foreground) in parts)
+			{
+				var encoded = EncodeOutput(text, foreground, Colour.Black);
+				encoded.CopyTo(result.AsSpan(offset));
+				offset += encoded.Length;
+			}
+
+			await client.Send(outputPipe, result);
+		}
+
+		async Task SendError(string message)
+			=> await Send(message, (1, 0, 0));
+
 		async Task SendLocation()
 		{
 			var location = world.Locations[currentLocationName];
-			await client.Send(outputPipe, []);
-			await client.Send(outputPipe, EncodeOutput(location.Title, Colour.White, Colour.Black));
-			await client.Send(outputPipe, EncodeOutputGradient(new string('=', location.Title.Length), (1, 0, 0), (0, 1, 1), Colour.Black));
-			await client.Send(outputPipe, EncodeOutput(location.Description, Colour.White, Colour.Black));
-			await client.Send(outputPipe, []);
-			await client.Send(outputPipe, EncodeOutput("Exits:", Colour.White, Colour.Black));
-			await client.Send(outputPipe, EncodeOutputGradient(new string('=', "Exits:".Length), (1, 0, 0), (0, 1, 1), Colour.Black));
+			await Send("");
+			await Send(location.Title, (1, 0.84f, 0));
+			await client.Send(outputPipe, EncodeOutputGradient(new string('=', location.Title.Length), (1, 1, 0), (0, 1, 1), Colour.Black));
+			await Send(location.Description);
+			await Send("");
+			await Send("Exits:");
 			foreach (var link in world.Links.Where(x => x.From == currentLocationName))
 			{
-				await client.Send(outputPipe, EncodeOutput(link.Name, Colour.White, Colour.Black));
+				var linkLocation = world.Locations[link.To];
+
+				await SendParts(($"- {link.Name} to ", Colour.White), (linkLocation.Title, (1, 0.84f, 0)));
 			}
 		}
 
@@ -72,36 +95,50 @@ internal class UserSession(IFactory<MtgpClient, Stream> mtgpClientFactory, TcpCl
 		{
 			var messageString = Encoding.UTF32.GetString(message.Value);
 
+			await SendParts((">> ", (0, 0.5f, 1)), (messageString, (0, 0.75f, 1)));
+
 			var messageParts = messageString.Split(' ');
 
-			switch (messageParts[0].ToLower())
+			if (messageParts.Length > 0)
 			{
-				case "look":
-					await SendLocation();
-					break;
-				case "quit":
-					runLock.SetResult();
-					break;
-				case "go":
-					var linkName = messageParts[1].ToLower();
-					var link = world.Links.FirstOrDefault(x => x.From == currentLocationName && x.Name == linkName);
-					if (link != null)
-					{
-						currentLocationName = link.To;
+				switch (messageParts[0].ToLower())
+				{
+					case "look":
 						await SendLocation();
-					}
-					else
-					{
-						await client.Send(outputPipe, EncodeOutput("No such exit.", (1, 0, 0), Colour.Black));
-					}
-					break;
+						break;
+					case "quit":
+						await Send("Bye!", (0, 1, 0));
+						runLock.SetResult();
+						break;
+					case "go":
+						var linkName = messageParts[1].ToLower();
+						var link = world.Links.FirstOrDefault(x => x.From == currentLocationName && x.Name == linkName);
+						if (link != null)
+						{
+							currentLocationName = link.To;
+							await SendLocation();
+						}
+						else
+						{
+							await SendError("No such exit.");
+						}
+						break;
+					default:
+						await SendError("Unknown command.");
+						break;
+				}
 			}
 		};
 
 		await client.StartAsync(true);
 
 		await client.SetDefaultPipe(DefaultPipe.Input, inputPipe, new() { [ChannelType.Character] = ImageFormat.T32_SInt });
-		await client.SetDefaultPipe(DefaultPipe.Output, outputPipe, new() { [ChannelType.Character] = ImageFormat.T32_SInt });
+		await client.SetDefaultPipe(DefaultPipe.Output, outputPipe, new()
+		{
+			[ChannelType.Character] = ImageFormat.T32_SInt,
+			[ChannelType.Foreground] = ImageFormat.R32G32B32_SFloat,
+			[ChannelType.Background] = ImageFormat.R32G32B32_SFloat
+		});
 
 		await SendLocation();
 

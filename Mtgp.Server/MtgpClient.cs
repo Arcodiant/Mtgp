@@ -156,6 +156,22 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 		ThrowIfError(result);
 	}
 
+	public async Task SetData(string uri, string value, DateTimeOffset? expiry = null)
+	{
+		var result = await this.connection.SendAsync(new SetDataRequest(Interlocked.Increment(ref this.requestId), uri, value, expiry?.ToUnixTimeSeconds()));
+
+		ThrowIfError(result);
+	}
+
+	public async Task<string?> GetData(string uri)
+	{
+		var result = await this.connection.SendAsync<GetDataResponse>(new GetDataRequest(Interlocked.Increment(ref this.requestId), uri));
+
+		ThrowIfError(result);
+
+		return result.Value;
+	}
+
 	public async Task Send(int pipe, byte[] value)
 	{
 		var result = await this.connection.SendAsync(new SendRequest(Interlocked.Increment(ref this.requestId), pipe, value));

@@ -24,6 +24,7 @@ namespace Mtgp.Proxy.Console
 			var proxy = new ProxyController(async request => await sendRequest(request));
 
 			proxy.AddExtension(new LineModeExtension(telnetClient));
+			proxy.AddExtension(new DataExtension([new LocalStorageDataScheme()]));
 
 			_ = Task.Run(async () =>
 			{
