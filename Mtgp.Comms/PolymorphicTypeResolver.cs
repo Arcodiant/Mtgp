@@ -29,6 +29,7 @@ internal class PolymorphicTypeResolver : DefaultJsonTypeInfoResolver
 						new JsonDerivedType(typeof(AddCopyBufferToImageActionRequest), "core.shader.addCopyBufferToImageAction"),
 						new JsonDerivedType(typeof(AddDrawActionRequest), "core.shader.addDrawAction"),
 						new JsonDerivedType(typeof(AddPresentActionRequest), "core.shader.addPresentAction"),
+						new JsonDerivedType(typeof(AddRunPipelineActionRequest), "core.shader.addRunPipelineAction"),
 						new JsonDerivedType(typeof(CreateResourceRequest), "core.shader.createResource"),
 						new JsonDerivedType(typeof(GetPresentImageRequest), "core.shader.getPresentImage"),
 						new JsonDerivedType(typeof(OpenUrlRequest), "core.web.openUrl"),

@@ -134,6 +134,13 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 		ThrowIfError(result);
 	}
 
+	public async Task AddRunPipelineAction(int actionListId, int pipeline)
+	{
+		var result = await this.connection.SendAsync(new AddRunPipelineActionRequest(Interlocked.Increment(ref this.requestId), actionListId, pipeline));
+
+		ThrowIfError(result);
+	}
+
 	public async Task SetBufferData(int buffer, int offset, byte[] data)
 	{
 		var result = await this.connection.SendAsync(new SetBufferDataRequest(Interlocked.Increment(ref this.requestId), buffer, offset, data));
@@ -251,6 +258,9 @@ public class ResourceBuilder(MtgpClient client)
 
 	public ResourceBuilder Shader(out Task<int> task, byte[] data, string? reference = null)
 		=> this.Add(new CreateShaderInfo(data, reference), out task);
+
+	public ResourceBuilder SplitStringPipeline(out Task<int> task, int Width, int Height, IdOrRef LinesPipe, IdOrRef LineImage, IdOrRef InstanceBufferView, IdOrRef IndirectCommandBufferView, string? Reference = null)
+		=> this.Add(new CreateStringSplitPipelineInfo(Width, Height, LinesPipe, LineImage, InstanceBufferView, IndirectCommandBufferView, Reference), out task);
 
 	public async Task BuildAsync()
 	{

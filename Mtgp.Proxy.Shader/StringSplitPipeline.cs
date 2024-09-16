@@ -1,20 +1,15 @@
-﻿namespace Mtgp.Proxy.Shader;
+﻿using System.Text;
 
-public class StringSplitPipeline(IEnumerable<string> lineBuffer, Memory<byte> characterBuffer, Memory<byte> instanceBuffer, Memory<byte> drawCommandBuffer, int maxLineCount, int regionWidth)
+namespace Mtgp.Proxy.Shader;
+
+public class StringSplitPipeline(IEnumerable<byte[]> lineBuffer, Memory<byte> characterBuffer, Memory<byte> instanceBuffer, Memory<byte> drawCommandBuffer, int maxLineCount, int regionWidth)
 	: IFixedFunctionPipeline
 {
-	private readonly IEnumerable<string> lineBuffer = lineBuffer;
-	private readonly Memory<byte> characterBuffer = characterBuffer;
-	private readonly Memory<byte> instanceBuffer = instanceBuffer;
-	private readonly Memory<byte> drawCommandBuffer = drawCommandBuffer;
-	private readonly int maxLineCount = maxLineCount;
-	private readonly int regionWidth = regionWidth;
-
 	public void Execute()
 	{
 		const int instanceSize = 16;
 
-		var lines = lineBuffer.Reverse().Take(maxLineCount).Reverse().SelectMany(SplitString).Reverse().Take(maxLineCount).Reverse();
+		var lines = lineBuffer.Select(Encoding.UTF32.GetString).Reverse().Take(maxLineCount).Reverse().SelectMany(SplitString).Reverse().Take(maxLineCount).Reverse();
 
 		int characterBufferIndex = 0;
 		int lineIndex = 0;
@@ -64,7 +59,7 @@ public class StringSplitPipeline(IEnumerable<string> lineBuffer, Memory<byte> ch
 			}
 			else
 			{
-				if (char.IsWhiteSpace(line[this.regionWidth]) || char.IsWhiteSpace(line[this.regionWidth - 1]))
+				if (char.IsWhiteSpace(line[regionWidth]) || char.IsWhiteSpace(line[regionWidth - 1]))
 				{
 					yield return line[..regionWidth].TrimEnd();
 					line = line[regionWidth..].TrimStart();
