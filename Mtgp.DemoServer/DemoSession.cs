@@ -4,17 +4,22 @@ using Mtgp.Server;
 using Mtgp.Shader;
 using System.Net;
 using System.Net.Sockets;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Mtgp.DemoServer;
 
-internal class DemoSession(Factory factory, TcpClient client, ILogger<DemoSession> logger, IOptions<Auth0Options> options)
+internal class DemoSession(Factory factory, TcpClient tcpClient, ILogger<DemoSession> logger, IOptions<Auth0Options> options)
+	: IMtgpSession
 {
-	private readonly MtgpClient client = factory.Create<MtgpClient, Stream>(client.GetStream());
+	private readonly MtgpClient client = factory.Create<MtgpClient, Stream>(tcpClient.GetStream());
 
-	public async Task RunAsync()
+	public void Dispose()
+	{
+		tcpClient.Dispose();
+	}
+
+	public async Task RunAsync(CancellationToken token)
 	{
 		var runLock = new TaskCompletionSource();
 
@@ -22,12 +27,16 @@ internal class DemoSession(Factory factory, TcpClient client, ILogger<DemoSessio
 
 		client.SendReceived += async message =>
 		{
-			if (Encoding.UTF32.GetString(message.Value).Contains('\n'))
-			{
-				runLock.SetResult();
-			}
+			runLock.SetResult();
 		};
 
+		await client.SetDefaultPipe(DefaultPipe.Input, 1, new() { [ChannelType.Character] = ImageFormat.T32_SInt }, true);
+
+		await runLock.Task;
+	}
+
+	private async Task Login(ILogger<DemoSession> logger, IOptions<Auth0Options> options)
+	{
 		try
 		{
 			var auth0Client = new HttpClient();
@@ -92,10 +101,6 @@ internal class DemoSession(Factory factory, TcpClient client, ILogger<DemoSessio
 		{
 			logger.LogError(ex, "Login failed with exception");
 		}
-
-		await client.SetDefaultPipe(DefaultPipe.Input, 1, new() { [ChannelType.Character] = ImageFormat.T32_SInt });
-
-		await runLock.Task;
 	}
 
 	private async Task RunMenu()

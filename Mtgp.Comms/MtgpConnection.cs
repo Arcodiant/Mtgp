@@ -40,6 +40,8 @@ public class MtgpConnection(ILogger<MtgpConnection> logger, Stream stream)
 			{
 				var request = JsonSerializer.Deserialize<MtgpRequest>(data, Shared.JsonSerializerOptions)!;
 
+				logger.LogDebug("Received request: {@Request}", request);
+
 				_ = Task.Run(async () => await this.Receive?.Invoke((request, data))!);
 			}
 			else
@@ -76,6 +78,10 @@ public class MtgpConnection(ILogger<MtgpConnection> logger, Stream stream)
 
 		var responseData = await responseCompletionSource.Task;
 
-		return JsonSerializer.Deserialize<TResponse>(responseData, Shared.JsonSerializerOptions)!;
+		var result = JsonSerializer.Deserialize<TResponse>(responseData, Shared.JsonSerializerOptions)!;
+
+		logger.LogDebug("Received response: {@Response}", result);
+
+		return result;
 	}
 }

@@ -4,7 +4,6 @@ using Mtgp.Shader;
 using Mtgp.Util;
 using Mtgp.WorldSeed.World;
 using System.Net.Sockets;
-using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace Mtgp.WorldSeed;
@@ -13,6 +12,10 @@ internal class UserSession(IFactory<MtgpClient, Stream> mtgpClientFactory, TcpCl
 	: IMtgpSession
 {
 	private readonly MtgpClient client = mtgpClientFactory.Create(client.GetStream());
+
+	public void Dispose()
+	{
+	}
 
 	public async Task RunAsync(CancellationToken cancellationToken)
 	{
@@ -132,13 +135,13 @@ internal class UserSession(IFactory<MtgpClient, Stream> mtgpClientFactory, TcpCl
 
 		await client.StartAsync(true);
 
-		await client.SetDefaultPipe(DefaultPipe.Input, inputPipe, new() { [ChannelType.Character] = ImageFormat.T32_SInt });
+		await client.SetDefaultPipe(DefaultPipe.Input, inputPipe, new() { [ChannelType.Character] = ImageFormat.T32_SInt }, true);
 		await client.SetDefaultPipe(DefaultPipe.Output, outputPipe, new()
 		{
 			[ChannelType.Character] = ImageFormat.T32_SInt,
 			[ChannelType.Foreground] = ImageFormat.R32G32B32_SFloat,
 			[ChannelType.Background] = ImageFormat.R32G32B32_SFloat
-		});
+		}, true);
 
 		await SendLocation();
 

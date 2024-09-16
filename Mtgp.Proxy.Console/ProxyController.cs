@@ -1,9 +1,10 @@
-﻿using Mtgp.Messages;
+﻿using Microsoft.Extensions.Logging;
+using Mtgp.Messages;
 using Mtgp.Shader;
 
 namespace Mtgp.Proxy.Console;
 
-internal class ProxyController(Func<MtgpRequest, Task<MtgpResponse>> sendRequest)
+internal class ProxyController(Func<MtgpRequest, Task<MtgpResponse>> sendRequest, ILogger logger)
 {
 	private readonly Dictionary<Type, Func<MtgpRequest, MtgpResponse>> messageHandlers = [];
 
@@ -30,6 +31,8 @@ internal class ProxyController(Func<MtgpRequest, Task<MtgpResponse>> sendRequest
 		}
 		else
 		{
+			logger.LogError("Unknown message type {MessageType}", message.GetType().Name);
+
 			return new MtgpResponse(message.Id, "unknownCommand");
 		}
 	}

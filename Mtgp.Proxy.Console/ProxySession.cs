@@ -16,14 +16,39 @@ namespace Mtgp.Proxy.Console
 			telnetClient.SendCommand(TelnetCommand.DONT, TelnetOption.Echo);
 			telnetClient.SendCommand(TelnetCommand.WILL, TelnetOption.Echo);
 
+			telnetClient.SendCommand(TelnetCommand.DO, TelnetOption.TerminalType);
+
+			var terminalType = (await telnetClient.GetTerminalType()).ToLower();
+
+			var terminalTypes = new List<string>();
+
+			do
+			{
+				terminalTypes.Add(terminalType);
+
+				terminalType = (await telnetClient.GetTerminalType()).ToLower();
+			}
+			while (terminalType != terminalTypes.First());
+
+			logger.LogInformation("Terminal types: {TerminalTypes}", terminalTypes);
+
 			Func<MtgpRequest, Task<MtgpResponse>> sendRequest = async request =>
 			{
 				return new MtgpResponse(request.Id, "error");
 			};
 
-			var proxy = new ProxyController(async request => await sendRequest(request));
+			var proxy = new ProxyController(async request => await sendRequest(request), logger);
 
-			proxy.AddExtension(new LineModeExtension(telnetClient));
+			if (terminalTypes.Contains("xterm"))
+			{
+				logger.LogInformation("Using shader mode");
+				proxy.AddExtension(new ShaderModeExtension(telnetClient));
+			}
+			else
+			{
+				logger.LogInformation("Using line mode");
+				proxy.AddExtension(new LineModeExtension(telnetClient));
+			}
 			proxy.AddExtension(new DataExtension([new LocalStorageDataScheme()]));
 
 			_ = Task.Run(async () =>
@@ -74,9 +99,13 @@ namespace Mtgp.Proxy.Console
 
 					if (message.Type == MtgpMessageType.Request)
 					{
-						var response = proxy.HandleMessage(JsonSerializer.Deserialize<MtgpRequest>(block, Shared.JsonSerializerOptions)!);
+						var request = JsonSerializer.Deserialize<MtgpRequest>(block, Shared.JsonSerializerOptions)!;
 
-						await mtgpStream.WriteMessageAsync(response, logger);
+						logger.LogDebug("Received request: {@Request}", request);
+
+						var response = proxy.HandleMessage(request);
+
+						await mtgpStream.WriteMessageAsync(response, response.GetType(), logger);
 					}
 				}
 			}

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Mtgp.DemoServer;
 using Mtgp.Server;
 using Serilog;
+using System.Net.Sockets;
 
 Log.Logger = new LoggerConfiguration()
 	.Enrich.FromLogContext()
@@ -17,6 +18,8 @@ try
 
 	var builder = Host.CreateApplicationBuilder(args);
 	builder.Services.AddTransient<Factory>();
+	builder.Services.AddDefaultFactories();
+	builder.Services.AddImplementingFactory<IMtgpSession, DemoSession, TcpClient>();
 	builder.Services.AddHostedService<MtgpServer>();
 	builder.Services.AddSerilog();
 	builder.Services.Configure<Auth0Options>(options =>

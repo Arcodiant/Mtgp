@@ -1,8 +1,8 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Mtgp.Proxy.Console;
+using Mtgp.Server;
+using Mtgp.SpaceGame;
 using Serilog;
-using System.Diagnostics;
 
 Log.Logger = new LoggerConfiguration()
 	.Enrich.FromLogContext()
@@ -16,16 +16,18 @@ try
 	Log.Information("Starting host");
 
 	var builder = Host.CreateApplicationBuilder(args);
-	builder.Services.AddHostedService<ProxyServer>();
+	builder.Services.AddTransient<Factory>();
 	builder.Services.AddDefaultFactories();
+	builder.Services.AddImplementingFactory<IMtgpSession, UserSession, MtgpClient>();
+	builder.Services.AddHostedService<MtgpServer>();
 	builder.Services.AddSerilog();
+	builder.Services.Configure<Auth0Options>(options =>
+	{
+		options.ClientId = builder.Configuration.GetSection("auth0")["clientId"]!;
+		options.Domain = builder.Configuration.GetSection("auth0")["domain"]!;
+	});
 
 	var host = builder.Build();
-
-	_ = Task.Run(() =>
-	{
-		Process.Start(new ProcessStartInfo("putty", $"-telnet localhost 12345"));
-	});
 
 	await host.RunAsync();
 }

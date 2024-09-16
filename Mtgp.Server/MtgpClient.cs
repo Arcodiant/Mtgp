@@ -4,7 +4,6 @@ using Mtgp.Messages;
 using Mtgp.Messages.Resources;
 using Mtgp.Shader;
 using Mtgp.Util;
-using System.Text.Json;
 
 namespace Mtgp.Server;
 
@@ -77,9 +76,9 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 
 	public event Func<SendRequest, Task> SendReceived;
 
-	public async Task SetDefaultPipe(DefaultPipe pipe, int pipeId, Dictionary<ChannelType, ImageFormat> channelSet)
+	public async Task SetDefaultPipe(DefaultPipe pipe, int pipeId, Dictionary<ChannelType, ImageFormat> channelSet, bool isArray)
 	{
-		var result = await this.connection.SendAsync(new SetDefaultPipeRequest(Interlocked.Increment(ref this.requestId), pipe, pipeId, channelSet));
+		var result = await this.connection.SendAsync(new SetDefaultPipeRequest(Interlocked.Increment(ref this.requestId), pipe, pipeId, channelSet, isArray));
 
 		ThrowIfError(result);
 	}

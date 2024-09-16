@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using Mtgp.Comms;
+using Mtgp.Messages;
 using System.Text.Json;
 
 namespace System;
@@ -30,6 +31,21 @@ public static class StreamExtensions
 		logger.LogDebug("Writing message {@Message}", message);
 
 		byte[] messageBytes = JsonSerializer.SerializeToUtf8Bytes(message, Shared.JsonSerializerOptions);
+
+		byte[] header = BitConverter.GetBytes(messageBytes.Length);
+
+		logger.LogTrace("Writing {MessageBytes} bytes {Data}", messageBytes.Length, messageBytes);
+
+		byte[] payload = [.. header, .. messageBytes];
+
+		await stream.WriteAsync(payload);
+	}
+
+	public static async Task WriteMessageAsync(this Stream stream, object message, Type messageType, ILogger logger)
+	{
+		logger.LogDebug("Writing message {@Message}", message);
+
+		byte[] messageBytes = JsonSerializer.SerializeToUtf8Bytes(message, messageType, Shared.JsonSerializerOptions);
 
 		byte[] header = BitConverter.GetBytes(messageBytes.Length);
 
