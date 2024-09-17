@@ -140,11 +140,11 @@ internal class ProxyHost(TelnetClient telnetClient)
 	public void AddClearBufferAction(int actionList, int image)
 		=> this.actionLists[actionList].Add(new ClearAction(this.images[image]));
 
-	public void AddIndirectDrawAction(int actionList, int renderPipeline, int[] imageAttachments, (int Character, int Foreground, int Background) framebuffer, int indirectCommandBuffer, int offset)
-		=> this.actionLists[actionList].Add(new IndirectDrawAction(this.renderPipelines[renderPipeline],
-													 imageAttachments.Select(x => this.images[x]).ToArray(),
-													 new(this.images[framebuffer.Character], this.images[framebuffer.Foreground], this.images[framebuffer.Background]),
-													 this.bufferViews[indirectCommandBuffer], offset));
+	//public void AddIndirectDrawAction(int actionList, int renderPipeline, int[] imageAttachments, (int Character, int Foreground, int Background) framebuffer, int indirectCommandBuffer, int offset)
+	//	=> this.actionLists[actionList].Add(new IndirectDrawAction(this.renderPipelines[renderPipeline],
+	//												 imageAttachments.Select(x => this.images[x]).ToArray(),
+	//												 new(this.images[framebuffer.Character], this.images[framebuffer.Foreground], this.images[framebuffer.Background]),
+	//												 this.bufferViews[indirectCommandBuffer], offset));
 
 	public void AddDrawAction(AddDrawActionRequest request)
 		=> this.actionLists[request.ActionList].Add(new DrawAction(this.renderPipelines[request.RenderPipeline],

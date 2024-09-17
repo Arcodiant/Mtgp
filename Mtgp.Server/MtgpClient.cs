@@ -113,6 +113,13 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 		ThrowIfError(result);
 	}
 
+	public async Task AddIndirectDrawAction(int actionListId, int renderPipeline, int[] imageAttachments, int[] bufferViewAttachments, FrameBufferInfo framebuffer, int commandBufferView, int offset)
+	{
+		var result = await this.connection.SendAsync(new AddIndirectDrawActionRequest(Interlocked.Increment(ref this.requestId), actionListId, renderPipeline, imageAttachments, bufferViewAttachments, framebuffer, commandBufferView, offset));
+
+		ThrowIfError(result);
+	}
+
 	public async Task AddBindVertexBuffers(int actionList, int firstBufferIndex, (int Buffer, int Offset)[] buffers)
 	{
 		var result = await this.connection.SendAsync(new AddBindVertexBuffersRequest(Interlocked.Increment(ref this.requestId), actionList, firstBufferIndex, buffers.Select(x => new AddBindVertexBuffersRequest.VertexBufferBinding(x.Buffer, x.Offset)).ToArray()));

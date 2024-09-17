@@ -1,5 +1,4 @@
 ﻿using Mtgp.Shader;
-using System;
 using System.Text;
 
 namespace Mtgp.Proxy.Shader;

@@ -121,7 +121,7 @@ internal class DemoSession(Factory factory, TcpClient tcpClient, ILogger<DemoSes
 				.Write(10).Write(3 * (index + 1)).Write(menuItems.Take(index).Sum(x => x.Length)).Write(menuItems[index].Length);
 		}
 
-		var shaderManager = await ShaderManager.Create(client);
+		var shaderManager = await ShaderManager.CreateAsync(client);
 
 		var presentImage = await client.GetPresentImage();
 

@@ -75,6 +75,7 @@ internal class ShaderModeExtension(TelnetClient telnetClient)
 		proxy.RegisterMessageHandler<AddClearBufferActionRequest>(AddClearBufferAction);
 		proxy.RegisterMessageHandler<AddBindVertexBuffersRequest>(AddBindVertexBuffers);
 		proxy.RegisterMessageHandler<AddDrawActionRequest>(AddDrawAction);
+		proxy.RegisterMessageHandler<AddIndirectDrawActionRequest>(AddIndirectDrawAction);
 		proxy.RegisterMessageHandler<AddPresentActionRequest>(AddPresentAction);
 		proxy.RegisterMessageHandler<AddRunPipelineActionRequest>(AddRunPipelineAction);
 
@@ -85,6 +86,20 @@ internal class ShaderModeExtension(TelnetClient telnetClient)
 				await proxy.SendOutgoingRequestAsync(new SendRequest(0, pipeInfo.PipeId, Encoding.UTF32.GetBytes(message.TrimEnd('\r', '\n'))));
 			}
 		};
+	}
+
+	private MtgpResponse AddIndirectDrawAction(AddIndirectDrawActionRequest request)
+	{
+		var actionList = this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions;
+
+		actionList.Add(new IndirectDrawAction(this.resourceStore.Get<RenderPipeline>(request.RenderPipeline),
+										request.ImageAttachments.Select(this.resourceStore.Get<ImageState>).ToArray(),
+										request.BufferViewAttachments.Select(this.resourceStore.Get<BufferViewInfo>).Select(x => x.View).ToArray(),
+										GetFrameBuffer(request.Framebuffer.Character, request.Framebuffer.Foreground, request.Framebuffer.Background),
+										this.resourceStore.Get<BufferViewInfo>(request.CommandBufferView).View,
+										request.Offset));
+
+		return new MtgpResponse(0, "ok");
 	}
 
 	private MtgpResponse AddRunPipelineAction(AddRunPipelineActionRequest request)
@@ -100,13 +115,13 @@ internal class ShaderModeExtension(TelnetClient telnetClient)
 	{
 		var actionList = this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions;
 
-		actionList.Add(new PresentAction(GetPresentFrameBuffer(), telnetClient));
+		actionList.Add(new PresentAction(GetFrameBuffer(), telnetClient));
 
 		return new MtgpResponse(0, "ok");
 	}
 
-	private FrameBuffer GetPresentFrameBuffer()
-		=> new(this.resourceStore.Get<ImageState>(0), this.resourceStore.Get<ImageState>(1), this.resourceStore.Get<ImageState>(2));
+	private FrameBuffer GetFrameBuffer(int character = 0, int foreground = 1, int background = 2)
+		=> new(this.resourceStore.Get<ImageState>(character), this.resourceStore.Get<ImageState>(foreground), this.resourceStore.Get<ImageState>(background));
 
 	private MtgpResponse AddDrawAction(AddDrawActionRequest request)
 	{
@@ -115,7 +130,7 @@ internal class ShaderModeExtension(TelnetClient telnetClient)
 		actionList.Add(new DrawAction(this.resourceStore.Get<RenderPipeline>(request.RenderPipeline),
 								request.ImageAttachments.Select(this.resourceStore.Get<ImageState>).ToArray(),
 								request.BufferViewAttachments.Select(this.resourceStore.Get<BufferViewInfo>).Select(x => x.View).ToArray(),
-								GetPresentFrameBuffer(),
+								GetFrameBuffer(request.Framebuffer.Character, request.Framebuffer.Foreground, request.Framebuffer.Background),
 								request.InstanceCount,
 								request.VertexCount));
 

@@ -19,7 +19,7 @@ public class ShaderManager
 		this.transferPipe = transferPipe;
 	}
 
-	public static async Task<ShaderManager> Create(MtgpClient client)
+	public static async Task<ShaderManager> CreateAsync(MtgpClient client)
 	{
 		await client.GetResourceBuilder()
 					.ActionList(out var transferActionListTask)
