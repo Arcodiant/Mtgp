@@ -1,10 +1,10 @@
 ﻿using Mtgp.Shader;
 using Mtgp.Shader.Tsl;
-using System.Text;
 
 namespace Mtgp.Server;
 
 public class ShaderManager
+	: IShaderManager
 {
 	private readonly MtgpClient client;
 	private readonly int transferActionList;

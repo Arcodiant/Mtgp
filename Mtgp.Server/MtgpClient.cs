@@ -74,7 +74,7 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 		}
 	}
 
-	public event Func<SendRequest, Task> SendReceived;
+	public event Func<SendRequest, Task>? SendReceived;
 
 	public async Task SetDefaultPipe(DefaultPipe pipe, int pipeId, Dictionary<ChannelType, ImageFormat> channelSet, bool isArray)
 	{
