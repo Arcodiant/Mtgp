@@ -32,10 +32,7 @@ namespace Mtgp.Proxy.Console
 
 			logger.LogInformation("Terminal types: {TerminalTypes}", terminalTypes);
 
-			Func<MtgpRequest, Task<MtgpResponse>> sendRequest = async request =>
-			{
-				return new MtgpResponse(request.Id, "error");
-			};
+			Func<MtgpRequest, Task<MtgpResponse>> sendRequest = request => Task.FromResult(new MtgpResponse(request.Id, "error"));
 
 			var proxy = new ProxyController(async request => await sendRequest(request), logger);
 

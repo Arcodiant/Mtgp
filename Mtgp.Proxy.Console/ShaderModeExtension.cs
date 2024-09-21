@@ -40,7 +40,7 @@ internal class ShaderModeExtension(TelnetClient telnetClient)
 		}
 	}
 
-	private record PipeInfo(Queue<byte[]> Queue, List<Action> Handlers, bool Discard);
+	private record PipeInfo(List<Action<Memory<byte>>> Handlers);
 	private record ActionListInfo(List<IAction> Actions);
 	private record BufferViewInfo(Memory<byte> View);
 	private record BufferInfo(byte[] Data);
@@ -187,9 +187,12 @@ internal class ShaderModeExtension(TelnetClient telnetClient)
 
 	private MtgpResponse SetActionTrigger(SetActionTriggerRequest request)
 	{
-		this.resourceStore.Get<PipeInfo>(request.Pipe).Handlers.Add(() =>
+		this.resourceStore.Get<PipeInfo>(request.Pipe).Handlers.Add(pipeData =>
 		{
-			var state = new ActionExecutionState();
+			var state = new ActionExecutionState
+			{
+				PipeData = pipeData 
+			};
 
 			foreach (var action in this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions)
 			{
@@ -217,8 +220,7 @@ internal class ShaderModeExtension(TelnetClient telnetClient)
 			=> new(shaderStages.ToDictionary(x => x.Key, x => this.resourceStore.Get<ShaderInterpreter>(x.Value)), vertexBufferBindings, vertexAttributes, fragmentAttributes, viewport, scissors, polygonMode);
 
 		IFixedFunctionPipeline CreateStringSplitPipeline(CreateStringSplitPipelineInfo info)
-			=> new StringSplitPipeline(this.resourceStore.Get<PipeInfo>(info.LinesPipe.Id!.Value).Queue,
-							  this.resourceStore.Get<ImageState>(info.LineImage.Id!.Value).Data,
+			=> new StringSplitPipeline(this.resourceStore.Get<ImageState>(info.LineImage.Id!.Value).Data,
 							  this.resourceStore.Get<BufferViewInfo>(info.InstanceBufferView.Id!.Value).View,
 							  this.resourceStore.Get<BufferViewInfo>(info.IndirectCommandBufferView.Id!.Value).View,
 							  info.Height,
@@ -233,7 +235,7 @@ internal class ShaderModeExtension(TelnetClient telnetClient)
 				result = resource switch
 				{
 					CreateShaderInfo shaderInfo => Create(new ShaderInterpreter(shaderInfo.ShaderData)),
-					CreatePipeInfo pipeInfo => Create(new PipeInfo([], [], pipeInfo.Discard)),
+					CreatePipeInfo pipeInfo => Create(new PipeInfo([])),
 					CreateActionListInfo actionListInfo => Create(new ActionListInfo([])),
 					CreateBufferInfo bufferInfo => Create(new BufferInfo(new byte[bufferInfo.Size])),
 					CreateBufferViewInfo bufferViewInfo => Create(CreateBufferView(bufferViewInfo)),
@@ -274,16 +276,9 @@ internal class ShaderModeExtension(TelnetClient telnetClient)
 		{
 			var pipeInfo = this.resourceStore.Get<PipeInfo>(request.Pipe);
 
-			if (pipeInfo.Discard)
-			{
-				pipeInfo.Queue.Clear();
-			}
-
-			pipeInfo.Queue.Enqueue(request.Value);
-
 			foreach (var handler in pipeInfo.Handlers)
 			{
-				handler();
+				handler(request.Value);
 			}
 
 			return new MtgpResponse(0, "ok");

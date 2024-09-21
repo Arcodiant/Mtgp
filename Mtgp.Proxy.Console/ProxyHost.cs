@@ -170,36 +170,39 @@ internal class ProxyHost(TelnetClient telnetClient)
 			_ => throw new ArgumentOutOfRangeException(nameof(pipe)),
 		};
 
-	public void SetActionTrigger(int actionList, int pipe)
-		=> this.pipes[pipe].Handlers.Add(() =>
-			{
-				var state = new ActionExecutionState();
+	//public void SetActionTrigger(int actionList, int pipe)
+	//	=> this.pipes[pipe].Handlers.Add(() =>
+	//		{
+	//			var state = new ActionExecutionState();
 
-				foreach (var action in this.actionLists[actionList])
-				{
-					action.Execute(state);
-				}
-			});
+	//			foreach (var action in this.actionLists[actionList])
+	//			{
+	//				action.Execute(state);
+	//			}
+	//		});
 
-	public void SetTimerTrigger(int actionList, int milliseconds)
-	{
-		_ = Task.Run(async () =>
-		{
-			while (true)
-			{
-				await Task.Delay(milliseconds);
-				_ = Task.Run(() =>
-				{
-					var state = new ActionExecutionState();
+	//public void SetTimerTrigger(int actionList, int milliseconds)
+	//{
+	//	_ = Task.Run(async () =>
+	//	{
+	//		while (true)
+	//		{
+	//			await Task.Delay(milliseconds);
+	//			_ = Task.Run(() =>
+	//			{
+	//				var state = new ActionExecutionState()
+	//				{
+	//					PipeData = Array.Empty<byte>()
+	//				};
 
-					foreach (var action in this.actionLists[actionList])
-					{
-						action.Execute(state);
-					}
-				});
-			}
-		});
-	}
+	//				foreach (var action in this.actionLists[actionList])
+	//				{
+	//					action.Execute(state);
+	//				}
+	//			});
+	//		}
+	//	});
+	//}
 
 	//public int CreateStringSplitPipeline((int Width, int Height) viewport, int linesPipe, int lineImage, int instanceBufferView, int indirectCommandBufferView)
 	//	=> AddResource(this.fixedFunctionPipelines, new StringSplitPipeline(this.pipes[linesPipe].Queue, this.images[lineImage].Data, this.bufferViews[instanceBufferView], this.bufferViews[indirectCommandBufferView], viewport.Height, viewport.Width));

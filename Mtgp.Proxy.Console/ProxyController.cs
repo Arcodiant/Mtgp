@@ -25,15 +25,24 @@ internal class ProxyController(Func<MtgpRequest, Task<MtgpResponse>> sendRequest
 
 	public MtgpResponse HandleMessage(MtgpRequest message)
 	{
-		if (this.messageHandlers.TryGetValue(message.GetType(), out var handler))
+		try
 		{
-			return handler(message) with { Id = message.Id };
-		}
-		else
-		{
-			logger.LogError("Unknown message type {MessageType}", message.GetType().Name);
+			if (this.messageHandlers.TryGetValue(message.GetType(), out var handler))
+			{
+				return handler(message) with { Id = message.Id };
+			}
+			else
+			{
+				logger.LogError("Unknown message type {MessageType}", message.GetType().Name);
 
-			return new MtgpResponse(message.Id, "unknownCommand");
+				return new MtgpResponse(message.Id, "unknownCommand");
+			}
+		}
+		catch (Exception ex)
+		{
+			logger.LogError(ex, "Error handling message {MessageType}", message.GetType().Name);
+
+			return new MtgpResponse(message.Id, "error");
 		}
 	}
 

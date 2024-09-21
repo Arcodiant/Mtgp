@@ -2,14 +2,39 @@
 
 namespace Mtgp.Proxy.Shader;
 
-public class StringSplitPipeline(IEnumerable<byte[]> lineBuffer, Memory<byte> characterBuffer, Memory<byte> instanceBuffer, Memory<byte> drawCommandBuffer, int maxLineCount, int regionWidth)
+public class StringSplitPipeline(Memory<byte> characterBuffer, Memory<byte> instanceBuffer, Memory<byte> drawCommandBuffer, int maxLineCount, int regionWidth)
 	: IFixedFunctionPipeline
 {
-	public void Execute()
+	private readonly byte[] lineBuffer = new byte[maxLineCount * regionWidth];
+
+	public void Execute(Memory<byte> pipeData)
 	{
 		const int instanceSize = 16;
 
-		var lines = lineBuffer.Select(Encoding.UTF32.GetString).Reverse().Take(maxLineCount).Reverse().SelectMany(SplitString).Reverse().Take(maxLineCount).Reverse();
+		var newLine = Encoding.UTF32.GetString(pipeData.Span);
+
+		new BitReader(lineBuffer.AsSpan()).Read(out int nextIndex);
+		int lastIndex = 0;
+
+		var bufferLines = new List<string>();
+
+		while(nextIndex != 0)
+		{
+			var lineReader = new BitReader(lineBuffer.AsSpan(lastIndex));
+			int count = (nextIndex - lastIndex) / 4 - 1;
+
+			lineReader.Read(out lastIndex)
+						.ReadRunes(out var line, count)
+						.Read(out nextIndex);
+
+			bufferLines.Add(line);
+		}
+
+		new BitWriter(lineBuffer.AsSpan(lastIndex)).Write(lastIndex + newLine.Length * 4 + 4).WriteRunes(newLine);
+
+		bufferLines.Add(newLine);
+
+		var lines = bufferLines.AsEnumerable().Reverse().Take(maxLineCount).Reverse().SelectMany(SplitString).Reverse().Take(maxLineCount).Reverse();
 
 		int characterBufferIndex = 0;
 		int lineIndex = 0;

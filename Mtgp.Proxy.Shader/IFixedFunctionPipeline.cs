@@ -2,5 +2,5 @@
 
 public interface IFixedFunctionPipeline
 {
-	void Execute();
+	void Execute(Memory<byte> pipeData);
 }

@@ -241,8 +241,8 @@ public class ResourceBuilder(MtgpClient client)
 	public ResourceBuilder ActionList(out Task<int> task, string? reference = null)
 		=> this.Add(new CreateActionListInfo(reference), out task);
 
-	public ResourceBuilder Pipe(out Task<int> task, bool discard = false, string? reference = null)
-		=> this.Add(new CreatePipeInfo(discard, reference), out task);
+	public ResourceBuilder Pipe(out Task<int> task, string? reference = null)
+		=> this.Add(new CreatePipeInfo(reference), out task);
 
 	public ResourceBuilder Buffer(out Task<int> task, int size, string? reference = null)
 		=> this.Add(new CreateBufferInfo(size, reference), out task);

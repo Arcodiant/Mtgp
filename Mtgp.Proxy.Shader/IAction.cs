@@ -8,4 +8,5 @@ public interface IAction
 public class ActionExecutionState
 {
 	public readonly List<(byte[] Buffer, int Offset)> VertexBuffers = [];
+	public required Memory<byte> PipeData { get; init; }
 }
