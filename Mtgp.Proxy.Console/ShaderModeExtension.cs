@@ -55,8 +55,11 @@ internal class ShaderModeExtension(TelnetClient telnetClient)
 		telnetClient.SendCommand(TelnetCommand.WILL, TelnetOption.Echo);
 		telnetClient.SendCommand(TelnetCommand.DO, TelnetOption.SuppressGoAhead);
 		telnetClient.SendCommand(TelnetCommand.WILL, TelnetOption.SuppressGoAhead);
+		telnetClient.SendCommand(TelnetCommand.DO, TelnetOption.NegotiateAboutWindowSize);
 
 		telnetClient.HideCursor();
+
+		telnetClient.SetWindowSize(36, 120);
 
 		this.resourceStore.Add(new ImageState((80, 24, 1), ImageFormat.T32_SInt));
 		this.resourceStore.Add(new ImageState((80, 24, 1), ImageFormat.R32G32B32_SFloat));
@@ -78,6 +81,7 @@ internal class ShaderModeExtension(TelnetClient telnetClient)
 		proxy.RegisterMessageHandler<AddIndirectDrawActionRequest>(AddIndirectDrawAction);
 		proxy.RegisterMessageHandler<AddPresentActionRequest>(AddPresentAction);
 		proxy.RegisterMessageHandler<AddRunPipelineActionRequest>(AddRunPipelineAction);
+		proxy.RegisterMessageHandler<AddTriggerPipeActionRequest>(AddTriggerPipeAction);
 
 		proxy.OnDefaultPipeSend += async (pipe, message) =>
 		{
@@ -86,6 +90,18 @@ internal class ShaderModeExtension(TelnetClient telnetClient)
 				await proxy.SendOutgoingRequestAsync(new SendRequest(0, pipeInfo.PipeId, Encoding.UTF32.GetBytes(message.TrimEnd('\r', '\n'))));
 			}
 		};
+	}
+
+	private MtgpResponse AddTriggerPipeAction(AddTriggerPipeActionRequest request)
+	{
+		var actionList = this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions;
+
+		actionList.Add(new TriggerPipeAction(() =>
+		{
+			this.Send(new SendRequest(0, request.Pipe, []));
+		}));
+
+		return new MtgpResponse(0, "ok");
 	}
 
 	private MtgpResponse AddIndirectDrawAction(AddIndirectDrawActionRequest request)

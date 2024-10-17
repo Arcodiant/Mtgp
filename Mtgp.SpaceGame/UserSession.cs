@@ -1,52 +1,77 @@
-﻿using Mtgp.Messages.Resources;
+﻿using Arch.Core;
+using Arch.Core.Extensions;
+using Arch.Relationships;
 using Mtgp.Server;
 using Mtgp.Shader;
+using Mtgp.SpaceGame.Components;
 using System.Text;
+using System.Threading.Channels;
 
 namespace Mtgp.SpaceGame
 {
-	internal class UserSession(MtgpClient client)
+	internal class UserSession(MtgpClient client, World world)
 		: IMtgpSession
 	{
 		public void Dispose()
 		{
 		}
 
+		private IEnumerable<Entity> GetByRelationship<T>(Entity from)
+		{
+			var result = new List<Entity>();
+
+			ref var relation = ref from.GetRelationships<T>();
+			foreach (var to in relation)
+			{
+				result.Add(to.Key);
+			}
+
+			return result;
+		}
+
 		public async Task RunAsync(CancellationToken cancellationToken)
 		{
-			var runlock = new TaskCompletionSource();
+			var playerMob = world.Create(new Mob());
+
+			var query = new QueryDescription().WithAll<Interior>();
+
+			var locations = new List<Entity>();
+
+			world.Query(query, locations.Add);
+
+			world.AddRelationship<Inside>(playerMob, locations.First());
+
+			var incoming = Channel.CreateUnbounded<string>();
 
 			var shaderManager = await ShaderManager.CreateAsync(client);
 
 			var uiManager = new UIManager(shaderManager, client);
 
-			int area = await uiManager.CreateStringSplitArea(new Rect2D((0, 0), (39, 24)));
-			int area2 = await uiManager.CreateStringSplitArea(new Rect2D((40, 0), (30, 24)));
-
-			await uiManager.StringSplitSend(area, "Hello, world!");
-			await uiManager.StringSplitSend(area, "This is a test.");
-			await uiManager.StringSplitSend(area, "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Lorem ipsum dolor sit amet, consectetur adipiscing elit.");
-
-			await uiManager.StringSplitSend(area2, "Hello, world!");
-			await uiManager.StringSplitSend(area2, "This is a test.");
-			await uiManager.StringSplitSend(area2, "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Lorem ipsum dolor sit amet, consectetur adipiscing elit.");
+			int area = await uiManager.CreateStringSplitArea(new Rect2D((1, 1), (78, 22)));
 
 			client.SendReceived += async message =>
 			{
 				var messageString = Encoding.UTF32.GetString(message.Value);
 
-				runlock.SetResult();
+				await incoming.Writer.WriteAsync(messageString);
 			};
 
-			await client.SetDefaultPipe(DefaultPipe.Input, 1, [], false);
+			await client.SetDefaultPipe(DefaultPipe.Input, -1, [], false);
 
-			await runlock.Task;
+			await uiManager.StringSplitSend(area, "Welcome to the Space Game!");
 
-			runlock = new TaskCompletionSource();
+			var playerLocation = GetByRelationship<Inside>(playerMob).First();
 
-			await uiManager.StringSplitSend(area2, "Hello, world!");
+			await uiManager.StringSplitSend(area, $"You are in the {playerLocation.Get<Interior>().Description}");
 
-			await runlock.Task;
+			var exits = GetByRelationship<Door>(playerLocation);
+
+			foreach (var exit in exits)
+			{
+				await uiManager.StringSplitSend(area, $"You can go to the {exit.Get<Interior>().Description}");
+			}
+
+			await incoming.Reader.WaitToReadAsync(cancellationToken);
 		}
 	}
 }

@@ -1,5 +1,4 @@
-﻿using Mtgp.Messages.Resources;
-using Mtgp.Shader;
+﻿using Mtgp.Shader;
 using System.Text;
 
 namespace Mtgp.Server;
@@ -11,6 +10,8 @@ public class UIManager(IShaderManager shaderManager, MtgpClient client)
 	private readonly List<int> shaderBuffers = [];
 
 	private int lastBufferOffset = 0;
+
+	private int? outputPipeActionList;
 
 	private record StringSplitData(int PipeID);
 
@@ -24,6 +25,11 @@ public class UIManager(IShaderManager shaderManager, MtgpClient client)
 
 		return shader;
 	}
+
+	//public async Task<int> CreatePanel()
+	//{
+
+	//}
 
 	public async Task<int> CreateStringSplitArea(Rect2D area)
 	{
@@ -64,7 +70,7 @@ public class UIManager(IShaderManager shaderManager, MtgpClient client)
 											new(ShaderStage.Vertex, vertexShader, "Main"),
 											new(ShaderStage.Fragment, fragmentShader, "Main")
 										],
-										new CreateRenderPipelineInfo.VertexInputInfo(
+										new(
 											[
 												new(0, 16, InputRate.PerInstance)
 											],
