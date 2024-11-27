@@ -148,6 +148,13 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 		ThrowIfError(result);
 	}
 
+	public async Task AddTriggerPipeAction(int actionListId, int pipe)
+	{
+		var result = await this.connection.SendAsync(new AddTriggerPipeActionRequest(Interlocked.Increment(ref this.requestId), actionListId, pipe));
+
+		ThrowIfError(result);
+	}
+
 	public async Task SetBufferData(int buffer, int offset, byte[] data)
 	{
 		var result = await this.connection.SendAsync(new SetBufferDataRequest(Interlocked.Increment(ref this.requestId), buffer, offset, data));
@@ -188,6 +195,13 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 	public async Task Send(int pipe, byte[] value)
 	{
 		var result = await this.connection.SendAsync(new SendRequest(Interlocked.Increment(ref this.requestId), pipe, value));
+
+		ThrowIfError(result);
+	}
+
+	public async Task ClearStringSplitPipeline(int pipeline)
+	{
+		var result = await this.connection.SendAsync(new ClearStringSplitPipelineRequest(Interlocked.Increment(ref this.requestId), pipeline));
 
 		ThrowIfError(result);
 	}
@@ -259,9 +273,10 @@ public class ResourceBuilder(MtgpClient client)
 									   CreateRenderPipelineInfo.FragmentAttribute[] fragmentAttributes,
 									   Rect3D viewport,
 									   Rect3D[]? scissors,
+									   bool enableAlpha,
 									   PolygonMode polygonMode,
 									   string? reference = null)
-		=> this.Add(new CreateRenderPipelineInfo(shaderStages, vertexInput, fragmentAttributes, viewport, scissors, polygonMode, reference), out task);
+		=> this.Add(new CreateRenderPipelineInfo(shaderStages, vertexInput, fragmentAttributes, viewport, scissors, enableAlpha, polygonMode, reference), out task);
 
 	public ResourceBuilder Shader(out Task<int> task, byte[] data, string? reference = null)
 		=> this.Add(new CreateShaderInfo(data, reference), out task);

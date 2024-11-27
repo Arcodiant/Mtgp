@@ -349,6 +349,10 @@ public class ShaderInterpreter
 									{
 										results2[result] = MemoryMarshal.AsRef<(Field, Field)>(input[variableInfo.Location!.Value].Span);
 									}
+									else if (type.Size == 12)
+									{
+										results3[result] = MemoryMarshal.AsRef<(Field, Field, Field)>(input[variableInfo.Location!.Value].Span);
+									}
 									else
 									{
 										throw new InvalidOperationException("Invalid input size");

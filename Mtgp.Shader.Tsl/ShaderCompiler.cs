@@ -574,7 +574,7 @@ public class ShaderCompiler
 			id = nextId++;
 			type = ShaderType.Int(4);
 
-			return writer.Load(id, GetTypeId(ref writer, ShaderType.Int(4)), GetVarId(expression));
+			return writer.Load(id, GetTypeId(ref writer, GetVarType(expression)), GetVarId(expression));
 		}
 		ShaderWriter WriteEqualityExpression(ShaderWriter writer, BinaryExpression expression, out int id, out ShaderType type)
 		{
@@ -660,6 +660,7 @@ public class ShaderCompiler
 		}
 
 		int GetVarId(BinaryExpression expression) => varNames[(((TokenExpression)expression.Left).Value, ((TokenExpression)expression.Right).Value)];
+		ShaderType GetVarType(BinaryExpression expression) => vars.Single(x => x.Id == GetVarId(expression)).Type;
 		int GetTokenVarId(TokenExpression expression) => varNames[(expression.Value, "")];
 
 		byte[] result = [.. shaderHeader[..headerWriter.Writer.WriteCount], .. shaderCode[..writer.Writer.WriteCount]];

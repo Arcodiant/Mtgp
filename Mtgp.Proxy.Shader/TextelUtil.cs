@@ -41,18 +41,26 @@ public static class TextelUtil
 	public static void Set(Span<byte> characterBuffer,
 						  Span<byte> foregroundBuffer,
 						  Span<byte> backgroundBuffer,
-						  (Rune, Colour, Colour) textel,
+						  (Rune Character, Colour Foreground, Colour Background) textel,
 						  ImageFormat characterFormat,
 						  ImageFormat foregroundFormat,
 						  ImageFormat backgroundFormat,
+						  float alpha,
 						  Offset3D offset,
 						  Extent3D imageExtent)
 	{
 		int index = offset.X + offset.Y * imageExtent.Width + offset.Z * imageExtent.Width * imageExtent.Depth;
 
-		SetCharacter(characterBuffer[(index * characterFormat.GetSize())..], textel.Item1, characterFormat);
-		SetColour(foregroundBuffer[(index * foregroundFormat.GetSize())..], textel.Item2, foregroundFormat);
-		SetColour(backgroundBuffer[(index * backgroundFormat.GetSize())..], textel.Item3, backgroundFormat);
+		SetCharacter(characterBuffer[(index * characterFormat.GetSize())..], textel.Character, characterFormat);
+		SetColour(foregroundBuffer[(index * foregroundFormat.GetSize())..], textel.Foreground, foregroundFormat);
+
+		if (alpha < 1.0f)
+		{
+			Colour background = GetColour(backgroundBuffer[(index * backgroundFormat.GetSize())..], backgroundFormat);
+			textel.Background = Colour.Lerp(background, textel.Background, alpha);
+		}
+
+		SetColour(backgroundBuffer[(index * backgroundFormat.GetSize())..], textel.Background, backgroundFormat);
 	}
 
 	public static void SetCharacter(Span<byte> data, Rune character, ImageFormat format)

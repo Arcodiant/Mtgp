@@ -2,7 +2,7 @@
 
 public record ShaderType(string Id, int Size, ShaderStorageClass? StorageClass = null, int ElementCount = 1, ShaderType? ElementType = null, ShaderType[]? Members = null)
 {
-	public static ShaderType Textel => StructOf([Int(4), VectorOf(Float(4), 3), VectorOf(Float(4), 3)]);
+	public static ShaderType Textel => StructOf([Int(4), VectorOf(Float(4), 3), VectorOf(Float(4), 3), Float(4)]);
 	public static ShaderType Bool => new("bool", 1);
 	public static ShaderType Float(int width) => new("float", width);
 	public static ShaderType Int(int width) => new("int", width);

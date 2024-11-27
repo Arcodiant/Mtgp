@@ -47,7 +47,7 @@ namespace Mtgp.SpaceGame
 
 			var uiManager = new UIManager(shaderManager, client);
 
-			int area = await uiManager.CreateStringSplitArea(new Rect2D((1, 1), (78, 22)));
+			int area = await uiManager.CreateStringSplitArea(new Rect2D((1, 1), (78, 22)), true);
 
 			client.SendReceived += async message =>
 			{
@@ -57,6 +57,8 @@ namespace Mtgp.SpaceGame
 			};
 
 			await client.SetDefaultPipe(DefaultPipe.Input, -1, [], false);
+
+			await uiManager.CreatePanel(new Rect2D((0, 0), (78, 22)));
 
 			await uiManager.StringSplitSend(area, "Welcome to the Space Game!");
 

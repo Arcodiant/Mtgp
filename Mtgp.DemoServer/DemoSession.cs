@@ -168,6 +168,7 @@ internal class DemoSession(Factory factory, TcpClient tcpClient, ILogger<DemoSes
 						 [new(0, ShaderType.Int(4), new(1, 0, 0)), new(1, ShaderType.Int(4), new(0, 1, 0))],
 						 new(new(0, 0, 0), new(80, 24, 1)),
 						 null,
+						 false,
 						 PolygonMode.Fill)
 					.BuildAsync();
 

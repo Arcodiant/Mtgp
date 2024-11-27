@@ -4,14 +4,19 @@ namespace Mtgp.Proxy.Shader;
 
 internal static class MathsUtil
 {
-	public static (float, float) XY(this (float X, float Y, float W) vector)
+	public static (float, float) XY(this (float X, float Y, float Z) vector)
 		=> (vector.X, vector.Y);
 
-	public static (float, float, float) Normalise((float X, float Y, float W) vector)
+	public static (float, float, float) Normalise((float X, float Y, float Z) vector)
 	{
-		float length = MathF.Sqrt(vector.X * vector.X + vector.Y * vector.Y + vector.W * vector.W);
+		float length = GetLength(vector);
 
-		return (vector.X / length, vector.Y / length, vector.W / length);
+		return (vector.X / length, vector.Y / length, vector.Z / length);
+	}
+
+	public static float GetLength((float X, float Y, float Z) vector)
+	{
+		return MathF.Sqrt(vector.X * vector.X + vector.Y * vector.Y + vector.Z * vector.Z);
 	}
 
 	public static bool IsWithin((int X, int Y) point, (int X, int Y) topLeft, (int X, int Y) bottomRight)
@@ -20,8 +25,8 @@ internal static class MathsUtil
 	public static float DotProduct((float X, float Y) a, (float X, float Y) b)
 		=> a.X * b.X + a.Y * b.Y;
 
-	public static float DotProduct((float X, float Y, float W) a, (float X, float Y, float W) b)
-		=> a.X * b.X + a.Y * b.Y + a.W * b.W;
+	public static float DotProduct((float X, float Y, float Z) a, (float X, float Y, float Z) b)
+		=> a.X * b.X + a.Y * b.Y + a.Z * b.Z;
 
 	public static void Lerp(Span<byte> fromValue, Span<byte> toValue, Span<byte> output, float t, ShaderType type)
 	{
@@ -38,6 +43,15 @@ internal static class MathsUtil
 			float to = BitConverter.ToSingle(toValue);
 			float result = from + (to - from) * t;
 			BitConverter.GetBytes(result).CopyTo(output);
+		}
+		else if (type.IsVector())
+		{
+			int elementSize = type.ElementType!.Size;
+
+			for (int index = 0; index < type.ElementCount; index++)
+			{
+				Lerp(fromValue[(index * elementSize)..], toValue[(index * elementSize)..], output[(index * elementSize)..], t, type.ElementType!);
+			}
 		}
 		else
 		{

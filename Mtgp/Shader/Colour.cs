@@ -12,4 +12,6 @@ public record struct Colour(float R, float G, float B)
 
 	public static readonly Colour Black = (0, 0, 0);
 	public static readonly Colour White = (1, 1, 1);
+
+	public static Colour Lerp(Colour a, Colour b, float t) => (a.R + (b.R - a.R) * t, a.G + (b.G - a.G) * t, a.B + (b.B - a.B) * t);
 }

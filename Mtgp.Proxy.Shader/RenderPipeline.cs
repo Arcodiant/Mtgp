@@ -9,6 +9,7 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 							  (int Location, ShaderType Type, Scale InterpolationScale)[] fragmentAttributes,
 							  Rect3D viewport,
 							  Rect3D[]? scissors,
+							  bool enableAlpha,
 							  PolygonMode polygonMode)
 {
 
@@ -111,14 +112,17 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 							var attribute = fragmentAttributes[x.Location];
 							var vertexOutputAttribute = vertex.Outputs[x.Location];
 
-							var fromValue = vertexOutput[vertexOutputAttribute.Offset..][..vertexOutputAttribute.Type.Size];
-							var toValue = vertexOutput[(vertex.OutputSize + vertexOutputAttribute.Offset)..][..vertexOutputAttribute.Type.Size];
+							int dataSize = vertexOutputAttribute.Type.ElementType!.Size;
+
+							var fromValue = vertexOutput[vertexOutputAttribute.Offset..][..dataSize];
+							var toValue = vertexOutput[(vertex.OutputSize + vertexOutputAttribute.Offset)..][..dataSize];
 
 							var scale = MathsUtil.Normalise(attribute.InterpolationScale);
+							float scaleLength = MathsUtil.GetLength(attribute.InterpolationScale);
 
-							var output = fragmentInput.AsMemory(x.Offset, x.Type.Size);
+							var output = fragmentInput.AsMemory(x.Offset, dataSize);
 
-							MathsUtil.Lerp(fromValue, toValue, output.Span, MathsUtil.DotProduct((xNormalised, yNormalised, 0), scale), attribute.Type);
+							MathsUtil.Lerp(fromValue, toValue, output.Span, MathsUtil.DotProduct((xNormalised, yNormalised, 0), scale) / scaleLength, attribute.Type);
 
 							return (ReadOnlyMemory<byte>)output;
 						}).ToArray();
@@ -135,7 +139,10 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 							.Read(out float foregroundBlue)
 							.Read(out float backgroundRed)
 							.Read(out float backgroundGreen)
-							.Read(out float backgroundBlue);
+							.Read(out float backgroundBlue)
+							.Read(out float alpha);
+
+						alpha = enableAlpha ? alpha : 1.0f;
 
 						TextelUtil.Set(frameBuffers[0].Character!.Data.Span,
 										 frameBuffers[0].Foreground!.Data.Span,
@@ -144,6 +151,7 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 										 frameBuffers[0].Character!.Format,
 										 frameBuffers[0].Foreground!.Format,
 										 frameBuffers[0].Background!.Format,
+										 alpha,
 										 new(pixelX, pixelY, 0),
 										 new(frameBuffers[0].Character!.Size.Width, frameBuffers[0].Character!.Size.Height, frameBuffers[0].Character!.Size.Depth));
 					}

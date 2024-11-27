@@ -119,14 +119,14 @@ internal class ProxyHost(TelnetClient telnetClient)
 
 	public (int, int, int) GetPresentImage() => (0, 1, 2);
 
-	public int CreateRenderPipeline(Dictionary<ShaderStage, int> shaderStages,
-								 (int Binding, int Stride, InputRate InputRate)[] vertexBufferBindings,
-								 (int Location, int Binding, ShaderType Type, int Offset)[] vertexAttributes,
-								 (int Location, ShaderType Type, Scale InterpolationScale)[] fragmentAttributes,
-								 Rect3D viewport,
-								 Rect3D[]? scissors,
-								 PolygonMode polygonMode)
-		=> AddResource(this.renderPipelines, new RenderPipeline(shaderStages.ToDictionary(x => x.Key, x => this.shaders[x.Value]), vertexBufferBindings, vertexAttributes, fragmentAttributes, viewport, scissors, polygonMode));
+	//public int CreateRenderPipeline(Dictionary<ShaderStage, int> shaderStages,
+	//							 (int Binding, int Stride, InputRate InputRate)[] vertexBufferBindings,
+	//							 (int Location, int Binding, ShaderType Type, int Offset)[] vertexAttributes,
+	//							 (int Location, ShaderType Type, Scale InterpolationScale)[] fragmentAttributes,
+	//							 Rect3D viewport,
+	//							 Rect3D[]? scissors,
+	//							 PolygonMode polygonMode)
+	//	=> AddResource(this.renderPipelines, new RenderPipeline(shaderStages.ToDictionary(x => x.Key, x => this.shaders[x.Value]), vertexBufferBindings, vertexAttributes, fragmentAttributes, viewport, scissors, polygonMode));
 
 	public int CreateActionList()
 		=> AddResource(this.actionLists, []);

@@ -7,6 +7,11 @@ public class StringSplitPipeline(Memory<byte> characterBuffer, Memory<byte> inst
 {
 	private readonly byte[] lineBuffer = new byte[maxLineCount * regionWidth];
 
+	public void Clear()
+	{
+		new BitWriter(lineBuffer).Write(0);
+	}
+
 	public void Execute(Memory<byte> pipeData)
 	{
 		const int instanceSize = 16;

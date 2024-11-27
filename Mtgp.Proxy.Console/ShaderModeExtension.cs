@@ -74,6 +74,7 @@ internal class ShaderModeExtension(TelnetClient telnetClient)
 		proxy.RegisterMessageHandler<GetPresentImageRequest>(GetPresentImage);
 		proxy.RegisterMessageHandler<SetBufferDataRequest>(SetBufferData);
 		proxy.RegisterMessageHandler<ResetActionListRequest>(ResetActionList);
+		proxy.RegisterMessageHandler<ClearStringSplitPipelineRequest>(ClearStringSplitPipeline);
 		proxy.RegisterMessageHandler<AddCopyBufferToImageActionRequest>(AddCopyBufferToImageAction);
 		proxy.RegisterMessageHandler<AddClearBufferActionRequest>(AddClearBufferAction);
 		proxy.RegisterMessageHandler<AddBindVertexBuffersRequest>(AddBindVertexBuffers);
@@ -90,6 +91,22 @@ internal class ShaderModeExtension(TelnetClient telnetClient)
 				await proxy.SendOutgoingRequestAsync(new SendRequest(0, pipeInfo.PipeId, Encoding.UTF32.GetBytes(message.TrimEnd('\r', '\n'))));
 			}
 		};
+	}
+
+	private MtgpResponse ClearStringSplitPipeline(ClearStringSplitPipelineRequest request)
+	{
+		var pipeline = this.resourceStore.Get<IFixedFunctionPipeline>(request.PipelineId);
+
+		if (pipeline is StringSplitPipeline stringSplitPipeline)
+		{
+			stringSplitPipeline.Clear();
+
+			return new MtgpResponse(0, "ok");
+		}
+		else
+		{
+			return new MtgpResponse(0, "error");
+		}
 	}
 
 	private MtgpResponse AddTriggerPipeAction(AddTriggerPipeActionRequest request)
@@ -207,7 +224,7 @@ internal class ShaderModeExtension(TelnetClient telnetClient)
 		{
 			var state = new ActionExecutionState
 			{
-				PipeData = pipeData 
+				PipeData = pipeData
 			};
 
 			foreach (var action in this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions)
@@ -232,8 +249,9 @@ internal class ShaderModeExtension(TelnetClient telnetClient)
 								 (int Location, ShaderType Type, Scale InterpolationScale)[] fragmentAttributes,
 								 Rect3D viewport,
 								 Rect3D[]? scissors,
+								 bool enableAlpha,
 								 PolygonMode polygonMode)
-			=> new(shaderStages.ToDictionary(x => x.Key, x => this.resourceStore.Get<ShaderInterpreter>(x.Value)), vertexBufferBindings, vertexAttributes, fragmentAttributes, viewport, scissors, polygonMode);
+			=> new(shaderStages.ToDictionary(x => x.Key, x => this.resourceStore.Get<ShaderInterpreter>(x.Value)), vertexBufferBindings, vertexAttributes, fragmentAttributes, viewport, scissors, enableAlpha, polygonMode);
 
 		IFixedFunctionPipeline CreateStringSplitPipeline(CreateStringSplitPipelineInfo info)
 			=> new StringSplitPipeline(this.resourceStore.Get<ImageState>(info.LineImage.Id!.Value).Data,
@@ -263,6 +281,7 @@ internal class ShaderModeExtension(TelnetClient telnetClient)
 																										renderPipelineInfo.FragmentAttributes.Select(x => (x.Location, x.Type, x.InterpolationScale)).ToArray(),
 																										renderPipelineInfo.Viewport,
 																										renderPipelineInfo.Scissors,
+																										renderPipelineInfo.enableAlpha,
 																										renderPipelineInfo.PolygonMode)),
 					_ => ResourceCreateResult.InvalidRequest
 				};
