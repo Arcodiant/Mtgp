@@ -16,14 +16,14 @@ namespace Mtgp.SpaceGame
 		{
 		}
 
-		private IEnumerable<Entity> GetByRelationship<T>(Entity from)
+		private static List<(T Relationship, Entity To)> GetByRelationship<T>(Entity from)
 		{
-			var result = new List<Entity>();
+			var result = new List<(T, Entity)>();
 
 			ref var relation = ref from.GetRelationships<T>();
 			foreach (var to in relation)
 			{
-				result.Add(to.Key);
+				result.Add((to.Value, to.Key));
 			}
 
 			return result;
@@ -62,18 +62,53 @@ namespace Mtgp.SpaceGame
 
 			await uiManager.StringSplitSend(area, "Welcome to the Space Game!");
 
-			var playerLocation = GetByRelationship<Inside>(playerMob).First();
+			var (_, playerLocation) = GetByRelationship<Inside>(playerMob).First();
 
 			await uiManager.StringSplitSend(area, $"You are in the {playerLocation.Get<Interior>().Description}");
 
 			var exits = GetByRelationship<Door>(playerLocation);
 
-			foreach (var exit in exits)
+			foreach (var (exit, room) in exits)
 			{
-				await uiManager.StringSplitSend(area, $"You can go to the {exit.Get<Interior>().Description}");
+				await uiManager.StringSplitSend(area, $"You can go to the {room.Get<Interior>().Description} via {exit.Name}");
 			}
 
-			await incoming.Reader.WaitToReadAsync(cancellationToken);
+			var inputBuilder = new StringBuilder();
+
+			await foreach (var input in incoming.Reader.ReadAllAsync(cancellationToken))
+			{
+				bool finished = false;
+
+				inputBuilder.Append(input.Trim());
+
+				if (input.EndsWith("\n"))
+				{
+					var inputString = inputBuilder.ToString().Trim();
+
+					inputBuilder.Clear();
+
+					var parts = inputString.Split(' ');
+
+					if (parts.Length > 0)
+					{
+						switch (parts[0].ToLower())
+						{
+							case "quit":
+								await uiManager.StringSplitSend(area, "Bye!");
+								finished = true;
+								break;
+							default:
+								await uiManager.StringSplitSend(area, "Unknown command.");
+								break;
+						}
+					}
+				}
+
+				if (finished)
+				{
+					break;
+				}
+			}
 		}
 	}
 }

@@ -88,7 +88,7 @@ internal class ShaderModeExtension(TelnetClient telnetClient)
 		{
 			if (this.defaultPipeBindings.TryGetValue(pipe, out var pipeInfo))
 			{
-				await proxy.SendOutgoingRequestAsync(new SendRequest(0, pipeInfo.PipeId, Encoding.UTF32.GetBytes(message.TrimEnd('\r', '\n'))));
+				await proxy.SendOutgoingRequestAsync(new SendRequest(0, pipeInfo.PipeId, Encoding.UTF32.GetBytes(message)));
 			}
 		};
 	}

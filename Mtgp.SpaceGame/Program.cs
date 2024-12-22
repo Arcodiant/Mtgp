@@ -23,8 +23,8 @@ try
 	var crewArea = world.Create(new Interior("Crew Area"));
 	var cockpit = world.Create(new Interior("Cockpit"));
 
-	world.AddRelationship<Door>(crewArea, cockpit);
-	world.AddRelationship<Door>(cockpit, crewArea);
+	world.AddRelationship<Door>(crewArea, cockpit, new("Fore"));
+	world.AddRelationship<Door>(cockpit, crewArea, new("Aft"));
 
 	var builder = Host.CreateApplicationBuilder(args);
 	builder.Services.AddSingleton(world);
