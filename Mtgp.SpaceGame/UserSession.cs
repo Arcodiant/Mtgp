@@ -62,16 +62,26 @@ namespace Mtgp.SpaceGame
 
 			await uiManager.StringSplitSend(area, "Welcome to the Space Game!");
 
-			var (_, playerLocation) = GetByRelationship<Inside>(playerMob).First();
+			(Entity PlayerLocation, List<(Door Exit, Entity Room)>) GetLocationInfo()
+            {
+                var (_, playerLocation) = GetByRelationship<Inside>(playerMob).First();
 
-			await uiManager.StringSplitSend(area, $"You are in the {playerLocation.Get<Interior>().Description}");
+                return (playerLocation, GetByRelationship<Door>(playerLocation));
+            }
 
-			var exits = GetByRelationship<Door>(playerLocation);
-
-			foreach (var (exit, room) in exits)
+			async Task DisplayLocation()
 			{
-				await uiManager.StringSplitSend(area, $"You can go to the {room.Get<Interior>().Description} via {exit.Name}");
+				var (playerLocation, exits) = GetLocationInfo();
+
+				await uiManager.StringSplitSend(area, $"You are in the {playerLocation.Get<Interior>().Description}");
+
+				foreach (var (exit, room) in exits)
+				{
+					await uiManager.StringSplitSend(area, $"You can go to the {room.Get<Interior>().Description} via {exit.Name}");
+				}
 			}
+
+			await DisplayLocation();
 
 			var inputBuilder = new StringBuilder();
 
@@ -79,9 +89,9 @@ namespace Mtgp.SpaceGame
 			{
 				bool finished = false;
 
-				inputBuilder.Append(input.Trim());
+				inputBuilder.Append(input);
 
-				if (input.EndsWith("\n"))
+				if (input.EndsWith('\n'))
 				{
 					var inputString = inputBuilder.ToString().Trim();
 
@@ -93,6 +103,30 @@ namespace Mtgp.SpaceGame
 					{
 						switch (parts[0].ToLower())
 						{
+							case "go":
+								if (parts.Length > 1)
+                                {
+                                    var (playerLocation, exits) = GetLocationInfo();
+
+                                    var exit = exits.FirstOrDefault(e => e.Exit.Name.Equals(parts[1], StringComparison.CurrentCultureIgnoreCase));
+
+                                    if (exit != default)
+                                    {
+										world.RemoveRelationship<Inside>(playerMob, playerLocation);
+                                        world.AddRelationship<Inside>(playerMob, exit.Room);
+
+                                        await DisplayLocation();
+                                    }
+                                    else
+                                    {
+                                        await uiManager.StringSplitSend(area, "Unknown exit.");
+                                    }
+                                }
+                                else
+                                {
+                                    await uiManager.StringSplitSend(area, "Go where?");
+                                }
+                                break;
 							case "quit":
 								await uiManager.StringSplitSend(area, "Bye!");
 								finished = true;

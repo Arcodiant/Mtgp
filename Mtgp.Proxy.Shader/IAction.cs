@@ -1,8 +1,10 @@
-﻿namespace Mtgp.Proxy.Shader;
+﻿using Microsoft.Extensions.Logging;
+
+namespace Mtgp.Proxy.Shader;
 
 public interface IAction
 {
-	void Execute(ActionExecutionState state);
+	void Execute(ILogger logger, ActionExecutionState state);
 }
 
 public class ActionExecutionState

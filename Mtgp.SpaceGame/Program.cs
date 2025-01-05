@@ -28,7 +28,6 @@ try
 
 	var builder = Host.CreateApplicationBuilder(args);
 	builder.Services.AddSingleton(world);
-	builder.Services.AddTransient<Factory>();
 	builder.Services.AddDefaultFactories();
 	builder.Services.AddImplementingFactory<IMtgpSession, UserSession, MtgpClient>();
 	builder.Services.AddHostedService<MtgpServer>();
@@ -40,6 +39,8 @@ try
 	});
 
 	var host = builder.Build();
+
+	Console.Title = "Space Game Server";
 
 	await host.RunAsync();
 }

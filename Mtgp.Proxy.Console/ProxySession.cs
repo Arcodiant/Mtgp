@@ -2,12 +2,13 @@
 using Mtgp.Comms;
 using Mtgp.Messages;
 using Mtgp.Shader;
+using System.Diagnostics;
 using System.Net.Sockets;
 using System.Text.Json;
 
 namespace Mtgp.Proxy.Console
 {
-	internal class ProxySession(TcpClient telnetTcpClient, ILogger<ProxySession> logger)
+	internal class ProxySession(TcpClient telnetTcpClient, ILogger<ProxySession> logger, ILoggerFactory loggerFactory)
 	{
 		public async Task RunAsync()
 		{
@@ -39,7 +40,7 @@ namespace Mtgp.Proxy.Console
 			if (terminalTypes.Contains("xterm"))
 			{
 				logger.LogInformation("Using shader mode");
-				proxy.AddExtension(new ShaderModeExtension(telnetClient));
+				proxy.AddExtension(new ShaderModeExtension(loggerFactory.CreateLogger<ShaderModeExtension>(), telnetClient));
 			}
 			else
 			{
@@ -100,9 +101,15 @@ namespace Mtgp.Proxy.Console
 
 						logger.LogDebug("Received request: {@Request}", request);
 
+						var stopwatch = Stopwatch.StartNew();
+
 						var response = proxy.HandleMessage(request);
 
 						await mtgpStream.WriteMessageAsync(response, response.GetType(), logger);
+
+						stopwatch.Stop();
+
+						logger.LogDebug("Handled request {RequestID} in {ElapsedMs}ms", request.Id, stopwatch.Elapsed.TotalMilliseconds);
 					}
 				}
 			}

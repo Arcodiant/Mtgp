@@ -1,9 +1,11 @@
-﻿namespace Mtgp.Proxy.Shader;
+﻿using Microsoft.Extensions.Logging;
+
+namespace Mtgp.Proxy.Shader;
 
 public class RunPipelineAction(IFixedFunctionPipeline pipeline)
 	: IAction
 {
-	public void Execute(ActionExecutionState state)
+	public void Execute(ILogger logger, ActionExecutionState state)
 	{
 		pipeline.Execute(state.PipeData);
 	}

@@ -1,11 +1,12 @@
-﻿using Mtgp.Shader;
+﻿using Microsoft.Extensions.Logging;
+using Mtgp.Shader;
 
 namespace Mtgp.Proxy.Shader;
 
 public class CopyBufferToImageAction(byte[] buffer, ImageFormat bufferFormat, ImageState image, Messages.AddCopyBufferToImageActionRequest.CopyRegion[] copyRegions)
 	: IAction
 {
-	public void Execute(ActionExecutionState state)
+	public void Execute(ILogger logger, ActionExecutionState state)
 	{
 		if (bufferFormat != image.Format)
 			throw new InvalidOperationException("Buffer format does not match image");

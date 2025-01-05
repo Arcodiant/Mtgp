@@ -1,4 +1,6 @@
-﻿using Mtgp.Shader;
+﻿using Microsoft.Extensions.Logging;
+using Mtgp.Shader;
+using System.Diagnostics;
 using System.Text;
 
 namespace Mtgp.Proxy.Shader;
@@ -13,7 +15,7 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 							  PolygonMode polygonMode)
 {
 
-	public void Execute(int instanceCount, int vertexCount, (byte[] Buffer, int Offset)[] vertexBuffers, ImageState[] imageAttachments, Memory<byte>[] bufferViewAttachments, FrameBuffer[] frameBuffers)
+	public void Execute(ILogger logger, int instanceCount, int vertexCount, (byte[] Buffer, int Offset)[] vertexBuffers, ImageState[] imageAttachments, Memory<byte>[] bufferViewAttachments, FrameBuffer[] frameBuffers)
 	{
 		int timerValue = Environment.TickCount;
 
@@ -39,7 +41,9 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 		{
 			for (int primitiveIndex = 0; primitiveIndex < primitiveCount; primitiveIndex++)
 			{
-				for (int vertexIndex = 0; vertexIndex < vertexPerPrimitive; vertexIndex++)
+                var vertexStopwatch = Stopwatch.StartNew();
+
+                for (int vertexIndex = 0; vertexIndex < vertexPerPrimitive; vertexIndex++)
 				{
 					inputBuiltins = new()
 					{
@@ -67,6 +71,12 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 
 					vertex.Execute(imageAttachments, bufferViewAttachments, inputBuiltins, inputs, ref vertexOutputBuiltins[vertexIndex], vertexOutput.AsSpan(vertexIndex * vertex.OutputSize, vertex.OutputSize));
 				}
+
+				vertexStopwatch.Stop();
+
+				logger.LogDebug("Vertex shaders took {ElapsedMs}ms", vertexStopwatch.ElapsedMilliseconds);
+
+				var fragmentStopwatch = Stopwatch.StartNew();
 
 				int fromX = vertexOutputBuiltins[0].PositionX;
 				int fromY = vertexOutputBuiltins[0].PositionY;
@@ -155,8 +165,12 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 										 new(pixelX, pixelY, 0),
 										 new(frameBuffers[0].Character!.Size.Width, frameBuffers[0].Character!.Size.Height, frameBuffers[0].Character!.Size.Depth));
 					}
-				}
-			}
+                }
+
+				fragmentStopwatch.Stop();
+
+                logger.LogDebug("Fragment shaders took {ElapsedMs}ms", fragmentStopwatch.ElapsedMilliseconds);
+            }
 		}
 	}
 }

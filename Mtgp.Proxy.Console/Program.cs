@@ -22,6 +22,8 @@ try
 
 	var host = builder.Build();
 
+	Console.Title = "MTGP Proxy";
+
 	_ = Task.Run(() =>
 	{
 		Process.Start(new ProcessStartInfo("putty", $"-telnet localhost 12345"));

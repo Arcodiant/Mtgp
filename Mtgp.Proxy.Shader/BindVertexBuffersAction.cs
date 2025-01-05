@@ -1,8 +1,10 @@
-﻿namespace Mtgp.Proxy.Shader;
+﻿using Microsoft.Extensions.Logging;
+
+namespace Mtgp.Proxy.Shader;
 
 public class BindVertexBuffersAction(int firstBinding, (byte[] Buffer, int Offset)[] buffers) : IAction
 {
-	public void Execute(ActionExecutionState state)
+	public void Execute(ILogger logger, ActionExecutionState state)
 	{
 		var prefix = state.VertexBuffers[..firstBinding];
 

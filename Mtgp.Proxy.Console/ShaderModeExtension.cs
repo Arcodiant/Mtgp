@@ -1,13 +1,15 @@
-﻿using Mtgp.Messages;
+﻿using Microsoft.Extensions.Logging;
+using Mtgp.Messages;
 using Mtgp.Messages.Resources;
 using Mtgp.Proxy.Shader;
 using Mtgp.Shader;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Mtgp.Proxy.Console;
 
-internal class ShaderModeExtension(TelnetClient telnetClient)
+internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetClient telnetClient)
 	: IProxyExtension
 {
 	private class ResourceStore
@@ -59,7 +61,7 @@ internal class ShaderModeExtension(TelnetClient telnetClient)
 
 		telnetClient.HideCursor();
 
-		telnetClient.SetWindowSize(36, 120);
+		//telnetClient.SetWindowSize(36, 120);
 
 		this.resourceStore.Add(new ImageState((80, 24, 1), ImageFormat.T32_SInt));
 		this.resourceStore.Add(new ImageState((80, 24, 1), ImageFormat.R32G32B32_SFloat));
@@ -220,16 +222,26 @@ internal class ShaderModeExtension(TelnetClient telnetClient)
 
 	private MtgpResponse SetActionTrigger(SetActionTriggerRequest request)
 	{
-		this.resourceStore.Get<PipeInfo>(request.Pipe).Handlers.Add(pipeData =>
+		int pipeId = request.Pipe;
+
+		this.resourceStore.Get<PipeInfo>(pipeId).Handlers.Add(pipeData =>
 		{
 			var state = new ActionExecutionState
 			{
 				PipeData = pipeData
 			};
 
+			logger.LogDebug("Running Pipe {PipeId}", pipeId);
+
 			foreach (var action in this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions)
 			{
-				action.Execute(state);
+				var stopwatch = Stopwatch.StartNew();
+
+				action.Execute(logger, state);
+
+				stopwatch.Stop();
+
+				logger.LogDebug("Pipe {PipeId} Action {Action} took {ElapsedMs}ms", pipeId, action.ToString(), stopwatch.ElapsedMilliseconds);
 			}
 		});
 

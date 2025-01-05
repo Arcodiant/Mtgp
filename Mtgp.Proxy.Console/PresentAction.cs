@@ -1,4 +1,5 @@
-﻿using Mtgp.Proxy.Shader;
+﻿using Microsoft.Extensions.Logging;
+using Mtgp.Proxy.Shader;
 using Mtgp.Shader;
 
 namespace Mtgp;
@@ -6,15 +7,15 @@ namespace Mtgp;
 public class PresentAction(FrameBuffer frameBuffer, TelnetClient client)
 	: IAction
 {
-	public void Execute(ActionExecutionState state)
-	{
-		var deltas = new List<RuneDelta>();
+	public void Execute(ILogger logger, ActionExecutionState state)
+    {
+        int height = frameBuffer.Character!.Size.Height;
+        int width = frameBuffer.Character!.Size.Width;
+
+        var deltas = new RuneDelta[height * width];
 		int characterStep = frameBuffer.Character!.Format.GetSize();
 		int foregroundStep = frameBuffer.Foreground!.Format.GetSize();
 		int backgroundStep = frameBuffer.Background!.Format.GetSize();
-
-		int height = frameBuffer.Character!.Size.Height;
-		int width = frameBuffer.Character!.Size.Width;
 
 		for (int y = 0; y < height; y++)
 		{
@@ -28,11 +29,10 @@ public class PresentAction(FrameBuffer frameBuffer, TelnetClient client)
 				var foreground = TextelUtil.GetColour(foregroundDatum, frameBuffer.Foreground!.Format);
 				var background = TextelUtil.GetColour(backgroundDatum, frameBuffer.Background!.Format);
 
-				deltas.Add(new(x, y, rune, foreground, background));
+				deltas[(y * width) + x] = new(x, y, rune, foreground, background);
 			}
-
 		}
 
-		client.Draw(deltas.ToArray());
+		client.Draw(deltas);
 	}
 }

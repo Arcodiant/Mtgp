@@ -1,4 +1,5 @@
-﻿using Mtgp.Shader;
+﻿using Microsoft.Extensions.Logging;
+using Mtgp.Shader;
 
 namespace Mtgp.Proxy.Shader;
 
@@ -7,7 +8,7 @@ public class ClearAction(ImageState image)
 {
     private readonly ImageState image = image;
 
-    public void Execute(ActionExecutionState state)
+    public void Execute(ILogger logger, ActionExecutionState state)
     {
         int step = image.Format.GetSize();
         int size = image.Size.Width * image.Size.Height * image.Size.Depth * step;
