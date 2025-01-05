@@ -74,7 +74,7 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 
 				vertexStopwatch.Stop();
 
-				logger.LogDebug("Vertex shaders took {ElapsedMs}ms", vertexStopwatch.ElapsedMilliseconds);
+				logger.LogDebug("Vertex shaders took {ElapsedMs}ms", vertexStopwatch.Elapsed.TotalMilliseconds);
 
 				var fragmentStopwatch = Stopwatch.StartNew();
 
@@ -169,7 +169,7 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 
 				fragmentStopwatch.Stop();
 
-                logger.LogDebug("Fragment shaders took {ElapsedMs}ms", fragmentStopwatch.ElapsedMilliseconds);
+                logger.LogDebug("Fragment shaders took {ElapsedMs}ms", fragmentStopwatch.Elapsed.TotalMilliseconds);
             }
 		}
 	}

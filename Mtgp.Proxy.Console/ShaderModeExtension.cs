@@ -300,7 +300,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 			}
 			catch (Exception ex)
 			{
-				//logger.LogError(ex, "Error creating resource: {@CreateInfo}", resource);
+				logger.LogError(ex, "Error creating resource: {@CreateInfo}", resource);
 				result = ResourceCreateResult.InternalError;
 			}
 

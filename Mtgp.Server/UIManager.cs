@@ -16,7 +16,7 @@ public class UIManager(IShaderManager shaderManager, MtgpClient client)
 	private (int Pipe, int ActionList)? mainPipe;
 
 
-	private record StringSplitData(int PipeID);
+	private record StringSplitData(int PipeId, int PipelineId);
 	private record PanelData();
 
 	private async Task<int> GetShaderAsync(string filePath)
@@ -174,7 +174,7 @@ public class UIManager(IShaderManager shaderManager, MtgpClient client)
 
 		await client.SetActionTrigger(outputPipe, outputPipeActionList);
 
-		this.stringSplitAreas.Add(new(outputPipe));
+		this.stringSplitAreas.Add(new(outputPipe, splitStringPipeline));
 
 		return this.stringSplitAreas.Count - 1;
 	}
@@ -211,6 +211,12 @@ public class UIManager(IShaderManager shaderManager, MtgpClient client)
 
 	public async Task StringSplitSend(int stringSplitArea, string text)
 	{
-		await client.Send(this.stringSplitAreas[stringSplitArea].PipeID, Encoding.UTF32.GetBytes(text));
+		await client.Send(this.stringSplitAreas[stringSplitArea].PipeId, Encoding.UTF32.GetBytes(text));
 	}
+
+	public async Task StringSplitOverwrite(int stringSplitArea, string text)
+    {
+		await client.ClearStringSplitPipeline(this.stringSplitAreas[stringSplitArea].PipelineId);
+		await StringSplitSend(stringSplitArea, text);
+    }
 }

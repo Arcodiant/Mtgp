@@ -39,6 +39,7 @@ internal class PolymorphicTypeResolver : DefaultJsonTypeInfoResolver
 						new JsonDerivedType(typeof(SetBufferDataRequest), "core.shader.setBufferData"),
 						new JsonDerivedType(typeof(SetTimerTriggerRequest), "core.shader.setTimerTrigger"),
 						new JsonDerivedType(typeof(AddTriggerPipeActionRequest), "core.shader.triggerPipeAction"),
+						new JsonDerivedType(typeof(ClearStringSplitPipelineRequest), "core.shader.clearStringSplitPipeline"),
 					}
 			};
 		}

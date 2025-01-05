@@ -47,7 +47,9 @@ namespace Mtgp.SpaceGame
 
 			var uiManager = new UIManager(shaderManager, client);
 
-			int area = await uiManager.CreateStringSplitArea(new Rect2D((1, 1), (78, 22)), true);
+			int outputArea = await uiManager.CreateStringSplitArea(new Rect2D((1, 1), (78, 18)), true);
+
+			int inputArea = await uiManager.CreateStringSplitArea(new Rect2D((1, 20), (78, 2)), true);
 
 			client.SendReceived += async message =>
 			{
@@ -58,9 +60,11 @@ namespace Mtgp.SpaceGame
 
 			await client.SetDefaultPipe(DefaultPipe.Input, -1, [], false);
 
-			await uiManager.CreatePanel(new Rect2D((0, 0), (78, 22)));
+			await uiManager.CreatePanel(new Rect2D((1, 1), (78, 18)));
 
-			await uiManager.StringSplitSend(area, "Welcome to the Space Game!");
+			await uiManager.CreatePanel(new Rect2D((1, 20), (78, 2)));
+
+            await uiManager.StringSplitSend(outputArea, "Welcome to the Space Game!");
 
 			(Entity PlayerLocation, List<(Door Exit, Entity Room)>) GetLocationInfo()
             {
@@ -73,11 +77,11 @@ namespace Mtgp.SpaceGame
 			{
 				var (playerLocation, exits) = GetLocationInfo();
 
-				await uiManager.StringSplitSend(area, $"You are in the {playerLocation.Get<Interior>().Description}");
+				await uiManager.StringSplitSend(outputArea, $"You are in the {playerLocation.Get<Interior>().Description}");
 
 				foreach (var (exit, room) in exits)
 				{
-					await uiManager.StringSplitSend(area, $"You can go to the {room.Get<Interior>().Description} via {exit.Name}");
+					await uiManager.StringSplitSend(outputArea, $"You can go to the {room.Get<Interior>().Description} via {exit.Name}");
 				}
 			}
 
@@ -119,24 +123,26 @@ namespace Mtgp.SpaceGame
                                     }
                                     else
                                     {
-                                        await uiManager.StringSplitSend(area, "Unknown exit.");
+                                        await uiManager.StringSplitSend(outputArea, "Unknown exit.");
                                     }
                                 }
                                 else
                                 {
-                                    await uiManager.StringSplitSend(area, "Go where?");
+                                    await uiManager.StringSplitSend(outputArea, "Go where?");
                                 }
                                 break;
 							case "quit":
-								await uiManager.StringSplitSend(area, "Bye!");
+								await uiManager.StringSplitSend(outputArea, "Bye!");
 								finished = true;
 								break;
 							default:
-								await uiManager.StringSplitSend(area, "Unknown command.");
+								await uiManager.StringSplitSend(outputArea, "Unknown command.Unknown command.Unknown command.Unknown command.");
 								break;
 						}
 					}
 				}
+
+				await uiManager.StringSplitOverwrite(inputArea, inputBuilder.ToString());
 
 				if (finished)
 				{
