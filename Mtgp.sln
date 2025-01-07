@@ -8,6 +8,9 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{043FB339-6570-4038-B2E6-20C4DB725ED0}"
 	ProjectSection(SolutionItems) = preProject
 		.editorconfig = .editorconfig
+		DemoServer - Todo.md = DemoServer - Todo.md
+		Proxy - Todo.md = Proxy - Todo.md
+		Todo.md = Todo.md
 	EndProjectSection
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Mtgp.Util", "Mtgp.Util\Mtgp.Util.csproj", "{B468951D-3B02-4D57-804A-9678A3E6E427}"
@@ -28,7 +31,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Mtgp.WorldSeed", "Mtgp.Worl
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Mtgp.Server", "Mtgp.Server\Mtgp.Server.csproj", "{0B7A61D4-B3C5-470E-B055-4C8A617A29CA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mtgp.SpaceGame", "Mtgp.SpaceGame\Mtgp.SpaceGame.csproj", "{5A01FCFF-9C4C-4F24-8946-AB8267BC0591}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Mtgp.SpaceGame", "Mtgp.SpaceGame\Mtgp.SpaceGame.csproj", "{5A01FCFF-9C4C-4F24-8946-AB8267BC0591}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

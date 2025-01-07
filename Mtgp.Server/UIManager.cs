@@ -38,7 +38,7 @@ public class UIManager(IShaderManager shaderManager, MtgpClient client)
 		var presentImage = await client.GetPresentImage();
 
 		await client.GetResourceBuilder()
-					.Buffer(out var sharedBufferTask, 4096)
+					.Buffer(out var sharedBufferTask, 16)
 					.BuildAsync();
 
 		var sharedBuffer = await sharedBufferTask;
@@ -79,7 +79,7 @@ public class UIManager(IShaderManager shaderManager, MtgpClient client)
 
 		var renderPipeline = await renderPipelineTask;
 
-		await CreateMainPipe();
+		await EnsureMainPipe();
 
 		this.createMainActions.Add((1, async mainActionList =>
 		{
@@ -158,7 +158,7 @@ public class UIManager(IShaderManager shaderManager, MtgpClient client)
 
 		var stringSplitRenderPipeline = await stringSplitRenderPipelineTask;
 
-		await CreateMainPipe();
+		await EnsureMainPipe();
 
 		await client.AddRunPipelineAction(outputPipeActionList, splitStringPipeline);
 		await client.AddTriggerPipeAction(outputPipeActionList, mainPipe!.Value.Pipe);
@@ -179,7 +179,7 @@ public class UIManager(IShaderManager shaderManager, MtgpClient client)
 		return this.stringSplitAreas.Count - 1;
 	}
 
-	private async Task CreateMainPipe()
+	private async Task EnsureMainPipe()
 	{
 		if (!mainPipe.HasValue)
 		{

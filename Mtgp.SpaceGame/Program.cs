@@ -5,6 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Mtgp.Server;
 using Mtgp.SpaceGame;
 using Mtgp.SpaceGame.Components;
+using Mtgp.SpaceGame.Services;
 using Serilog;
 
 Log.Logger = new LoggerConfiguration()
@@ -18,16 +19,8 @@ try
 {
 	Log.Information("Starting host");
 
-	var world = World.Create();
-
-	var crewArea = world.Create(new Interior("Crew Area"));
-	var cockpit = world.Create(new Interior("Cockpit"));
-
-	world.AddRelationship<Door>(crewArea, cockpit, new("Fore"));
-	world.AddRelationship<Door>(cockpit, crewArea, new("Aft"));
-
 	var builder = Host.CreateApplicationBuilder(args);
-	builder.Services.AddSingleton(world);
+	builder.Services.AddSingleton<IWorldManager, WorldManager>();
 	builder.Services.AddDefaultFactories();
 	builder.Services.AddImplementingFactory<IMtgpSession, UserSession, MtgpClient>();
 	builder.Services.AddHostedService<MtgpServer>();

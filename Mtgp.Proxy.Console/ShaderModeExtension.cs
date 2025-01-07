@@ -226,6 +226,8 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 
 		this.resourceStore.Get<PipeInfo>(pipeId).Handlers.Add(pipeData =>
 		{
+			var pipeStopwatch = Stopwatch.StartNew();
+
 			var state = new ActionExecutionState
 			{
 				PipeData = pipeData
@@ -241,8 +243,12 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 
 				stopwatch.Stop();
 
-				logger.LogDebug("Pipe {PipeId} Action {Action} took {ElapsedMs}ms", pipeId, action.ToString(), stopwatch.ElapsedMilliseconds);
+				logger.LogDebug("Pipe {PipeId} Action {Action} took {ElapsedMs}ms", pipeId, action.ToString(), stopwatch.Elapsed.TotalMilliseconds);
 			}
+
+			pipeStopwatch.Stop();
+
+			logger.LogDebug("Pipe {PipeId} took {ElapsedMs}ms", pipeId, pipeStopwatch.Elapsed.TotalMilliseconds);
 		});
 
 		return new MtgpResponse(0, "ok");
@@ -325,7 +331,13 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 
 			foreach (var handler in pipeInfo.Handlers)
 			{
+				var handlerStopwatch = Stopwatch.StartNew();
+
 				handler(request.Value);
+
+				handlerStopwatch.Stop();
+
+				logger.LogDebug("Pipe {PipeId} handler took {ElapsedMs}ms", request.Pipe, handlerStopwatch.Elapsed.TotalMilliseconds);
 			}
 
 			return new MtgpResponse(0, "ok");
