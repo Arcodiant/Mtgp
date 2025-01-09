@@ -22,13 +22,11 @@ public class ShaderManager
 	public static async Task<ShaderManager> CreateAsync(MtgpClient client)
 	{
 		await client.GetResourceBuilder()
-					.ActionList(out var transferActionListTask)
-					.Pipe(out var transferPipeTask)
+					.ActionList(out var transferActionListTask, "transferActionList")
+					.Pipe(out var transferPipeTask, "transferActionList")
 					.BuildAsync();
 
 		var (transferActionList, transferPipe) = (await transferActionListTask, await transferPipeTask);
-
-		await client.SetActionTrigger(transferActionList, transferPipe);
 
 		return new ShaderManager(client, transferActionList, transferPipe);
 	}

@@ -126,8 +126,8 @@ internal class DemoSession(Factory factory, TcpClient tcpClient, ILogger<DemoSes
 		var presentImage = await client.GetPresentImage();
 
 		await client.GetResourceBuilder()
-					.ActionList(out var actionListTask)
-					.Pipe(out var pipeTask)
+					.ActionList(out var actionListTask, "ActionList")
+					.Pipe(out var pipeTask, "ActionList")
 					.Buffer(out var vertexBufferTask, 1024)
 					.Buffer(out var uniformBufferTask, 4)
 					.BuildAsync();
@@ -171,8 +171,6 @@ internal class DemoSession(Factory factory, TcpClient tcpClient, ILogger<DemoSes
 						 false,
 						 PolygonMode.Fill)
 					.BuildAsync();
-
-		await client.SetActionTrigger(pipe, actionList);
 
 		int renderPipeline = await renderPipelineTask;
 

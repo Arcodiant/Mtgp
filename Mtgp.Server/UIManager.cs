@@ -105,10 +105,10 @@ public class UIManager(IShaderManager shaderManager, MtgpClient client)
 		var presentImage = await client.GetPresentImage();
 
 		await client.GetResourceBuilder()
-					.Pipe(out var outputPipeTask)
+					.ActionList(out var outputPipeActionListTask, "actionList")
+					.Pipe(out var outputPipeTask, "actionList")
 					.Image(out var lineImageTask, (area.Extent.Width * area.Extent.Height, 1, 1), ImageFormat.T32_SInt)
 					.Buffer(out var sharedBufferTask, 4096)
-					.ActionList(out var outputPipeActionListTask)
 					.BuildAsync();
 
 		var outputPipe = await outputPipeTask;
@@ -125,7 +125,7 @@ public class UIManager(IShaderManager shaderManager, MtgpClient client)
 		var indirectCommandBufferView = await indirectCommandBufferViewTask;
 
 		await client.GetResourceBuilder()
-					.SplitStringPipeline(out var splitStringPipelineTask, area.Extent.Width, area.Extent.Height, outputPipe, lineImage, instanceBufferView, indirectCommandBufferView)
+					.SplitStringPipeline(out var splitStringPipelineTask, area.Extent.Width, area.Extent.Height, lineImage, instanceBufferView, indirectCommandBufferView)
 					.BuildAsync();
 
 		var splitStringPipeline = await splitStringPipelineTask;
@@ -161,7 +161,7 @@ public class UIManager(IShaderManager shaderManager, MtgpClient client)
 		await EnsureMainPipe();
 
 		await client.AddRunPipelineAction(outputPipeActionList, splitStringPipeline);
-		await client.AddTriggerPipeAction(outputPipeActionList, mainPipe!.Value.Pipe);
+		await client.AddTriggerActionListAction(outputPipeActionList, mainPipe!.Value.ActionList);
 
 		this.createMainActions.Add((2, async mainActionList =>
 		{
@@ -171,8 +171,6 @@ public class UIManager(IShaderManager shaderManager, MtgpClient client)
 		));
 
 		await BuildMainPipe();
-
-		await client.SetActionTrigger(outputPipe, outputPipeActionList);
 
 		this.stringSplitAreas.Add(new(outputPipe, splitStringPipeline));
 
@@ -184,14 +182,12 @@ public class UIManager(IShaderManager shaderManager, MtgpClient client)
 		if (!mainPipe.HasValue)
 		{
 			await client.GetResourceBuilder()
-						.Pipe(out var mainPipeTask)
-						.ActionList(out var mainPipeActionListTask)
+						.ActionList(out var mainPipeActionListTask, "mainActionList")
+						.Pipe(out var mainPipeTask, "mainActionList")
 						.BuildAsync();
 
 			int pipeId = await mainPipeTask;
 			var mainPipeActionList = await mainPipeActionListTask;
-
-			await client.SetActionTrigger(pipeId, mainPipeActionList);
 
 			mainPipe = (pipeId, mainPipeActionList);
 		}

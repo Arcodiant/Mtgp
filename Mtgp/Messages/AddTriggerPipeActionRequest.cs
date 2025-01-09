@@ -1,4 +1,4 @@
 ﻿namespace Mtgp.Messages;
 
-public record AddTriggerPipeActionRequest(int Id, int ActionList, int Pipe)
-	: MtgpRequest(Id, "core.shader.addTriggerPipeAction");
+public record AddTriggerActionListActionRequest(int Id, int ActionList, int TriggeredActionList)
+	: MtgpRequest(Id, "core.shader.addTriggerActionListAction");

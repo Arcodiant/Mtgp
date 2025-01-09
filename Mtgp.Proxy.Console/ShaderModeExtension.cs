@@ -42,7 +42,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 		}
 	}
 
-	private record PipeInfo(List<Action<Memory<byte>>> Handlers);
+	private record PipeInfo(int ActionList);
 	private record ActionListInfo(List<IAction> Actions);
 	private record BufferViewInfo(Memory<byte> View);
 	private record BufferInfo(byte[] Data);
@@ -72,7 +72,6 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 		proxy.RegisterMessageHandler<SetDefaultPipeRequest>(SetDefaultPipe);
 		proxy.RegisterMessageHandler<SendRequest>(Send);
 		proxy.RegisterMessageHandler<CreateResourceRequest>(CreateResource);
-		proxy.RegisterMessageHandler<SetActionTriggerRequest>(SetActionTrigger);
 		proxy.RegisterMessageHandler<GetPresentImageRequest>(GetPresentImage);
 		proxy.RegisterMessageHandler<SetBufferDataRequest>(SetBufferData);
 		proxy.RegisterMessageHandler<ResetActionListRequest>(ResetActionList);
@@ -84,7 +83,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 		proxy.RegisterMessageHandler<AddIndirectDrawActionRequest>(AddIndirectDrawAction);
 		proxy.RegisterMessageHandler<AddPresentActionRequest>(AddPresentAction);
 		proxy.RegisterMessageHandler<AddRunPipelineActionRequest>(AddRunPipelineAction);
-		proxy.RegisterMessageHandler<AddTriggerPipeActionRequest>(AddTriggerPipeAction);
+		proxy.RegisterMessageHandler<AddTriggerActionListActionRequest>(AddTriggerActionListAction);
 
 		proxy.OnDefaultPipeSend += async (pipe, message) =>
 		{
@@ -111,14 +110,20 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 		}
 	}
 
-	private MtgpResponse AddTriggerPipeAction(AddTriggerPipeActionRequest request)
+	private class TriggerActionListAction(ShaderModeExtension parent, int actionList)
+		: IAction
+	{
+		public void Execute(ILogger logger, ActionExecutionState state)
+		{
+			parent.RunActionList(actionList, []);
+		}
+	}
+
+	private MtgpResponse AddTriggerActionListAction(AddTriggerActionListActionRequest request)
 	{
 		var actionList = this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions;
 
-		actionList.Add(new TriggerPipeAction(() =>
-		{
-			this.Send(new SendRequest(0, request.Pipe, []));
-		}));
+		actionList.Add(new TriggerActionListAction(this, request.TriggeredActionList));
 
 		return new MtgpResponse(0, "ok");
 	}
@@ -220,47 +225,43 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 		return new GetPresentImageResponse(request.Id, 0, 1, 2);
 	}
 
-	private MtgpResponse SetActionTrigger(SetActionTriggerRequest request)
-	{
-		int pipeId = request.Pipe;
+	//private MtgpResponse SetActionTrigger(SetActionTriggerRequest request)
+	//{
+	//	int pipeId = request.Pipe;
 
-		this.resourceStore.Get<PipeInfo>(pipeId).Handlers.Add(pipeData =>
-		{
-			var pipeStopwatch = Stopwatch.StartNew();
+	//	this.resourceStore.Get<PipeInfo>(pipeId).Handlers.Add(pipeData =>
+	//	{
+	//		var pipeStopwatch = Stopwatch.StartNew();
 
-			var state = new ActionExecutionState
-			{
-				PipeData = pipeData
-			};
+	//		var state = new ActionExecutionState
+	//		{
+	//			PipeData = pipeData
+	//		};
 
-			logger.LogDebug("Running Pipe {PipeId}", pipeId);
+	//		logger.LogDebug("Running Pipe {PipeId}", pipeId);
 
-			foreach (var action in this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions)
-			{
-				var stopwatch = Stopwatch.StartNew();
+	//		foreach (var action in this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions)
+	//		{
+	//			var stopwatch = Stopwatch.StartNew();
 
-				action.Execute(logger, state);
+	//			action.Execute(logger, state);
 
-				stopwatch.Stop();
+	//			stopwatch.Stop();
 
-				logger.LogDebug("Pipe {PipeId} Action {Action} took {ElapsedMs}ms", pipeId, action.ToString(), stopwatch.Elapsed.TotalMilliseconds);
-			}
+	//			logger.LogDebug("Pipe {PipeId} Action {Action} took {ElapsedMs}ms", pipeId, action.ToString(), stopwatch.Elapsed.TotalMilliseconds);
+	//		}
 
-			pipeStopwatch.Stop();
+	//		pipeStopwatch.Stop();
 
-			logger.LogDebug("Pipe {PipeId} took {ElapsedMs}ms", pipeId, pipeStopwatch.Elapsed.TotalMilliseconds);
-		});
+	//		logger.LogDebug("Pipe {PipeId} took {ElapsedMs}ms", pipeId, pipeStopwatch.Elapsed.TotalMilliseconds);
+	//	});
 
-		return new MtgpResponse(0, "ok");
-	}
+	//	return new MtgpResponse(0, "ok");
+	//}
 
 	private MtgpResponse CreateResource(CreateResourceRequest request)
 	{
-		var results = new List<ResourceCreateResult>();
-
 		ResourceCreateResult Create<T>(T resource) => new(this.resourceStore.Add(resource), ResourceCreateResultType.Success);
-		BufferViewInfo CreateBufferView(CreateBufferViewInfo bufferViewInfo)
-			=> new(this.resourceStore.Get<BufferInfo>(bufferViewInfo.Buffer.Id!.Value).Data.AsMemory()[bufferViewInfo.Offset..(bufferViewInfo.Offset + bufferViewInfo.Size)]);
 		RenderPipeline CreateRenderPipeline(Dictionary<ShaderStage, int> shaderStages,
 								 (int Binding, int Stride, InputRate InputRate)[] vertexBufferBindings,
 								 (int Location, int Binding, ShaderType Type, int Offset)[] vertexAttributes,
@@ -271,46 +272,113 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 								 PolygonMode polygonMode)
 			=> new(shaderStages.ToDictionary(x => x.Key, x => this.resourceStore.Get<ShaderInterpreter>(x.Value)), vertexBufferBindings, vertexAttributes, fragmentAttributes, viewport, scissors, enableAlpha, polygonMode);
 
-		IFixedFunctionPipeline CreateStringSplitPipeline(CreateStringSplitPipelineInfo info)
-			=> new StringSplitPipeline(this.resourceStore.Get<ImageState>(info.LineImage.Id!.Value).Data,
-							  this.resourceStore.Get<BufferViewInfo>(info.InstanceBufferView.Id!.Value).View,
-							  this.resourceStore.Get<BufferViewInfo>(info.IndirectCommandBufferView.Id!.Value).View,
-							  info.Height,
-							  info.Width);
 
-		foreach (var resource in request.Resources)
+		var remainingResources = request.Resources.Select((x, y) => (Info: x, Index: y)).ToList();
+
+		var results = new ResourceCreateResult[request.Resources.Length];
+
+		var createdIds = new Dictionary<string, ResourceCreateResult>();
+
+		while (remainingResources.Count != 0)
 		{
-			var result = ResourceCreateResult.InternalError;
+			List<int> createdResources = [];
 
-			try
+			foreach (var resource in remainingResources)
 			{
-				result = resource switch
+				var result = ResourceCreateResult.InternalError;
+
+				try
 				{
-					CreateShaderInfo shaderInfo => Create(new ShaderInterpreter(shaderInfo.ShaderData)),
-					CreatePipeInfo pipeInfo => Create(new PipeInfo([])),
-					CreateActionListInfo actionListInfo => Create(new ActionListInfo([])),
-					CreateBufferInfo bufferInfo => Create(new BufferInfo(new byte[bufferInfo.Size])),
-					CreateBufferViewInfo bufferViewInfo => Create(CreateBufferView(bufferViewInfo)),
-					CreateImageInfo imageInfo => Create(new ImageState(imageInfo.Size, imageInfo.Format)),
-					CreateStringSplitPipelineInfo stringSplitPipelineInfo => Create(CreateStringSplitPipeline(stringSplitPipelineInfo)),
-					CreateRenderPipelineInfo renderPipelineInfo => Create(CreateRenderPipeline(renderPipelineInfo.ShaderStages.ToDictionary(x => x.Stage, x => x.Shader.Id!.Value),
-																										renderPipelineInfo.VertexInput.VertexBufferBindings.Select(x => (x.Binding, x.Stride, x.InputRate)).ToArray(),
-																										renderPipelineInfo.VertexInput.VertexAttributes.Select(x => (x.Location, x.Binding, x.Type, x.Offset)).ToArray(),
-																										renderPipelineInfo.FragmentAttributes.Select(x => (x.Location, x.Type, x.InterpolationScale)).ToArray(),
-																										renderPipelineInfo.Viewport,
-																										renderPipelineInfo.Scissors,
-																										renderPipelineInfo.enableAlpha,
-																										renderPipelineInfo.PolygonMode)),
-					_ => ResourceCreateResult.InvalidRequest
-				};
-			}
-			catch (Exception ex)
-			{
-				logger.LogError(ex, "Error creating resource: {@CreateInfo}", resource);
-				result = ResourceCreateResult.InternalError;
+					bool IsIdCreated(IdOrRef idOrRef)
+						=> idOrRef.Id.HasValue || createdIds.ContainsKey(idOrRef.Reference!);
+
+					bool IsIdValid(IdOrRef idOrRef)
+						=> idOrRef.Id.HasValue || (createdIds.ContainsKey(idOrRef.Reference!) && createdIds[idOrRef.Reference!].Result == ResourceCreateResultType.Success);
+
+					IdOrRef[] Dependencies = resource.Info switch
+					{
+						CreatePipeInfo pipeInfo => [pipeInfo.ActionList],
+						CreateBufferViewInfo bufferViewInfo => [bufferViewInfo.Buffer],
+						CreateStringSplitPipelineInfo stringSplitPipelineInfo => [stringSplitPipelineInfo.IndirectCommandBufferView, stringSplitPipelineInfo.InstanceBufferView, stringSplitPipelineInfo.LineImage],
+						CreateRenderPipelineInfo renderPipelineInfo => renderPipelineInfo.ShaderStages.Select(x => x.Shader).ToArray(),
+						_ => []
+					};
+
+					if (Dependencies.All(IsIdCreated))
+					{
+						if (!Dependencies.All(IsIdValid))
+						{
+							result = ResourceCreateResult.FailedReference;
+						}
+						else
+						{
+							int GetId(IdOrRef idOrRef)
+							{
+								if (idOrRef.Id.HasValue)
+								{
+									return idOrRef.Id.Value;
+								}
+								else if (createdIds.TryGetValue(idOrRef.Reference!, out var created))
+								{
+									return created.ResourceId;
+								}
+								else
+								{
+									throw new Exception($"Missing dependency creation: {idOrRef.Reference}");
+								}
+							}
+
+							result = resource.Info switch
+							{
+								CreateShaderInfo shaderInfo => Create(new ShaderInterpreter(shaderInfo.ShaderData)),
+								CreatePipeInfo pipeInfo => Create(new PipeInfo(GetId(pipeInfo.ActionList))),
+								CreateActionListInfo actionListInfo => Create(new ActionListInfo([])),
+								CreateBufferInfo bufferInfo => Create(new BufferInfo(new byte[bufferInfo.Size])),
+								CreateBufferViewInfo bufferViewInfo => Create(new BufferViewInfo(this.resourceStore.Get<BufferInfo>(GetId(bufferViewInfo.Buffer)).Data.AsMemory()[bufferViewInfo.Offset..(bufferViewInfo.Offset + bufferViewInfo.Size)])),
+								CreateImageInfo imageInfo => Create(new ImageState(imageInfo.Size, imageInfo.Format)),
+								CreateStringSplitPipelineInfo stringSplitPipelineInfo => Create<IFixedFunctionPipeline>(new StringSplitPipeline(this.resourceStore.Get<ImageState>(GetId(stringSplitPipelineInfo.LineImage)).Data,
+																																				  this.resourceStore.Get<BufferViewInfo>(GetId(stringSplitPipelineInfo.InstanceBufferView)).View,
+																																				  this.resourceStore.Get<BufferViewInfo>(GetId(stringSplitPipelineInfo.IndirectCommandBufferView)).View,
+																																				  stringSplitPipelineInfo.Height,
+																																				  stringSplitPipelineInfo.Width)),
+								CreateRenderPipelineInfo renderPipelineInfo => Create(CreateRenderPipeline(renderPipelineInfo.ShaderStages.ToDictionary(x => x.Stage, x => GetId(x.Shader)),
+																													renderPipelineInfo.VertexInput.VertexBufferBindings.Select(x => (x.Binding, x.Stride, x.InputRate)).ToArray(),
+																													renderPipelineInfo.VertexInput.VertexAttributes.Select(x => (x.Location, x.Binding, x.Type, x.Offset)).ToArray(),
+																													renderPipelineInfo.FragmentAttributes.Select(x => (x.Location, x.Type, x.InterpolationScale)).ToArray(),
+																													renderPipelineInfo.Viewport,
+																													renderPipelineInfo.Scissors,
+																													renderPipelineInfo.enableAlpha,
+																													renderPipelineInfo.PolygonMode)),
+								_ => ResourceCreateResult.InvalidRequest
+							};
+						}
+
+						if (resource.Info.Reference != null)
+						{
+							createdIds[resource.Info.Reference!] = result;
+						}
+
+						createdResources.Add(resource.Index);
+
+						results[resource.Index] = result;
+					}
+				}
+				catch (Exception ex)
+				{
+					logger.LogError(ex, "Error creating resource: {@CreateInfo}", resource);
+					result = ResourceCreateResult.InternalError;
+				}
 			}
 
-			results.Add(result);
+			if (createdResources.Count == 0)
+			{
+				foreach (var resource in remainingResources)
+				{
+					results[resource.Index] = ResourceCreateResult.InvalidReference;
+				}
+			}
+
+			remainingResources = remainingResources.Where(x => !createdResources.Contains(x.Index)).ToList();
 		}
 
 		return new CreateResourceResponse(request.Id, [.. results]);
@@ -329,21 +397,39 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 		{
 			var pipeInfo = this.resourceStore.Get<PipeInfo>(request.Pipe);
 
-			foreach (var handler in pipeInfo.Handlers)
-			{
-				var handlerStopwatch = Stopwatch.StartNew();
+			var pipeStopwatch = Stopwatch.StartNew();
 
-				handler(request.Value);
+			logger.LogDebug("Running Pipe {PipeId}/Action List {ActionList}", request.Pipe, pipeInfo.ActionList);
 
-				handlerStopwatch.Stop();
+			RunActionList(pipeInfo.ActionList, request.Value);
 
-				logger.LogDebug("Pipe {PipeId} handler took {ElapsedMs}ms", request.Pipe, handlerStopwatch.Elapsed.TotalMilliseconds);
-			}
+			pipeStopwatch.Stop();
+
+			logger.LogDebug("Pipe {PipeId}/Action List {ActionList} took {ElapsedMs}ms", request.Pipe, pipeInfo.ActionList, pipeStopwatch.Elapsed.TotalMilliseconds);
 
 			return new MtgpResponse(0, "ok");
 		}
 
 		return new MtgpResponse(0, "invalidRequest");
+	}
+
+	private void RunActionList(int actionList, byte[] pipeData)
+	{
+		var state = new ActionExecutionState
+		{
+			PipeData = pipeData
+		};
+
+		foreach (var action in this.resourceStore.Get<ActionListInfo>(actionList).Actions)
+		{
+			var stopwatch = Stopwatch.StartNew();
+
+			action.Execute(logger, state);
+
+			stopwatch.Stop();
+
+			logger.LogDebug("Action List {ActionList} Action {Action} took {ElapsedMs}ms", actionList, action.ToString(), stopwatch.Elapsed.TotalMilliseconds);
+		}
 	}
 
 	private MtgpResponse SetDefaultPipe(SetDefaultPipeRequest request)

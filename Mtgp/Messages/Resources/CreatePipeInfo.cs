@@ -1,6 +1,6 @@
 ﻿namespace Mtgp.Messages.Resources;
 
-public record CreatePipeInfo(string? Reference = null)
+public record CreatePipeInfo(IdOrRef ActionList, string? Reference = null)
 	: ResourceInfo(Reference), ICreateResourceInfo
 {
 	static string ICreateResourceInfo.ResourceType => ResourceType;

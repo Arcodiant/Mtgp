@@ -148,9 +148,9 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 		ThrowIfError(result);
 	}
 
-	public async Task AddTriggerPipeAction(int actionListId, int pipe)
+	public async Task AddTriggerActionListAction(int actionListId, int triggeredActionListId)
 	{
-		var result = await this.connection.SendAsync(new AddTriggerPipeActionRequest(Interlocked.Increment(ref this.requestId), actionListId, pipe));
+		var result = await this.connection.SendAsync(new AddTriggerActionListActionRequest(Interlocked.Increment(ref this.requestId), actionListId, triggeredActionListId));
 
 		ThrowIfError(result);
 	}
@@ -165,13 +165,6 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 	public async Task ResetActionList(int actionList)
 	{
 		var result = await this.connection.SendAsync(new ResetActionListRequest(Interlocked.Increment(ref this.requestId), actionList));
-
-		ThrowIfError(result);
-	}
-
-	public async Task SetActionTrigger(int pipe, int actionList)
-	{
-		var result = await this.connection.SendAsync(new SetActionTriggerRequest(Interlocked.Increment(ref this.requestId), actionList, pipe));
 
 		ThrowIfError(result);
 	}
@@ -255,8 +248,8 @@ public class ResourceBuilder(MtgpClient client)
 	public ResourceBuilder ActionList(out Task<int> task, string? reference = null)
 		=> this.Add(new CreateActionListInfo(reference), out task);
 
-	public ResourceBuilder Pipe(out Task<int> task, string? reference = null)
-		=> this.Add(new CreatePipeInfo(reference), out task);
+	public ResourceBuilder Pipe(out Task<int> task, IdOrRef actionList, string? reference = null)
+		=> this.Add(new CreatePipeInfo(actionList, reference), out task);
 
 	public ResourceBuilder Buffer(out Task<int> task, int size, string? reference = null)
 		=> this.Add(new CreateBufferInfo(size, reference), out task);
@@ -281,8 +274,8 @@ public class ResourceBuilder(MtgpClient client)
 	public ResourceBuilder Shader(out Task<int> task, byte[] data, string? reference = null)
 		=> this.Add(new CreateShaderInfo(data, reference), out task);
 
-	public ResourceBuilder SplitStringPipeline(out Task<int> task, int Width, int Height, IdOrRef LinesPipe, IdOrRef LineImage, IdOrRef InstanceBufferView, IdOrRef IndirectCommandBufferView, string? Reference = null)
-		=> this.Add(new CreateStringSplitPipelineInfo(Width, Height, LinesPipe, LineImage, InstanceBufferView, IndirectCommandBufferView, Reference), out task);
+	public ResourceBuilder SplitStringPipeline(out Task<int> task, int Width, int Height, IdOrRef LineImage, IdOrRef InstanceBufferView, IdOrRef IndirectCommandBufferView, string? Reference = null)
+		=> this.Add(new CreateStringSplitPipelineInfo(Width, Height, LineImage, InstanceBufferView, IndirectCommandBufferView, Reference), out task);
 
 	public async Task BuildAsync()
 	{
