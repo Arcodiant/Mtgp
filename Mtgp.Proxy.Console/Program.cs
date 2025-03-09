@@ -13,6 +13,8 @@ Log.Logger = new LoggerConfiguration()
 
 try
 {
+	Console.SetWindowSize(240, 75);
+
 	Log.Information("Starting host");
 
 	var builder = Host.CreateApplicationBuilder(args);

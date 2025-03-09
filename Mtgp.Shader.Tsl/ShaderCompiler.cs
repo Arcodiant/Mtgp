@@ -13,11 +13,13 @@ internal enum PartType
 	Func,
 	Uniform,
 	Image,
+	ReadBuffer,
+	WriteBuffer,
 	Identifier,
 	LBlockParen,
 	RBlockParen,
-	LAttributeParen,
-	RAttributeParen,
+	LSquareParen,
+	RSquareParen,
 	LArrow,
 	RArrow,
 	LParen,
@@ -63,6 +65,9 @@ internal record TernaryExpression(Expression Condition, Expression TrueBranch, E
 internal record FunctionExpression(string Name, Expression[] Arguments)
 	: Expression;
 
+internal record ArrayAccessExpression(Expression Base, Expression Index)
+	: Expression;
+
 public class ShaderCompiler
 {
 	private static TextParser<TextSpan> Float { get; } = from first in Numerics.Integer
@@ -74,8 +79,8 @@ public class ShaderCompiler
 														.Ignore(Span.WhiteSpace)
 														.Match(Character.EqualTo('{'), PartType.LBlockParen)
 														.Match(Character.EqualTo('}'), PartType.RBlockParen)
-														.Match(Character.EqualTo('['), PartType.LAttributeParen)
-														.Match(Character.EqualTo(']'), PartType.RAttributeParen)
+														.Match(Character.EqualTo('['), PartType.LSquareParen)
+														.Match(Character.EqualTo(']'), PartType.RSquareParen)
 														.Match(Character.EqualTo('<'), PartType.LArrow)
 														.Match(Character.EqualTo('>'), PartType.RArrow)
 														.Match(Character.EqualTo('('), PartType.LParen)
@@ -97,6 +102,8 @@ public class ShaderCompiler
 														.Match(Span.EqualTo("uniform"), PartType.Uniform)
 														.Match(Span.EqualTo("image1d"), PartType.Image)
 														.Match(Span.EqualTo("image2d"), PartType.Image)
+														.Match(Span.EqualTo("readbuffer"), PartType.ReadBuffer)
+														.Match(Span.EqualTo("writebuffer"), PartType.WriteBuffer)
 														.Match(Float, PartType.DecimalLiteral)
 														.Match(Numerics.Integer, PartType.IntegerLiteral)
 														.Match(Identifier.CStyle, PartType.Identifier)
@@ -108,10 +115,10 @@ public class ShaderCompiler
 																					from endOfLine in Token.EqualTo(PartType.Semicolon)
 																					select new AssignStatement(leftHand, rightHand);
 
-	private readonly static TokenListParser<PartType, Decoration> decoration = from open in Token.EqualTo(PartType.LAttributeParen)
+	private readonly static TokenListParser<PartType, Decoration> decoration = from open in Token.EqualTo(PartType.LSquareParen)
 																			   from name in Token.EqualTo(PartType.Identifier)
 																			   from value in Token.EqualTo(PartType.Assign).IgnoreThen(Token.EqualTo(PartType.IntegerLiteral)).OptionalOrDefault()
-																			   from close in Token.EqualTo(PartType.RAttributeParen)
+																			   from close in Token.EqualTo(PartType.RSquareParen)
 																			   select new Decoration(name.ToStringValue(), value.HasValue ? int.Parse(value.ToStringValue()) : null);
 
 	private readonly static TokenListParser<PartType, TypeReference> typeReference = from type in Token.EqualTo(PartType.Identifier)
@@ -161,7 +168,10 @@ public class ShaderCompiler
 																						   select (TopLevelDefinition)new FuncDefinition(type, name, parameters, statements);
 
 	private readonly static TokenListParser<PartType, TopLevelDefinition> bindingDefinition = from decoration in decoration
-																							  from typeKeyword in Token.EqualTo(PartType.Uniform).Or(Token.EqualTo(PartType.Image))
+																							  from typeKeyword in Token.EqualTo(PartType.Uniform)
+																													.Or(Token.EqualTo(PartType.Image))
+																													.Or(Token.EqualTo(PartType.ReadBuffer))
+																													.Or(Token.EqualTo(PartType.WriteBuffer))
 																							  from type in typeReference
 																							  from name in BaseParsers.Identifier
 																							  from lineEnd in Token.EqualTo(PartType.Semicolon)
@@ -221,30 +231,7 @@ public class ShaderCompiler
 
 	public byte[] Compile(string source, string entrypointName = "Main")
 	{
-		var tokens = token.Tokenize(source);
-
-		var file = shaderFile.Parse(tokens);
-
-		var structTypes = file.StructDefinitions.ToImmutableDictionary(x => x.Name);
-		var funcs = file.FuncDefinitions.ToImmutableDictionary(x => x.Name);
-
-		var mainFunc = funcs[entrypointName];
-
-		var outputStruct = structTypes[mainFunc.ReturnType.Token];
-		var inputFields = mainFunc.Parameters.Length != 0
-							? structTypes[mainFunc.Parameters.Single().Type.Token].Fields
-							: [];
-
-		int nextId = 0;
-
-		var vars = new List<(int Id, ShaderStorageClass Storage, ShaderType Type, bool IsInEntryPoint)>();
-		var locations = new Dictionary<int, int>();
-		var builtins = new Dictionary<int, Builtin>();
-		var bindings = new Dictionary<int, int>();
-
-		var varNames = new Dictionary<(string VariableName, string FieldName), int>();
-
-		ShaderType GetType(TypeReference type)
+		ShaderType GetPrimitiveType(TypeReference type)
 		{
 			if (type.Token == "int")
 			{
@@ -256,20 +243,58 @@ public class ShaderCompiler
 			}
 			else if (type.Token == "vec")
 			{
-				return ShaderType.VectorOf(GetType((TypeReference)type.Arguments[0]), ((IntegerTypeArgument)type.Arguments[1]).Value);
+				return ShaderType.VectorOf(GetPrimitiveType((TypeReference)type.Arguments[0]), ((IntegerTypeArgument)type.Arguments[1]).Value);
+			}
+			else if(type.Token == "void")
+			{
+				return ShaderType.Void;
 			}
 			else
 			{
 				throw new Exception($"Unknown type: {type}");
 			}
 		}
+		var tokens = token.Tokenize(source);
+
+		var file = shaderFile.Parse(tokens);
+
+		(StructDefinition Def, ShaderType Type) BuildStructType(StructDefinition structDef)
+		{
+			var fields = structDef.Fields.Select(x => GetPrimitiveType(x.Type)).ToArray();
+
+			return (structDef, ShaderType.StructOf(fields));
+		}
+
+		var structTypes = file.StructDefinitions.Select(BuildStructType).ToImmutableDictionary(x => x.Def.Name);
+		var funcs = file.FuncDefinitions.ToImmutableDictionary(x => x.Name);
+
+		var mainFunc = funcs[entrypointName];
+
+		(FieldDefinition Ref, ShaderType Type)[] GetFields((StructDefinition Def, ShaderType Type) structType)
+		{
+			return structType.Def.Fields.Select(x => (x, GetPrimitiveType(x.Type))).ToArray();
+		}
+
+		var outputFields = structTypes.TryGetValue(mainFunc.ReturnType.Token, out var outputStruct) ? GetFields(outputStruct) : [];
+		var inputFields = mainFunc.Parameters.Length != 0
+							? GetFields(structTypes[mainFunc.Parameters.Single().Type.Token])
+							: [];
+
+		int nextId = 0;
+
+		var vars = new List<(int Id, ShaderStorageClass Storage, ShaderType Type, bool IsInEntryPoint)>();
+		var locations = new Dictionary<int, int>();
+		var builtins = new Dictionary<int, Builtin>();
+		var bindings = new Dictionary<int, int>();
+
+		var varNames = new Dictionary<(string VariableName, string FieldName), int>();
 
 		foreach (var (field, storage, variableName) in inputFields.Select(x => (x, ShaderStorageClass.Input, mainFunc.Parameters.Single().Name))
-															.Concat(outputStruct.Fields.Select(x => (x, ShaderStorageClass.Output, "result"))))
+															.Concat(outputFields.Select(x => (x, ShaderStorageClass.Output, "result"))))
 		{
 			int id = nextId++;
 
-			foreach (var decoration in field.Decorations)
+			foreach (var decoration in field.Ref.Decorations)
 			{
 				if (Enum.TryParse<Builtin>(decoration.Name, out var builtin))
 				{
@@ -289,17 +314,19 @@ public class ShaderCompiler
 
 					locations[id] = decoration.Value!.Value;
 				}
+				else
+				{
+					throw new Exception($"Unknown decoration: {decoration.Name}");
+				}
 
-				var type = GetType(field.Type);
-
-				vars.Add((id, storage, type, !builtins.ContainsKey(id)));
-				varNames.Add((variableName, field.Field), id);
+				vars.Add((id, storage, field.Type, !builtins.ContainsKey(id)));
+				varNames.Add((variableName, field.Ref.Field), id);
 			}
 		}
 
 		foreach (var binding in file.BindingDefinitions)
 		{
-			var type = GetType(binding.Type);
+			var type = GetPrimitiveType(binding.Type);
 
 			int id = nextId++;
 
@@ -308,6 +335,8 @@ public class ShaderCompiler
 				"uniform" => (ShaderStorageClass.UniformConstant, 1),
 				"image1d" => (ShaderStorageClass.Image, 1),
 				"image2d" => (ShaderStorageClass.Image, 2),
+				"readbuffer" => (ShaderStorageClass.ReadBuffer, 1),
+				"writebuffer" => (ShaderStorageClass.WriteBuffer, 1),
 				_ => throw new Exception($"Unknown binding type: {binding.BindingType}")
 			};
 
@@ -407,8 +436,30 @@ public class ShaderCompiler
 		writer = writer.Return();
 
 		ShaderWriter WriteAssignment(ShaderWriter writer, AssignStatement assignment)
-			=> WriteExpression(writer, assignment.RightHand, out int rightId, out _)
-				.Store(GetVarId((BinaryExpression)assignment.LeftHand), rightId);
+		{
+			writer = WriteExpression(writer, assignment.RightHand, out int rightId, out _);
+			writer = assignment.LeftHand switch
+			{
+				BinaryExpression binaryExpression => writer.Store(GetVarId(binaryExpression), rightId),
+				ArrayAccessExpression arrayAccessExpression => WriteLeftHandArrayAccessExpression(writer, arrayAccessExpression, out int pointerId).Store(pointerId, rightId),
+				_ => throw new Exception($"Unknown left hand type: {assignment.LeftHand}")
+			};
+
+			return writer;
+		}
+
+		ShaderWriter WriteLeftHandArrayAccessExpression(ShaderWriter writer, ArrayAccessExpression expression, out int pointerId)
+		{
+			writer = WriteExpression(writer, expression.Index, out int indexId, out var type);
+
+			pointerId = nextId++;
+
+			var baseType = GetTokenVarType((TokenExpression)expression.Base);
+
+			writer = writer.AccessChain(pointerId, GetTypeId(ref writer, baseType), GetTokenVarId((TokenExpression)expression.Base), new int[] { indexId });
+
+			return writer;
+		}
 
 		ShaderWriter WriteExpression(ShaderWriter writer, Expression expression, out int id, out ShaderType type)
 		{
@@ -422,6 +473,7 @@ public class ShaderCompiler
 					FunctionExpression functionExpression => WriteFunctionExpression(writer, functionExpression, out id, out type),
 					TernaryExpression ternaryExpression => WriteTernaryExpression(writer, ternaryExpression, out id, out type),
 					FloatLiteralExpression floatLiteralExpression => WriteFloatLiteralExpression(writer, floatLiteralExpression, out id, out type),
+					ArrayAccessExpression arrayAccessExpression => WriteRightHandArrayAccessExpression(writer, arrayAccessExpression, out id, out type),
 					_ => throw new Exception($"Unknown expression type: {expression}")
 				};
 
@@ -434,6 +486,11 @@ public class ShaderCompiler
 			}
 
 			return writer;
+		}
+
+		ShaderWriter WriteRightHandArrayAccessExpression(ShaderWriter writer, ArrayAccessExpression expression, out int id, out ShaderType type)
+		{
+			throw new NotImplementedException();
 		}
 
 		ShaderWriter WriteTokenExpression(ShaderWriter writer, TokenExpression expression, out int id, out ShaderType type)
@@ -662,6 +719,7 @@ public class ShaderCompiler
 		int GetVarId(BinaryExpression expression) => varNames[(((TokenExpression)expression.Left).Value, ((TokenExpression)expression.Right).Value)];
 		ShaderType GetVarType(BinaryExpression expression) => vars.Single(x => x.Id == GetVarId(expression)).Type;
 		int GetTokenVarId(TokenExpression expression) => varNames[(expression.Value, "")];
+		ShaderType GetTokenVarType(TokenExpression expression) => vars.Single(x => x.Id == GetTokenVarId(expression)).Type;
 
 		byte[] result = [.. shaderHeader[..headerWriter.Writer.WriteCount], .. shaderCode[..writer.Writer.WriteCount]];
 

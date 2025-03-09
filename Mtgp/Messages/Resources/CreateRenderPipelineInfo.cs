@@ -7,7 +7,7 @@ public record CreateRenderPipelineInfo(CreateRenderPipelineInfo.ShaderStageInfo[
 									   CreateRenderPipelineInfo.FragmentAttribute[] FragmentAttributes,
 									   Rect3D Viewport,
 									   Rect3D[]? Scissors,
-									   bool enableAlpha,
+									   bool EnableAlpha,
 									   PolygonMode PolygonMode,
 									   string? Reference = null)
 	: ResourceInfo(Reference), ICreateResourceInfo

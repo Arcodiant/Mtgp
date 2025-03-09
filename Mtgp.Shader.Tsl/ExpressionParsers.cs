@@ -41,9 +41,16 @@ internal static class ExpressionParsers
 																					  from arguments in Parse.Ref(() => Expression!).ManyDelimitedBy(Token.EqualTo(PartType.Comma)).Between(Token.EqualTo(PartType.LParen), Token.EqualTo(PartType.RParen))
 																					  select (Expression)new FunctionExpression(name, arguments);
 
-	private readonly static TokenListParser<PartType, Expression> factor = (from expr in Parse.Ref(() => Expression!).Between(Token.EqualTo(PartType.LParen), Token.EqualTo(PartType.RParen)) select expr)
-																			.Or(FunctionExpression.Try())
-																			.Or(tokenExpression)
+	private readonly static TokenListParser<PartType, Expression> functionOrBase = (from expr in Parse.Ref(() => Expression!).Between(Token.EqualTo(PartType.LParen), Token.EqualTo(PartType.RParen)) select expr)
+																						.Or(FunctionExpression.Try())
+																						.Or(tokenExpression);
+
+	private readonly static TokenListParser<PartType, Expression> arrayAccessExpression = from baseExpr in functionOrBase
+																						  from index in Parse.Ref(() => Expression!).Between(Token.EqualTo(PartType.LSquareParen), Token.EqualTo(PartType.RSquareParen))
+																						  select (Expression)new ArrayAccessExpression(baseExpr, index);
+
+	private readonly static TokenListParser<PartType, Expression> factor = arrayAccessExpression.Try()
+																			.Or(functionOrBase)
 																			.Or(floatLiteralExpression)
 																			.Or(intLiteralExpression);
 

@@ -113,6 +113,13 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 		ThrowIfError(result);
 	}
 
+	public async Task AddDispatchAction(int actionListId, int computePipeline, Extent3D dimensions, int[] bufferViewAttachments)
+	{
+		var result = await this.connection.SendAsync(new AddDispatchActionRequest(Interlocked.Increment(ref this.requestId), actionListId, computePipeline, dimensions, bufferViewAttachments));
+
+		ThrowIfError(result);
+	}
+
 	public async Task AddIndirectDrawAction(int actionListId, int renderPipeline, int[] imageAttachments, int[] bufferViewAttachments, FrameBufferInfo framebuffer, int commandBufferView, int offset)
 	{
 		var result = await this.connection.SendAsync(new AddIndirectDrawActionRequest(Interlocked.Increment(ref this.requestId), actionListId, renderPipeline, imageAttachments, bufferViewAttachments, framebuffer, commandBufferView, offset));
@@ -271,6 +278,9 @@ public class ResourceBuilder(MtgpClient client)
 									   string? reference = null)
 		=> this.Add(new CreateRenderPipelineInfo(shaderStages, vertexInput, fragmentAttributes, viewport, scissors, enableAlpha, polygonMode, reference), out task);
 
+	public ResourceBuilder ComputePipeline(out Task<int> task, CreateComputePipelineInfo.ShaderInfo shader, string? reference = null)
+		=> this.Add(new CreateComputePipelineInfo(shader, reference), out task);
+
 	public ResourceBuilder Shader(out Task<int> task, byte[] data, string? reference = null)
 		=> this.Add(new CreateShaderInfo(data, reference), out task);
 
@@ -281,11 +291,18 @@ public class ResourceBuilder(MtgpClient client)
 	{
 		var results = await this.client.CreateResourcesAsync(this.resources.Select(x => x.Info).ToArray());
 
-		for (var i = 0; i < results.Length; i++)
+		for (var i = 0; i < resources.Count; i++)
 		{
 			try
 			{
-				this.resources[i].TaskSource.SetResult(await results[i]);
+				if (results.Length <= i)
+				{
+					this.resources[i].TaskSource.SetException(new Exception("Missing resource creation result"));
+				}
+				else
+				{
+					this.resources[i].TaskSource.SetResult(await results[i]);
+				}
 			}
 			catch (Exception ex)
 			{

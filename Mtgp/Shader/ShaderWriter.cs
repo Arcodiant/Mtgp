@@ -176,4 +176,11 @@ public readonly ref struct ShaderWriter(BitWriter writer)
 							.Write(result)
 							.Write(type)
 							.Write(value));
+
+	public readonly ShaderWriter AccessChain(int result, int type, int baseId, ReadOnlySpan<int> indexes)
+		=> new(this.Write(ShaderOp.AccessChain, (uint)(4 + indexes.Length))
+							.Write(result)
+							.Write(type)
+							.Write(baseId)
+							.Write(indexes));
 }

@@ -30,6 +30,8 @@ public class ShaderInterpreter
 
 	public ShaderInterpreter(Memory<byte> compiledShader)
 	{
+		Console.WriteLine(ShaderDisassembler.Disassemble(compiledShader.ToArray()));
+
 		this.compiledShader = compiledShader;
 
 		var (inputs, outputs) = GetAttributes(compiledShader);
@@ -183,14 +185,7 @@ public class ShaderInterpreter
 		public ShaderStorageClass? StorageClass { get; set; }
 	}
 
-	public struct Builtins(int vertexIndex = 0, int instanceIndex = 0, int positionX = 0, int positionY = 0, int timer = 0)
-	{
-		public int VertexIndex = vertexIndex;
-		public int InstanceIndex = instanceIndex;
-		public int PositionX = positionX;
-		public int PositionY = positionY;
-		public int Timer = timer;
-	}
+	public record struct Builtins(int VertexIndex = 0, int InstanceIndex = 0, int PositionX = 0, int PositionY = 0, int Timer = 0, int WorkgroupId = 0);
 
 	public void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, Builtins inputBuiltins, ReadOnlyMemory<byte>[] input, ref Builtins outputBuiltins, Span<byte> output)
 	{
@@ -336,6 +331,7 @@ public class ShaderInterpreter
 										Builtin.Timer => inputBuiltins.Timer,
 										Builtin.PositionX => inputBuiltins.PositionX,
 										Builtin.PositionY => inputBuiltins.PositionY,
+										Builtin.WorkgroupId => inputBuiltins.WorkgroupId,
 										_ => throw new InvalidOperationException($"Invalid builtin {variableInfo.Builtin}"),
 									};
 								}
@@ -687,6 +683,10 @@ public class ShaderInterpreter
 					break;
 				case ShaderOp.EntryPoint:
 					shaderReader = shaderReader.Skip();
+					break;
+				case ShaderOp.AccessChain:
+					{
+					}
 					break;
 				default:
 					throw new InvalidOperationException($"Unknown opcode {op}");

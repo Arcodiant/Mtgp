@@ -28,5 +28,6 @@ public enum ShaderOp
 	Multiply,
 	IntToFloat,
 	Abs,
-	Negate
+	Negate,
+	AccessChain
 }

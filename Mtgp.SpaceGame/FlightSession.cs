@@ -19,7 +19,43 @@ namespace Mtgp.SpaceGame
 		{
 			var shaderManager = await ShaderManager.CreateAsync(client);
 
-			var uiManager = new UIManager(shaderManager, client);
+			var particleShader = await shaderManager.CreateShaderFromFileAsync("Shaders/Particle.comp");
+
+			await client.GetResourceBuilder()
+					.ActionList(out var _, "ActionList")
+					.Pipe(out var pipeTask, "ActionList")
+					.Buffer(out var bufferTask, 64, "Particles")
+					.BufferView(out var bufferViewTask, "Particles", 0, 64)
+					.ComputePipeline(out var pipelineTask, new(particleShader, "Main"))
+					.BuildAsync();
+
+			var pipe = await pipeTask;
+			var buffer = await bufferTask;
+			var bufferView = await bufferViewTask;
+
+			var particleBuffer = new byte[12];
+
+			new BitWriter(particleBuffer)
+				.Write(10)
+				.Write(10)
+				.Write(1);
+
+			await client.SetBufferData(buffer, 0, particleBuffer);
+
+			await client.AddDispatchAction(pipe, buffer, (1, 1, 1), [bufferView]);
+
+			await client.Send(pipe, []);
+
+			var waitHandle = new TaskCompletionSource();
+
+			client.SendReceived += async message =>
+			{
+				waitHandle.SetResult();
+			};
+
+			await client.SetDefaultPipe(DefaultPipe.Input, -1, [], false);
+
+			await waitHandle.Task;
 		}
 	}
 }

@@ -27,4 +27,10 @@
     <ProjectReference Include="..\Mtgp\Mtgp.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Shaders\Particle.comp">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

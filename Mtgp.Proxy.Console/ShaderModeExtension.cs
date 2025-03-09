@@ -40,6 +40,16 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 		{
 			return this.GetStore<T>()[index];
 		}
+
+		public T[] Get<T>(int[] indices)
+		{
+			return indices.Select(Get<T>).ToArray();
+		}
+
+		public V[] Get<T, V>(int[] indices, Func<T, V> selector)
+		{
+			return indices.Select(Get<T>).Select(selector).ToArray();
+		}
 	}
 
 	private record PipeInfo(int ActionList);
@@ -80,6 +90,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 		proxy.RegisterMessageHandler<AddClearBufferActionRequest>(AddClearBufferAction);
 		proxy.RegisterMessageHandler<AddBindVertexBuffersRequest>(AddBindVertexBuffers);
 		proxy.RegisterMessageHandler<AddDrawActionRequest>(AddDrawAction);
+		proxy.RegisterMessageHandler<AddDispatchActionRequest>(AddDispatchAction);
 		proxy.RegisterMessageHandler<AddIndirectDrawActionRequest>(AddIndirectDrawAction);
 		proxy.RegisterMessageHandler<AddPresentActionRequest>(AddPresentAction);
 		proxy.RegisterMessageHandler<AddRunPipelineActionRequest>(AddRunPipelineAction);
@@ -133,8 +144,8 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 		var actionList = this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions;
 
 		actionList.Add(new IndirectDrawAction(this.resourceStore.Get<RenderPipeline>(request.RenderPipeline),
-										request.ImageAttachments.Select(this.resourceStore.Get<ImageState>).ToArray(),
-										request.BufferViewAttachments.Select(this.resourceStore.Get<BufferViewInfo>).Select(x => x.View).ToArray(),
+										this.resourceStore.Get<ImageState>(request.ImageAttachments),
+										this.resourceStore.Get(request.BufferViewAttachments, (BufferViewInfo info) => info.View),
 										GetFrameBuffer(request.Framebuffer.Character, request.Framebuffer.Foreground, request.Framebuffer.Background),
 										this.resourceStore.Get<BufferViewInfo>(request.CommandBufferView).View,
 										request.Offset));
@@ -173,6 +184,15 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 								GetFrameBuffer(request.Framebuffer.Character, request.Framebuffer.Foreground, request.Framebuffer.Background),
 								request.InstanceCount,
 								request.VertexCount));
+
+		return new MtgpResponse(0, "ok");
+	}
+
+	private MtgpResponse AddDispatchAction(AddDispatchActionRequest request)
+	{
+		var actionList = this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions;
+
+		actionList.Add(new DispatchAction(this.resourceStore.Get<ComputePipeline>(request.ComputePipeline), request.Dimensions, this.resourceStore.Get(request.BufferViewAttachments, (BufferViewInfo info) => info.View)));
 
 		return new MtgpResponse(0, "ok");
 	}
@@ -225,40 +245,6 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 		return new GetPresentImageResponse(request.Id, 0, 1, 2);
 	}
 
-	//private MtgpResponse SetActionTrigger(SetActionTriggerRequest request)
-	//{
-	//	int pipeId = request.Pipe;
-
-	//	this.resourceStore.Get<PipeInfo>(pipeId).Handlers.Add(pipeData =>
-	//	{
-	//		var pipeStopwatch = Stopwatch.StartNew();
-
-	//		var state = new ActionExecutionState
-	//		{
-	//			PipeData = pipeData
-	//		};
-
-	//		logger.LogDebug("Running Pipe {PipeId}", pipeId);
-
-	//		foreach (var action in this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions)
-	//		{
-	//			var stopwatch = Stopwatch.StartNew();
-
-	//			action.Execute(logger, state);
-
-	//			stopwatch.Stop();
-
-	//			logger.LogDebug("Pipe {PipeId} Action {Action} took {ElapsedMs}ms", pipeId, action.ToString(), stopwatch.Elapsed.TotalMilliseconds);
-	//		}
-
-	//		pipeStopwatch.Stop();
-
-	//		logger.LogDebug("Pipe {PipeId} took {ElapsedMs}ms", pipeId, pipeStopwatch.Elapsed.TotalMilliseconds);
-	//	});
-
-	//	return new MtgpResponse(0, "ok");
-	//}
-
 	private MtgpResponse CreateResource(CreateResourceRequest request)
 	{
 		ResourceCreateResult Create<T>(T resource) => new(this.resourceStore.Add(resource), ResourceCreateResultType.Success);
@@ -301,6 +287,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 						CreateBufferViewInfo bufferViewInfo => [bufferViewInfo.Buffer],
 						CreateStringSplitPipelineInfo stringSplitPipelineInfo => [stringSplitPipelineInfo.IndirectCommandBufferView, stringSplitPipelineInfo.InstanceBufferView, stringSplitPipelineInfo.LineImage],
 						CreateRenderPipelineInfo renderPipelineInfo => renderPipelineInfo.ShaderStages.Select(x => x.Shader).ToArray(),
+						CreateComputePipelineInfo computePipelineInfo => [computePipelineInfo.ComputeShader.Shader],
 						_ => []
 					};
 
@@ -347,8 +334,9 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 																													renderPipelineInfo.FragmentAttributes.Select(x => (x.Location, x.Type, x.InterpolationScale)).ToArray(),
 																													renderPipelineInfo.Viewport,
 																													renderPipelineInfo.Scissors,
-																													renderPipelineInfo.enableAlpha,
+																													renderPipelineInfo.EnableAlpha,
 																													renderPipelineInfo.PolygonMode)),
+								CreateComputePipelineInfo computePipelineInfo => Create(new ComputePipeline(this.resourceStore.Get<ShaderInterpreter>(GetId(computePipelineInfo.ComputeShader.Shader)))),
 								_ => ResourceCreateResult.InvalidRequest
 							};
 						}

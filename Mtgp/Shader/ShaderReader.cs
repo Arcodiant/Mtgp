@@ -393,4 +393,37 @@ public readonly ref struct ShaderReader(BitReader reader)
 
 		return new(reader);
 	}
+
+	private readonly BitReader ReadAccessChain(out int count)
+	{
+		var reader = this.ReadShaderOp(ShaderOp.AccessChain, out uint wordCount);
+
+		count = (int)wordCount - 4;
+
+		return reader;
+	}
+
+	public readonly ShaderReader AccessChain(out int count)
+	{
+		var reader = this.ReadAccessChain(out count);
+
+		return new(reader.Skip(count * 4));
+	}
+
+	public readonly ShaderReader AccessChain(out int result, out int type, out int baseId, Span<int> indexes, out int count)
+	{
+		var reader = this.ReadAccessChain(out count).Read(out result).Read(out type).Read(out baseId);
+
+		if (count <= indexes.Length)
+		{
+			reader = reader.Read(indexes[..count]);
+		}
+		else
+		{
+			reader.Read(indexes);
+			reader = reader.Skip(count * 4);
+		}
+
+		return new(reader);
+	}
 }
