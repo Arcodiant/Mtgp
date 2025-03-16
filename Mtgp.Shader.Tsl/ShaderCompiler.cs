@@ -335,8 +335,8 @@ public class ShaderCompiler
 				"uniform" => (ShaderStorageClass.UniformConstant, 1),
 				"image1d" => (ShaderStorageClass.Image, 1),
 				"image2d" => (ShaderStorageClass.Image, 2),
-				"readbuffer" => (ShaderStorageClass.ReadBuffer, 1),
-				"writebuffer" => (ShaderStorageClass.WriteBuffer, 1),
+				"readbuffer" => (ShaderStorageClass.UniformConstant, 1),
+				"writebuffer" => (ShaderStorageClass.Uniform, 1),
 				_ => throw new Exception($"Unknown binding type: {binding.BindingType}")
 			};
 

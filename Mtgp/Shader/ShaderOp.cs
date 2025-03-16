@@ -10,6 +10,7 @@ public enum ShaderOp
 	TypeImage,
 	TypePointer,
 	TypeTextel,
+	TypeRuntimeArray,
 	Decorate,
 	Store,
 	Load,

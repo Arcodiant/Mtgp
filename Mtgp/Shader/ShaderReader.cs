@@ -143,6 +143,15 @@ public readonly ref struct ShaderReader(BitReader reader)
 		return new(reader);
 	}
 
+	public readonly ShaderReader TypeRuntimeArray(out int result, out int elementType)
+	{
+		var reader = this.ReadShaderOp(ShaderOp.TypeRuntimeArray, ShaderOpConstants.TypeRuntimeArrayWordCount);
+
+		reader = reader.Read(out result).Read(out elementType);
+
+		return new(reader);
+	}
+
 	public readonly ShaderReader TypeImage(out int result, out int imageType, out int dim)
 	{
 		var reader = this.ReadShaderOp(ShaderOp.TypeImage, ShaderOpConstants.TypeImageWordCount);

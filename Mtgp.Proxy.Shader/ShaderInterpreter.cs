@@ -84,7 +84,7 @@ public class ShaderInterpreter
 
 		var types = new Dictionary<int, ShaderType>();
 
-		while (!shaderReader.EndOfStream)
+		while (!shaderReader.EndOfStream && shaderReader.Next != ShaderOp.None)
 		{
 			var op = shaderReader.Next;
 
@@ -130,6 +130,13 @@ public class ShaderInterpreter
 						shaderReader.TypeVector(out int result, out int componentType, out int componentCount);
 						var type = types[componentType];
 						types[result] = ShaderType.VectorOf(type, componentCount);
+					}
+					break;
+				case ShaderOp.TypeRuntimeArray:
+					{
+						shaderReader.TypeRuntimeArray(out int result, out int elementType);
+						var type = types[elementType];
+						types[result] = ShaderType.RuntimeArrayOf(type);
 					}
 					break;
 				case ShaderOp.TypePointer:
@@ -182,10 +189,42 @@ public class ShaderInterpreter
 		public uint? Location { get; set; }
 		public uint? Binding { get; set; }
 		public Builtin? Builtin { get; set; }
-		public ShaderStorageClass? StorageClass { get; set; }
 	}
 
-	public record struct Builtins(int VertexIndex = 0, int InstanceIndex = 0, int PositionX = 0, int PositionY = 0, int Timer = 0, int WorkgroupId = 0);
+	public struct Builtins(int vertexIndex = 0, int instanceIndex = 0, int positionX = 0, int positionY = 0, int timer = 0, int workgroupId = 0)
+	{
+		public int VertexIndex = vertexIndex;
+		public int InstanceIndex = instanceIndex;
+		public int PositionX = positionX;
+		public int PositionY = positionY;
+		public int Timer = timer;
+		public int WorkgroupId = workgroupId;
+	};
+
+	public readonly struct UniformPointer(byte binding, uint pointer)
+	{
+		private UniformPointer(uint value)
+			: this(0, 0)
+		{
+			this.value = value;
+		}
+
+		private readonly uint value = (pointer & 0x00FFFFFF) + ((uint)binding << 24);
+
+		public byte Binding
+		{
+			get => (byte)(value >> 24);
+		}
+
+		public uint Pointer
+		{
+			get => value & 0x00FFFFFF;
+		}
+
+		public uint ToUInt32() => value;
+
+		public static UniformPointer FromUInt32(uint value) => new(value);
+	}
 
 	public void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, Builtins inputBuiltins, ReadOnlyMemory<byte>[] input, ref Builtins outputBuiltins, Span<byte> output)
 	{
@@ -206,10 +245,60 @@ public class ShaderInterpreter
 			set(decorations);
 		}
 
-		var results = new Dictionary<int, Field>();
-		var results2 = new Dictionary<int, (Field X, Field Y)>();
-		var results3 = new Dictionary<int, (Field X, Field Y, Field Z)>();
+		var results = new Dictionary<int, int>();
 		var types = new Dictionary<int, ShaderType>();
+
+		int builtinSize = 0;
+
+		unsafe
+		{
+			builtinSize = sizeof(Builtins);
+		}
+
+		Span<byte> inputBuffer = stackalloc byte[this.InputSize + builtinSize];
+		Span<byte> outputBuffer = stackalloc byte[this.OutputSize + builtinSize];
+
+		new BitWriter(inputBuffer).Write([inputBuiltins]);
+		for (int index = 0; index < input.Length; index++)
+		{
+			var inputSlice = input[index].Span;
+
+			inputSlice.CopyTo(inputBuffer[(builtinSize + this.inputMappings[index])..]);
+		}
+
+		int workingSetSize = 4096;
+		Span<byte> workingSet = stackalloc byte[workingSetSize];
+
+		int workingSetPointer = 0;
+
+		int GetWorkingSetPointer(int size)
+		{
+			int pointer = workingSetPointer;
+			workingSetPointer += size;
+
+			if (workingSetPointer > workingSetSize)
+			{
+				throw new InvalidOperationException("Working set overflow");
+			}
+
+			return pointer;
+		}
+
+		Span<byte> GetSpan(int id, Span<byte> workingSet)
+		{
+			int valuePointer = results[id];
+			int valueSize = types[id].Size;
+
+			return workingSet[valuePointer..][..valueSize];
+		}
+
+		Span<byte> GetTarget(int id, int type, Span<byte> workingSet)
+		{
+			int pointer = GetWorkingSetPointer(types[type].Size);
+			results[id] = pointer;
+
+			return workingSet[pointer..][..types[type].Size];
+		}
 
 		while (isRunning)
 		{
@@ -260,14 +349,23 @@ public class ShaderInterpreter
 					types[result] = ShaderType.Bool;
 					break;
 				case ShaderOp.TypePointer:
-					shaderReader = shaderReader.TypePointer(out result, out var storageClass, out int pointerType);
-					types[result] = ShaderType.PointerOf(types[pointerType], storageClass);
-					break;
+					{
+						shaderReader = shaderReader.TypePointer(out result, out var storageClass, out int pointerType);
+						types[result] = ShaderType.PointerOf(types[pointerType], storageClass);
+						break;
+					}
 				case ShaderOp.TypeVector:
 					{
 						shaderReader = shaderReader.TypeVector(out result, out int componentType, out int componentCount);
 
 						types[result] = ShaderType.VectorOf(types[componentType], componentCount);
+						break;
+					}
+				case ShaderOp.TypeRuntimeArray:
+					{
+						shaderReader = shaderReader.TypeRuntimeArray(out result, out int elementType);
+
+						types[result] = ShaderType.RuntimeArrayOf(types[elementType]);
 						break;
 					}
 				case ShaderOp.TypeImage:
@@ -295,81 +393,45 @@ public class ShaderInterpreter
 
 						types[result] = variableType;
 
-						SetVariableInfo(result, x => x.StorageClass = variableStorageClass);
-					}
-					break;
-				case ShaderOp.Constant:
-					{
-						shaderReader = shaderReader.Constant(out result, out int type, out int value);
+						int pointer = 0;
 
-						results[result] = value;
-						types[result] = types[type];
-						break;
-					}
-				case ShaderOp.Load:
-					{
-						shaderReader = shaderReader.Load(out result, out int resultType, out int variable);
-
-						var type = types[resultType];
-
-						if (types[variable].ElementType != type)
-						{
-							throw new InvalidOperationException("Load result type must match variable element type");
-						}
-
-						var variableInfo = variableDecorations[variable];
-
-						switch (variableInfo.StorageClass)
+						switch (variableType.StorageClass)
 						{
 							case ShaderStorageClass.Input:
-								if (variableInfo.Builtin is not null)
+								if (variableDecorations[result].Location is not null)
 								{
-									results[result] = variableInfo.Builtin switch
-									{
-										Builtin.VertexIndex => inputBuiltins.VertexIndex,
-										Builtin.InstanceIndex => inputBuiltins.InstanceIndex,
-										Builtin.Timer => inputBuiltins.Timer,
-										Builtin.PositionX => inputBuiltins.PositionX,
-										Builtin.PositionY => inputBuiltins.PositionY,
-										Builtin.WorkgroupId => inputBuiltins.WorkgroupId,
-										_ => throw new InvalidOperationException($"Invalid builtin {variableInfo.Builtin}"),
-									};
+									pointer = builtinSize + this.inputMappings[variableDecorations[result].Location!.Value];
 								}
-								else if (variableInfo.Location is not null)
+								else if (variableDecorations[result].Builtin is not null)
 								{
-									if (type.Size == 4)
-									{
-										results[result] = MemoryMarshal.AsRef<Field>(input[variableInfo.Location!.Value].Span);
-									}
-									else if (type.Size == 8)
-									{
-										results2[result] = MemoryMarshal.AsRef<(Field, Field)>(input[variableInfo.Location!.Value].Span);
-									}
-									else if (type.Size == 12)
-									{
-										results3[result] = MemoryMarshal.AsRef<(Field, Field, Field)>(input[variableInfo.Location!.Value].Span);
-									}
-									else
-									{
-										throw new InvalidOperationException("Invalid input size");
-									}
+									pointer = (int)Marshal.OffsetOf<Builtins>(variableDecorations[result].Builtin.ToString()!);
 								}
 								else
 								{
 									throw new InvalidOperationException("Input variable has no target decoration");
 								}
 								break;
-							case ShaderStorageClass.UniformConstant:
-								if (variableInfo.Binding is not null)
+							case ShaderStorageClass.Output:
+								if (variableDecorations[result].Location is not null)
 								{
-									if (type.Size == 4)
-									{
-										results[result] = BitConverter.ToInt32(bufferAttachments[(int)variableInfo.Binding].Span);
-									}
-									else
-									{
-										throw new InvalidOperationException("Invalid uniform size");
-									}
+									pointer = builtinSize + this.outputMappings[variableDecorations[result].Location!.Value];
+								}
+								else if (variableDecorations[result].Builtin is not null)
+								{
+									pointer = (int)Marshal.OffsetOf<Builtins>(variableDecorations[result].Builtin.ToString()!);
+								}
+								else
+								{
+									throw new InvalidOperationException("Output variable has no target decoration");
+								}
+								break;
+							case ShaderStorageClass.UniformConstant:
+							case ShaderStorageClass.Uniform:
+								if (variableDecorations[result].Binding is not null)
+								{
+									var uniformPointer = new UniformPointer((byte)variableDecorations[result].Binding!, 0);
+
+									pointer = (int)uniformPointer.ToUInt32();
 								}
 								else
 								{
@@ -377,7 +439,55 @@ public class ShaderInterpreter
 								}
 								break;
 							default:
-								throw new InvalidOperationException($"Invalid storage class {variableInfo.StorageClass}");
+								throw new InvalidOperationException($"Invalid storage class {variableStorageClass}");
+						}
+
+						var targetSpan = GetTarget(result, type, workingSet);
+
+						new BitWriter(targetSpan).Write(pointer);
+					}
+					break;
+				case ShaderOp.Constant:
+					{
+						shaderReader = shaderReader.Constant(out result, out int type, out int value);
+
+						var constantType = types[type];
+
+						if (!constantType.IsInt())
+						{
+							throw new InvalidOperationException("Constant type must be int");
+						}
+
+						new BitWriter(GetTarget(result, type, workingSet)).Write(value);
+
+						types[result] = constantType;
+						break;
+					}
+				case ShaderOp.Load:
+					{
+						shaderReader = shaderReader.Load(out result, out int resultType, out int pointer);
+
+						var type = types[resultType];
+						var pointerType = types[pointer];
+
+						if (pointerType.ElementType != type)
+						{
+							throw new InvalidOperationException("Load result type must match variable element type");
+						}
+
+						switch (pointerType.StorageClass)
+						{
+							case ShaderStorageClass.Input:
+								int pointerValue = BitConverter.ToInt32(GetSpan(pointer, workingSet));
+
+								var targetSpan = GetTarget(result, resultType, workingSet);
+
+								var inputSpan = inputBuffer[pointerValue..][..type.Size];
+
+								inputSpan.CopyTo(targetSpan);
+								break;
+							default:
+								throw new InvalidOperationException($"Invalid storage class {pointerType.StorageClass}");
 						}
 
 						types[result] = type;
@@ -386,73 +496,38 @@ public class ShaderInterpreter
 					}
 				case ShaderOp.Store:
 					{
-						shaderReader = shaderReader.Store(out int variable, out int value);
+						shaderReader = shaderReader.Store(out int pointer, out int value);
 
-						var variableInfo = variableDecorations[variable];
-						var variableType = types[variable].ElementType;
+						var pointerType = types[pointer];
+						var valueType = pointerType.ElementType;
 
-						if (variableType != types[value])
+						if (valueType != types[value])
 						{
-							throw new InvalidOperationException("Store value type must match variable element type");
+							throw new InvalidOperationException("Store value type must match pointer element type");
 						}
 
-						Span<byte> valueToStore = stackalloc byte[variableType.Size];
+						int valuePointer = results[value];
 
-						if (!variableType.IsVector())
-						{
-							new BitWriter(valueToStore)
-								.Write((int)results[value]);
-						}
-						else if (variableType.ElementCount == 2)
-						{
-							var (x, y) = results2[value];
-							new BitWriter(valueToStore)
-								.Write((int)x)
-								.Write((int)y);
-						}
-						else if (variableType.ElementCount == 3)
-						{
-							var (x, y, z) = results3[value];
-							new BitWriter(valueToStore)
-								.Write((int)x)
-								.Write((int)y)
-								.Write((int)z);
-						}
-						else
-						{
-							throw new InvalidOperationException($"Unsupported store type {variableType}");
-						}
+						Span<byte> valueToStore = workingSet[valuePointer..][..valueType.Size];
+						int pointerValue = BitConverter.ToInt32(GetSpan(pointer, workingSet));
 
-						new BitReader(valueToStore).Read(out int valueAsInt);
-
-						switch (variableInfo.StorageClass)
+						switch (pointerType.StorageClass)
 						{
 							case ShaderStorageClass.Output:
-								if (variableInfo.Builtin is not null)
-								{
-									switch (variableInfo.Builtin)
-									{
-										case Builtin.PositionX:
-											outputBuiltins.PositionX = valueAsInt;
-											break;
-										case Builtin.PositionY:
-											outputBuiltins.PositionY = valueAsInt;
-											break;
-										default:
-											throw new InvalidOperationException($"Invalid builtin {variableInfo.Builtin}");
-									}
-								}
-								else if (variableInfo.Location is not null)
-								{
-									valueToStore.CopyTo(output[this.outputMappings[(int)variableInfo.Location]..]);
-								}
-								else
-								{
-									throw new InvalidOperationException("Output variable has no target decoration");
-								}
+								var outputSpan = outputBuffer[pointerValue..][..valueType.Size];
+
+								valueToStore.CopyTo(outputSpan);
+								break;
+							case ShaderStorageClass.UniformConstant:
+							case ShaderStorageClass.Uniform:
+								var uniformPointer = UniformPointer.FromUInt32((uint)pointerValue);
+
+								var uniformSpan = bufferAttachments[uniformPointer.Binding].Span[(int)uniformPointer.Pointer..][..valueType.Size];
+
+								valueToStore.CopyTo(uniformSpan);
 								break;
 							default:
-								throw new InvalidOperationException($"Invalid storage class {variableInfo.StorageClass}");
+								throw new InvalidOperationException($"Invalid storage class {pointerType.StorageClass}");
 						}
 						break;
 					}
@@ -465,7 +540,7 @@ public class ShaderInterpreter
 							throw new InvalidOperationException("Add operands must have the same type");
 						}
 
-						results[result] = ApplyOperator(types[type], results[a], results[b], (a, b) => a + b, (a, b) => a + b);
+						ApplyOperator(types[type], GetSpan(a, workingSet), GetSpan(b, workingSet), GetTarget(result, type, workingSet), (a, b) => a + b, (a, b) => a + b);
 						types[result] = types[type];
 						break;
 					}
@@ -478,7 +553,7 @@ public class ShaderInterpreter
 							throw new InvalidOperationException("Mod operands must have the same type");
 						}
 
-						results[result] = ApplyOperator(types[type], results[a], results[b], (a, b) => a % b, (a, b) => a % b);
+						ApplyOperator(types[type], GetSpan(a, workingSet), GetSpan(b, workingSet), GetTarget(result, type, workingSet), (a, b) => a % b, (a, b) => a % b);
 
 						types[result] = types[type];
 						break;
@@ -492,9 +567,11 @@ public class ShaderInterpreter
 						var textureImage = imageAttachments[(int)variableData.Binding!];
 						var textureData = textureImage.Data.Span;
 
-						var (x, y) = results2[coord];
+						new BitReader(GetSpan(coord, workingSet))
+							.Read(out int x)
+							.Read(out int y);
 
-						int textureIndex = (int)x + (int)y * textureImage.Size.Width;
+						int textureIndex = x + y * textureImage.Size.Width;
 
 						if (types[type] != ShaderType.Int(4))
 						{
@@ -514,7 +591,7 @@ public class ShaderInterpreter
 							throw new InvalidOperationException("Subtract operands must have the same type");
 						}
 
-						results[result] = ApplyOperator(types[type], results[a], results[b], (a, b) => a - b, (a, b) => a - b);
+						ApplyOperator(types[type], GetSpan(a, workingSet), GetSpan(b, workingSet), GetTarget(result, type, workingSet), (a, b) => a - b, (a, b) => a - b);
 
 						types[result] = types[type];
 						break;
@@ -528,7 +605,7 @@ public class ShaderInterpreter
 							throw new InvalidOperationException("Multiply operands must have the same type");
 						}
 
-						results[result] = ApplyOperator(types[type], results[a], results[b], (a, b) => a * b, (a, b) => a * b);
+						ApplyOperator(types[type], GetSpan(a, workingSet), GetSpan(b, workingSet), GetTarget(result, type, workingSet), (a, b) => a * b, (a, b) => a * b);
 
 						types[result] = types[type];
 						break;
@@ -542,7 +619,7 @@ public class ShaderInterpreter
 							throw new InvalidOperationException("Divide operands must have the same type");
 						}
 
-						results[result] = ApplyOperator(types[type], results[a], results[b], (a, b) => a / b, (a, b) => a / b);
+						ApplyOperator(types[type], GetSpan(a, workingSet), GetSpan(b, workingSet), GetTarget(result, type, workingSet), (a, b) => a / b, (a, b) => a / b);
 
 						types[result] = types[type];
 						break;
@@ -579,20 +656,14 @@ public class ShaderInterpreter
 							throw new InvalidOperationException("Conditional true and false values must have the same type");
 						}
 
-						switch (types[type].Size)
-						{
-							case 4:
-								results[result] = (int)results[condition] == 0 ? results[trueValue] : results[falseValue];
-								break;
-							case 8:
-								results2[result] = (int)results[condition] == 0 ? results2[trueValue] : results2[falseValue];
-								break;
-							case 12:
-								results3[result] = (int)results[condition] == 0 ? results3[trueValue] : results3[falseValue];
-								break;
-							default:
-								throw new InvalidOperationException("Unsupported conditional type size");
-						}
+						new BitReader(GetSpan(condition, workingSet)).Read(out int conditionValue);
+
+						bool isTrue = conditionValue != 0;
+
+						int valueId = isTrue ? trueValue : falseValue;
+
+						GetSpan(valueId, workingSet).CopyTo(GetTarget(result, type, workingSet));
+
 						types[result] = types[type];
 						break;
 					}
@@ -609,36 +680,27 @@ public class ShaderInterpreter
 							throw new InvalidOperationException("Composite construct result type must be a vector");
 						}
 
+						if (count != types[type].ElementCount)
+						{
+							throw new InvalidOperationException("Composite construct component count must match element count");
+						}
+
 						var elementType = types[type].ElementType;
-						var items = new List<Field>();
+
+						var targetSpan = GetTarget(result, type, workingSet);
 
 						for (int i = 0; i < count; i++)
 						{
 							if (types[components[i]] == elementType)
 							{
-								items.Add(results[components[i]]);
+								var subSpan = targetSpan[(i * elementType.Size)..][..elementType.Size];
+
+								GetSpan(components[i], workingSet).CopyTo(subSpan);
 							}
 							else
 							{
 								throw new Exception("Composite construct component type must match element type");
 							}
-						}
-
-						if (items.Count != types[type].ElementCount)
-						{
-							throw new InvalidOperationException("Composite construct component count must match element count");
-						}
-
-						switch (items.Count)
-						{
-							case 2:
-								results2[result] = (items[0], items[1]);
-								break;
-							case 3:
-								results3[result] = (items[0], items[1], items[2]);
-								break;
-							default:
-								throw new InvalidOperationException($"Unsupported composite construct component count ({items.Count})");
 						}
 
 						types[result] = types[type];
@@ -658,7 +720,8 @@ public class ShaderInterpreter
 							throw new InvalidOperationException("Int to float value type must be int");
 						}
 
-						results[result] = (float)(int)results[value];
+						var targetSpan = GetTarget(result, type, workingSet);
+						new BitWriter(targetSpan).Write((float)BitConverter.ToInt32(GetSpan(value, workingSet)));
 						types[result] = types[type];
 						break;
 					}
@@ -666,7 +729,7 @@ public class ShaderInterpreter
 					{
 						shaderReader = shaderReader.Abs(out result, out int type, out int value);
 
-						results[result] = ApplyOperator(types[type], results[value], Math.Abs, Math.Abs);
+						ApplyOperator(types[type], GetSpan(value, workingSet), GetTarget(result, type, workingSet), Math.Abs, Math.Abs);
 						types[result] = types[type];
 						break;
 					}
@@ -674,7 +737,7 @@ public class ShaderInterpreter
 					{
 						shaderReader = shaderReader.Negate(out result, out int type, out int value);
 
-						results[result] = ApplyOperator(types[type], results[value], x => -x, x => -x);
+						ApplyOperator(types[type], GetSpan(value, workingSet), GetTarget(result, type, workingSet), x => -x, x => -x);
 						types[result] = types[type];
 						break;
 					}
@@ -686,23 +749,82 @@ public class ShaderInterpreter
 					break;
 				case ShaderOp.AccessChain:
 					{
+						shaderReader.AccessChain(out int count);
+
+						Span<int> indices = new int[count];
+
+						if (count > 1)
+						{
+							throw new NotImplementedException("Access chain with more than one index is not implemented");
+						}
+
+						shaderReader = shaderReader.AccessChain(out result, out int type, out int basePointer, indices, out _);
+
+						var basePointerType = types[basePointer];
+
+						if (!basePointerType.IsPointer())
+						{
+							throw new InvalidOperationException("Access chain base must be a pointer");
+						}
+
+						if (basePointerType.StorageClass is not ShaderStorageClass.Input
+								&& basePointerType.StorageClass is not ShaderStorageClass.Output
+								&& basePointerType.StorageClass is not ShaderStorageClass.Uniform
+								&& basePointerType.StorageClass is not ShaderStorageClass.UniformConstant)
+						{
+							throw new InvalidOperationException($"Invalid storage class {basePointerType.StorageClass} for access chain base pointer");
+						}
+
+						var subjectType = basePointerType.ElementType!;
+						var elementType = subjectType.ElementType!;
+
+						if (types[type] != ShaderType.PointerOf(elementType, basePointerType.StorageClass.Value))
+						{
+							throw new InvalidOperationException("Access chain result type must be a pointer to the element type of the base pointer");
+						}
+
+						int index = BitConverter.ToInt32(GetSpan(indices[0], workingSet));
+						int basePointerValue = BitConverter.ToInt32(GetSpan(basePointer, workingSet));
+
+						var targetSpan = GetTarget(result, type, workingSet);
+
+						if (basePointerType.StorageClass is ShaderStorageClass.UniformConstant || basePointerType.StorageClass is ShaderStorageClass.Uniform)
+						{
+							var uniformPointer = UniformPointer.FromUInt32((uint)basePointerValue);
+
+							new BitWriter(targetSpan).Write((int)new UniformPointer(uniformPointer.Binding, (uint)(uniformPointer.Pointer + (index * elementType.Size))).ToUInt32());
+						}
+						else
+						{
+							int elementPointer = basePointerValue + (index * elementType.Size);
+
+							new BitWriter(targetSpan).Write(elementPointer);
+						}
+
+						types[result] = types[type];
 					}
 					break;
 				default:
 					throw new InvalidOperationException($"Unknown opcode {op}");
 			}
 		}
+
+		new BitReader(outputBuffer)
+			.ReadUnmanaged(out outputBuiltins);
+
+		outputBuffer[builtinSize..]
+			.CopyTo(output);
 	}
 
-	private static Field ApplyOperator(ShaderType type, Field value, Func<float, float> floatOp, Func<int, int> intOp)
+	private static void ApplyOperator(ShaderType type, Span<byte> value, Span<byte> target, Func<float, float> floatOp, Func<int, int> intOp)
 	{
 		if (type.IsFloat())
 		{
-			return floatOp((float)value);
+			new BitWriter(target).Write(floatOp(BitConverter.ToSingle(value)));
 		}
 		else if (type.IsInt())
 		{
-			return intOp((int)value);
+			new BitWriter(target).Write(intOp(BitConverter.ToInt32(value)));
 		}
 		else
 		{
@@ -710,15 +832,15 @@ public class ShaderInterpreter
 		}
 	}
 
-	private static Field ApplyOperator(ShaderType type, Field a, Field b, Func<float, float, float> floatOp, Func<int, int, int> intOp)
+	private static void ApplyOperator(ShaderType type, Span<byte> a, Span<byte> b, Span<byte> target, Func<float, float, float> floatOp, Func<int, int, int> intOp)
 	{
 		if (type.IsFloat())
 		{
-			return floatOp((float)a, (float)b);
+			new BitWriter(target).Write(floatOp(BitConverter.ToSingle(a), BitConverter.ToSingle(b)));
 		}
 		else if (type.IsInt())
 		{
-			return intOp((int)a, (int)b);
+			new BitWriter(target).Write(intOp(BitConverter.ToInt32(a), BitConverter.ToInt32(b)));
 		}
 		else
 		{

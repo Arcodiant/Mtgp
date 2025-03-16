@@ -11,8 +11,8 @@ public record ShaderType(string Id, int Size, ShaderStorageClass? StorageClass =
 		=> new("image", 4, ElementCount: dim, ElementType: type);
 	public static ShaderType PointerOf(ShaderType type, ShaderStorageClass storageClass)
 		=> new("ptr", 4, StorageClass: storageClass, ElementType: type);
-	public static ShaderType ArrayOf(ShaderType type, ShaderStorageClass storageClass)
-		=> new("array", 4, StorageClass: storageClass, ElementType: type);
+	public static ShaderType RuntimeArrayOf(ShaderType type)
+		=> new("rtarray", 4, ElementType: type);
 	public static ShaderType VectorOf(ShaderType type, int count)
 		=> new("vec", type.Size * count, ElementCount: count, ElementType: type);
 	public static ShaderType StructOf(params ShaderType[] members)
@@ -35,8 +35,8 @@ public static class ShaderTypeExtensions
 		=> type.Id == "image";
 	public static bool IsStruct(this ShaderType type)
 		=> type.Id == "struct";
-	public static bool IsArray(this ShaderType type)
-		=> type.Id == "array";
+	public static bool IsRuntimeArray(this ShaderType type)
+		=> type.Id == "rtarray";
 	public static bool IsVoid(this ShaderType type)
 		=> type.Id == "void";
 }

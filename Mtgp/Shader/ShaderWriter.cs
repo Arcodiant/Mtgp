@@ -55,6 +55,11 @@ public readonly ref struct ShaderWriter(BitWriter writer)
 							.Write(componentType)
 							.Write(componentCount));
 
+	public readonly ShaderWriter TypeRuntimeArray(int result, int elementType)
+		=> new(this.Write(ShaderOp.TypeRuntimeArray, ShaderOpConstants.TypeRuntimeArrayWordCount)
+							.Write(result)
+							.Write(elementType));
+
 	public readonly ShaderWriter TypeImage(int result, int imageType, int dim)
 		=> new(this.Write(ShaderOp.TypeImage, ShaderOpConstants.TypeImageWordCount)
 							.Write(result)

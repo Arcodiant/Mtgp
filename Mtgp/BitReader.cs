@@ -113,6 +113,14 @@ public readonly ref struct BitReader(ReadOnlySpan<byte> buffer)
 		return Skip(buffer.Length);
 	}
 
+	public readonly BitReader ReadUnmanaged<T>(out T value)
+		where T : unmanaged
+	{
+		value = MemoryMarshal.Cast<byte, T>(this.buffer)[0];
+
+		return new BitReader(this.buffer[Marshal.SizeOf<T>()..]);
+	}
+
 	public readonly BitReader Read<T>(Span<T> buffer)
 		where T : unmanaged
 			=> this.Read(MemoryMarshal.AsBytes(buffer));
