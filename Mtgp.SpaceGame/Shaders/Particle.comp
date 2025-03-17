@@ -3,10 +3,10 @@
     [WorkgroupId] int workgroupId;
 }
 
-[Binding=0] readbuffer vec<int,2> particle;
-[Binding=0] writebuffer vec<int,3> instance;
+[Binding=0] uniform vec<int,2> particle;
+[Binding=1] uniform vec<int,3> instance;
 
 func void Main(Input input)
 {
-    instance[input.workgroupId] = Vec(0, 0, 1);
+    instance[input.workgroupId] = Vec(1, 2, 3);
 }

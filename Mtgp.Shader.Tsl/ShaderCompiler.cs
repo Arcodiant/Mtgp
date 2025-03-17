@@ -102,8 +102,6 @@ public class ShaderCompiler
 														.Match(Span.EqualTo("uniform"), PartType.Uniform)
 														.Match(Span.EqualTo("image1d"), PartType.Image)
 														.Match(Span.EqualTo("image2d"), PartType.Image)
-														.Match(Span.EqualTo("readbuffer"), PartType.ReadBuffer)
-														.Match(Span.EqualTo("writebuffer"), PartType.WriteBuffer)
 														.Match(Float, PartType.DecimalLiteral)
 														.Match(Numerics.Integer, PartType.IntegerLiteral)
 														.Match(Identifier.CStyle, PartType.Identifier)
@@ -281,6 +279,16 @@ public class ShaderCompiler
 							: [];
 
 		int nextId = 0;
+		var idTypes = new Dictionary<int, ShaderType>();
+
+		int GetNextId(ShaderType idType)
+		{
+			int id = nextId++;
+
+			idTypes[id] = idType;
+
+			return id;
+		}
 
 		var vars = new List<(int Id, ShaderStorageClass Storage, ShaderType Type, bool IsInEntryPoint)>();
 		var locations = new Dictionary<int, int>();
@@ -292,7 +300,8 @@ public class ShaderCompiler
 		foreach (var (field, storage, variableName) in inputFields.Select(x => (x, ShaderStorageClass.Input, mainFunc.Parameters.Single().Name))
 															.Concat(outputFields.Select(x => (x, ShaderStorageClass.Output, "result"))))
 		{
-			int id = nextId++;
+			var type = ShaderType.PointerOf(field.Type, storage);
+			int id = GetNextId(type);
 
 			foreach (var decoration in field.Ref.Decorations)
 			{
@@ -319,7 +328,7 @@ public class ShaderCompiler
 					throw new Exception($"Unknown decoration: {decoration.Name}");
 				}
 
-				vars.Add((id, storage, field.Type, !builtins.ContainsKey(id)));
+				vars.Add((id, storage, type, !builtins.ContainsKey(id)));
 				varNames.Add((variableName, field.Ref.Field), id);
 			}
 		}
@@ -328,24 +337,28 @@ public class ShaderCompiler
 		{
 			var type = GetPrimitiveType(binding.Type);
 
-			int id = nextId++;
-
 			var (storage, dimension) = binding.BindingType switch
 			{
-				"uniform" => (ShaderStorageClass.UniformConstant, 1),
+				"uniform" => (ShaderStorageClass.Uniform, 1),
 				"image1d" => (ShaderStorageClass.Image, 1),
 				"image2d" => (ShaderStorageClass.Image, 2),
-				"readbuffer" => (ShaderStorageClass.UniformConstant, 1),
-				"writebuffer" => (ShaderStorageClass.Uniform, 1),
 				_ => throw new Exception($"Unknown binding type: {binding.BindingType}")
 			};
-
-			bindings[id] = binding.Decoration.Value!.Value;
 
 			if (storage == ShaderStorageClass.Image)
 			{
 				type = ShaderType.ImageOf(type, dimension);
 			}
+			else if (storage == ShaderStorageClass.Uniform)
+			{
+				type = ShaderType.RuntimeArrayOf(type);
+			}
+
+			type = ShaderType.PointerOf(type, storage);
+
+			int id = GetNextId(type);
+
+			bindings[id] = binding.Decoration.Value!.Value;
 
 			vars.Add((id, storage, type, false));
 			varNames.Add((binding.Name, ""), id);
@@ -380,7 +393,7 @@ public class ShaderCompiler
 		{
 			if (!typeLookup.TryGetValue(type, out int id))
 			{
-				id = nextId++;
+				id = GetNextId(type);
 
 				if (type.IsInt())
 				{
@@ -406,6 +419,10 @@ public class ShaderCompiler
 				{
 					writer = writer.TypeFloat(id, type.Size);
 				}
+				else if (type.IsRuntimeArray())
+				{
+					writer = writer.TypeRuntimeArray(id, GetTypeId(ref writer, type.ElementType!));
+				}
 				else
 				{
 					throw new Exception($"Unknown type: {type}");
@@ -419,7 +436,7 @@ public class ShaderCompiler
 
 		foreach (var (id, storage, type, _) in vars)
 		{
-			writer = writer.Variable(id, storage, GetTypeId(ref headerWriter, ShaderType.PointerOf(type, storage)));
+			writer = writer.Variable(id, storage, GetTypeId(ref headerWriter, type));
 		}
 
 		var expressionImplementations = new Dictionary<Expression, (int Id, ShaderType Type)>();
@@ -452,11 +469,14 @@ public class ShaderCompiler
 		{
 			writer = WriteExpression(writer, expression.Index, out int indexId, out var type);
 
-			pointerId = nextId++;
+			int baseId = GetTokenVarId((TokenExpression)expression.Base);
 
-			var baseType = GetTokenVarType((TokenExpression)expression.Base);
+			var baseType = idTypes[baseId];
+			var pointerType = ShaderType.PointerOf(baseType.ElementType!.ElementType!, baseType.StorageClass!.Value);
 
-			writer = writer.AccessChain(pointerId, GetTypeId(ref writer, baseType), GetTokenVarId((TokenExpression)expression.Base), new int[] { indexId });
+			pointerId = GetNextId(pointerType);
+
+			writer = writer.AccessChain(pointerId, GetTypeId(ref writer, pointerType), GetTokenVarId((TokenExpression)expression.Base), new int[] { indexId });
 
 			return writer;
 		}
@@ -496,9 +516,9 @@ public class ShaderCompiler
 		ShaderWriter WriteTokenExpression(ShaderWriter writer, TokenExpression expression, out int id, out ShaderType type)
 		{
 			int varId = GetTokenVarId(expression);
-			type = vars.Single(x => x.Id == varId).Type;
+			type = vars.Single(x => x.Id == varId).Type.ElementType!;
 
-			id = nextId++;
+			id = GetNextId(type);
 
 			return writer.Load(id, GetTypeId(ref writer, type), varId);
 		}
@@ -518,8 +538,8 @@ public class ShaderCompiler
 				throw new Exception($"Ternary branches must have the same type, got {trueBranchType} and {falseBranchType}");
 			}
 
-			id = nextId++;
 			type = trueBranchType;
+			id = GetNextId(type);
 
 			writer = writer.Conditional(id, GetTypeId(ref writer, trueBranchType), conditionId, trueBranchId, falseBranchId);
 
@@ -527,8 +547,6 @@ public class ShaderCompiler
 		}
 		ShaderWriter WriteFunctionExpression(ShaderWriter writer, FunctionExpression expression, out int id, out ShaderType type)
 		{
-			id = nextId++;
-
 			return expression.Name switch
 			{
 				"Gather" => WriteGatherFunction(writer, expression, out id, out type),
@@ -546,7 +564,7 @@ public class ShaderCompiler
 
 			writer = WriteExpression(writer, expression.Arguments[0], out int valueId, out type);
 
-			id = nextId++;
+			id = GetNextId(type);
 			return writer.Abs(id, GetTypeId(ref writer, type), valueId);
 		}
 		ShaderWriter WriteVecFunction(ShaderWriter writer, FunctionExpression expression, out int id, out ShaderType type)
@@ -577,8 +595,8 @@ public class ShaderCompiler
 				expressionList.Add(argumentId);
 			}
 
-			id = nextId++;
 			type = ShaderType.VectorOf(elementType, expressionList.Count);
+			id = GetNextId(type);
 
 			return writer.CompositeConstruct(id, GetTypeId(ref writer, type), expressionList.ToArray());
 		}
@@ -596,8 +614,8 @@ public class ShaderCompiler
 			writer = WriteExpression(writer, expression.Arguments[1], out int coordId, out var coordIdType);
 			var coordIdTypeId = GetTypeId(ref writer, coordIdType);
 
-			id = nextId++;
 			type = imageElementType;
+			id = GetNextId(type);
 
 			return writer.Gather(id, imageElementTypeId, imageVarId, coordId);
 		}
@@ -614,24 +632,24 @@ public class ShaderCompiler
 		};
 		ShaderWriter WriteIntegerLiteralExpression(ShaderWriter writer, IntegerLiteralExpression expression, out int id, out ShaderType type)
 		{
-			id = nextId++;
 			type = ShaderType.Int(4);
+			id = GetNextId(type);
 
 			return writer.Constant(id, GetTypeId(ref writer, ShaderType.Int(4)), expression.Value);
 		}
 		ShaderWriter WriteFloatLiteralExpression(ShaderWriter writer, FloatLiteralExpression expression, out int id, out ShaderType type)
 		{
-			id = nextId++;
 			type = ShaderType.Float(4);
+			id = GetNextId(type);
 
 			return writer.Constant(id, GetTypeId(ref writer, ShaderType.Float(4)), expression.Value);
 		}
 		ShaderWriter WriteDotExpression(ShaderWriter writer, BinaryExpression expression, out int id, out ShaderType type)
 		{
-			id = nextId++;
 			type = ShaderType.Int(4);
+			id = GetNextId(type);
 
-			return writer.Load(id, GetTypeId(ref writer, GetVarType(expression)), GetVarId(expression));
+			return writer.Load(id, GetTypeId(ref writer, GetVarType(expression).ElementType!), GetVarId(expression));
 		}
 		ShaderWriter WriteEqualityExpression(ShaderWriter writer, BinaryExpression expression, out int id, out ShaderType type)
 		{
@@ -642,15 +660,15 @@ public class ShaderCompiler
 				throw new Exception($"Equality operands must have the same type, got {leftType} and {rightType}");
 			}
 
-			id = nextId++;
 			type = ShaderType.Bool;
+			id = GetNextId(type);
 
 			return writer.Equals(id, GetTypeId(ref writer, ShaderType.Bool), leftId, rightId);
 		}
 		ShaderWriter WriteIntToFloat(ShaderWriter writer, int value, out int id, out ShaderType type)
 		{
-			id = nextId++;
 			type = ShaderType.Float(4);
+			id = GetNextId(type);
 			return writer.IntToFloat(id, GetTypeId(ref writer, type), value);
 		}
 		ShaderWriter PrepOperatorExpression(ShaderWriter writer, BinaryExpression expression, out ShaderType type, out int leftId, out int rightId)
@@ -679,7 +697,7 @@ public class ShaderCompiler
 		{
 			writer = PrepOperatorExpression(writer, expression, out type, out int leftId, out int rightId);
 
-			id = nextId++;
+			id = GetNextId(type);
 
 			return writer.Add(id, GetTypeId(ref writer, type), leftId, rightId);
 		}
@@ -687,7 +705,7 @@ public class ShaderCompiler
 		{
 			writer = PrepOperatorExpression(writer, expression, out type, out int leftId, out int rightId);
 
-			id = nextId++;
+			id = GetNextId(type);
 
 			return writer.Subtract(id, GetTypeId(ref writer, type), leftId, rightId);
 		}
@@ -695,7 +713,7 @@ public class ShaderCompiler
 		{
 			writer = PrepOperatorExpression(writer, expression, out type, out int leftId, out int rightId);
 
-			id = nextId++;
+			id = GetNextId(type);
 
 			return writer.Multiply(id, GetTypeId(ref writer, type), leftId, rightId);
 		}
@@ -703,7 +721,7 @@ public class ShaderCompiler
 		{
 			writer = PrepOperatorExpression(writer, expression, out type, out int leftId, out int rightId);
 
-			id = nextId++;
+			id = GetNextId(type);
 
 			return writer.Divide(id, GetTypeId(ref writer, type), leftId, rightId);
 		}
@@ -711,7 +729,7 @@ public class ShaderCompiler
 		{
 			writer = PrepOperatorExpression(writer, expression, out type, out int leftId, out int rightId);
 
-			id = nextId++;
+			id = GetNextId(type);
 
 			return writer.Mod(id, GetTypeId(ref writer, type), leftId, rightId);
 		}
@@ -719,7 +737,6 @@ public class ShaderCompiler
 		int GetVarId(BinaryExpression expression) => varNames[(((TokenExpression)expression.Left).Value, ((TokenExpression)expression.Right).Value)];
 		ShaderType GetVarType(BinaryExpression expression) => vars.Single(x => x.Id == GetVarId(expression)).Type;
 		int GetTokenVarId(TokenExpression expression) => varNames[(expression.Value, "")];
-		ShaderType GetTokenVarType(TokenExpression expression) => vars.Single(x => x.Id == GetTokenVarId(expression)).Type;
 
 		byte[] result = [.. shaderHeader[..headerWriter.Writer.WriteCount], .. shaderCode[..writer.Writer.WriteCount]];
 

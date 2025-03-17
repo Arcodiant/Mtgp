@@ -72,12 +72,36 @@ public readonly ref struct ShaderReader(BitReader reader)
 	}
 
 	public readonly ShaderReader Skip()
+		=> this.Skip(out _);
+
+	public readonly ShaderReader Skip(out uint wordCount)
 	{
 		this.reader.Read(out uint value);
 
-		var wordCount = (value & 0xFFFF0000) >> 16;
+		wordCount = (value & 0xFFFF0000) >> 16;
 
 		return new(this.reader.Skip(wordCount * 4));
+	}
+
+	public readonly ShaderReader Skip(Span<byte> raw, out uint wordCount)
+	{
+		this.Skip(out wordCount);
+
+		var reader = this.reader;
+
+		int byteCount = (int)wordCount * 4;
+
+		if (byteCount <= raw.Length)
+		{
+			reader = reader.Read(raw[..byteCount]);
+		}
+		else
+		{
+			reader.Read(raw);
+			reader = reader.Skip(byteCount);
+		}
+
+		return new(reader);
 	}
 
 	public readonly ShaderReader Decorate(out int target, out ShaderDecoration decoration)

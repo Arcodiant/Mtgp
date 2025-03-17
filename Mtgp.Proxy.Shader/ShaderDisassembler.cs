@@ -191,7 +191,25 @@ public static class ShaderDisassembler
 						}
 						break;
 					default:
-						assembly.AppendLine(" - Unknown Opcode");
+						shaderReader.Skip(out uint wordCount);
+
+						Span<byte> raw = new byte[(int)wordCount * 4];
+
+						shaderReader.Skip(raw, out _);
+
+						assembly.Append(" - Unknown Opcode [(");
+						assembly.Append(shaderReader.Next);
+						assembly.Append(", ");
+						assembly.Append(wordCount);
+						assembly.Append(')');
+
+						for (int index = 1; index < wordCount; index++)
+						{
+							assembly.Append(", ");
+							assembly.Append(BitConverter.ToUInt32(raw[(index * 4)..][..4]));
+						}
+
+						assembly.AppendLine("]");
 						break;
 				}
 
