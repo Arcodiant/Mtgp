@@ -148,6 +148,13 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 		ThrowIfError(result);
 	}
 
+	public async Task AddCopyBufferAction(int actionListId, int sourceBuffer, int destinationBuffer, int sourceOffset, int destinationOffset, int size)
+	{
+		var result = await this.connection.SendAsync(new AddCopyBufferActionRequest(Interlocked.Increment(ref this.requestId), actionListId, sourceBuffer, destinationBuffer, sourceOffset, destinationOffset, size));
+
+		ThrowIfError(result);
+	}
+
 	public async Task AddRunPipelineAction(int actionListId, int pipeline)
 	{
 		var result = await this.connection.SendAsync(new AddRunPipelineActionRequest(Interlocked.Increment(ref this.requestId), actionListId, pipeline));

@@ -22,7 +22,7 @@ namespace Mtgp.SpaceGame
 			var particleShader = await shaderManager.CreateShaderFromFileAsync("Shaders/Particle.comp");
 
 			await client.GetResourceBuilder()
-					.ActionList(out var _, "ActionList")
+					.ActionList(out var actionListTask, "ActionList")
 					.Pipe(out var pipeTask, "ActionList")
 					.Buffer(out var bufferTask, 128, "Particles")
 					.BufferView(out var bufferView1Task, "Particles", 0, 64)
@@ -30,6 +30,7 @@ namespace Mtgp.SpaceGame
 					.ComputePipeline(out var pipelineTask, new(particleShader, "Main"))
 					.BuildAsync();
 
+			var actionList = await actionListTask;
 			var pipe = await pipeTask;
 			var buffer = await bufferTask;
 			var bufferView1 = await bufferView1Task;
@@ -44,7 +45,9 @@ namespace Mtgp.SpaceGame
 
 			await client.SetBufferData(buffer, 0, particleBuffer);
 
-			await client.AddDispatchAction(pipe, buffer, (1, 1, 1), [bufferView1, bufferView2]);
+			await client.AddDispatchAction(actionList, buffer, (1, 1, 1), [bufferView1, bufferView2]);
+
+			await client.AddCopyBufferAction(actionList, buffer, buffer, 64, 0, 64);
 
 			await client.Send(pipe, []);
 

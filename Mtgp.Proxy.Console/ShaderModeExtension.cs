@@ -87,6 +87,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 		proxy.RegisterMessageHandler<ResetActionListRequest>(ResetActionList);
 		proxy.RegisterMessageHandler<ClearStringSplitPipelineRequest>(ClearStringSplitPipeline);
 		proxy.RegisterMessageHandler<AddCopyBufferToImageActionRequest>(AddCopyBufferToImageAction);
+		proxy.RegisterMessageHandler<AddCopyBufferActionRequest>(AddCopyBufferAction);
 		proxy.RegisterMessageHandler<AddClearBufferActionRequest>(AddClearBufferAction);
 		proxy.RegisterMessageHandler<AddBindVertexBuffersRequest>(AddBindVertexBuffers);
 		proxy.RegisterMessageHandler<AddDrawActionRequest>(AddDrawAction);
@@ -220,6 +221,19 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 		var actionList = this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions;
 
 		actionList.Add(new CopyBufferToImageAction(this.resourceStore.Get<BufferInfo>(request.Buffer).Data, request.BufferFormat, this.resourceStore.Get<ImageState>(request.Image), request.CopyRegions));
+
+		return new MtgpResponse(0, "ok");
+	}
+
+	private MtgpResponse AddCopyBufferAction(AddCopyBufferActionRequest request)
+	{
+		var actionList = this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions;
+
+		actionList.Add(new CopyBufferAction(this.resourceStore.Get<BufferInfo>(request.SourceBuffer).Data,
+												this.resourceStore.Get<BufferInfo>(request.DestinationBuffer).Data,
+												request.SourceOffset,
+												request.DestinationOffset,
+												request.Size));
 
 		return new MtgpResponse(0, "ok");
 	}

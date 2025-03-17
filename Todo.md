@@ -1,5 +1,5 @@
 - Demos
   - Parallax
 	- Starfield
-	  - Uniform pointers
+	  - Read from uniform
 	- City Skyline
