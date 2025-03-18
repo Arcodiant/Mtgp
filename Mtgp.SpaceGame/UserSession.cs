@@ -83,6 +83,8 @@ namespace Mtgp.SpaceGame
 
 								inputBuilder.Clear();
 
+								await uiManager.StringSplitSend(outputArea, $"> {inputString}");
+
 								var parts = inputString.Split(' ');
 
 								if (parts.Length > 0)

@@ -24,7 +24,7 @@ try
 	var builder = Host.CreateApplicationBuilder(args);
 	builder.Services.AddSingleton<IWorldManager, WorldManager>();
 	builder.Services.AddDefaultFactories();
-	builder.Services.AddImplementingFactory<IMtgpSession, FlightSession, MtgpClient>();
+	builder.Services.AddImplementingFactory<IMtgpSession, UserSession, MtgpClient>();
 	builder.Services.AddHostedService<MtgpServer>();
 	builder.Services.AddSerilog();
 	builder.Services.Configure<Auth0Options>(options =>

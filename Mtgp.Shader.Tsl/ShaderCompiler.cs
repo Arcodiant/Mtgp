@@ -608,7 +608,7 @@ public class ShaderCompiler
 			}
 
 			var imageVarId = varNames[(((TokenExpression)expression.Arguments[0]).Value, "")];
-			var imageType = vars.Single(x => x.Id == imageVarId).Type;
+			var imageType = vars.Single(x => x.Id == imageVarId).Type.ElementType!;
 			var imageElementType = imageType.ElementType!;
 			var imageElementTypeId = GetTypeId(ref writer, imageElementType);
 			writer = WriteExpression(writer, expression.Arguments[1], out int coordId, out var coordIdType);

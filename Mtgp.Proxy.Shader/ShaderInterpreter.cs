@@ -438,6 +438,16 @@ public class ShaderInterpreter
 									throw new InvalidOperationException("Uniform variable has no binding decoration");
 								}
 								break;
+							case ShaderStorageClass.Image:
+								if (variableDecorations[result].Binding is not null)
+								{
+									pointer = (int)variableDecorations[result].Binding!;
+								}
+								else
+								{
+									throw new InvalidOperationException("Image variable has no target decoration");
+								}
+								break;
 							default:
 								throw new InvalidOperationException($"Invalid storage class {variableStorageClass}");
 						}
@@ -453,12 +463,14 @@ public class ShaderInterpreter
 
 						var constantType = types[type];
 
-						if (!constantType.IsInt())
+						if (constantType.IsInt() || constantType.IsFloat())
 						{
-							throw new InvalidOperationException("Constant type must be int");
+							new BitWriter(GetTarget(result, type, workingSet)).Write(value);
 						}
-
-						new BitWriter(GetTarget(result, type, workingSet)).Write(value);
+						else
+						{
+							throw new InvalidOperationException($"Unsupported constant type {constantType}");
+						}
 
 						types[result] = constantType;
 						break;
@@ -506,9 +518,7 @@ public class ShaderInterpreter
 							throw new InvalidOperationException("Store value type must match pointer element type");
 						}
 
-						int valuePointer = results[value];
-
-						Span<byte> valueToStore = workingSet[valuePointer..][..valueType.Size];
+						var valueToStore = GetSpan(value, workingSet);
 						int pointerValue = BitConverter.ToInt32(GetSpan(pointer, workingSet));
 
 						switch (pointerType.StorageClass)
@@ -562,9 +572,9 @@ public class ShaderInterpreter
 					{
 						shaderReader = shaderReader.Gather(out result, out int type, out int texture, out int coord);
 
-						var variableData = variableDecorations[texture];
+						int binding = BitConverter.ToInt32(GetSpan(texture, workingSet));
 
-						var textureImage = imageAttachments[(int)variableData.Binding!];
+						var textureImage = imageAttachments[binding];
 						var textureData = textureImage.Data.Span;
 
 						new BitReader(GetSpan(coord, workingSet))
@@ -578,7 +588,7 @@ public class ShaderInterpreter
 							throw new InvalidOperationException("Gather result type must be int32");
 						}
 
-						results[result] = BitConverter.ToInt32(textureData[(textureIndex * 4)..]);
+						textureData[(textureIndex * 4)..][..4].CopyTo(GetTarget(result, type, workingSet));
 						types[result] = types[type];
 						break;
 					}
@@ -638,7 +648,8 @@ public class ShaderInterpreter
 							throw new InvalidOperationException($"Equals result must be bool");
 						}
 
-						results[result] = (int)results[a] - (int)results[b];
+						ApplyOperator(types[a], GetSpan(a, workingSet), GetSpan(b, workingSet), GetTarget(result, type, workingSet), (a, b) => a - b, (a, b) => a - b);
+
 						types[result] = types[type];
 						break;
 					}
@@ -658,7 +669,7 @@ public class ShaderInterpreter
 
 						new BitReader(GetSpan(condition, workingSet)).Read(out int conditionValue);
 
-						bool isTrue = conditionValue != 0;
+						bool isTrue = conditionValue == 0;
 
 						int valueId = isTrue ? trueValue : falseValue;
 

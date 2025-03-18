@@ -4,7 +4,7 @@ public record ShaderType(string Id, int Size, ShaderStorageClass? StorageClass =
 {
 	public static ShaderType Textel => StructOf([Int(4), VectorOf(Float(4), 3), VectorOf(Float(4), 3), Float(4)]);
 	public static ShaderType Void => new("void", 0);
-	public static ShaderType Bool => new("bool", 1);
+	public static ShaderType Bool => new("bool", 4);
 	public static ShaderType Float(int width) => new("float", width);
 	public static ShaderType Int(int width) => new("int", width);
 	public static ShaderType ImageOf(ShaderType type, int dim)
