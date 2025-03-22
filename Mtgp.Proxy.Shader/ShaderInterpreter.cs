@@ -3,30 +3,35 @@ using System.Runtime.InteropServices;
 
 namespace Mtgp.Proxy.Shader;
 
+[StructLayout(LayoutKind.Explicit)]
+public readonly struct Field
+{
+	[FieldOffset(0)]
+	public readonly int Int32;
+	[FieldOffset(0)]
+	public readonly bool Bool;
+	[FieldOffset(0)]
+	public readonly float Float;
+
+	public Field(int value) => this.Int32 = value;
+	public Field(bool value) => this.Bool = value;
+	public Field(float value) => this.Float = value;
+
+	public static implicit operator Field(int value) => new(value);
+	public static implicit operator Field(bool value) => new(value);
+	public static implicit operator Field(float value) => new(value);
+
+	public static explicit operator int(Field value) => value.Int32;
+	public static explicit operator bool(Field value) => value.Bool;
+	public static explicit operator float(Field value) => value.Float;
+}
+
 public class ShaderInterpreter
+	: IShaderExecutor
 {
 	private readonly Memory<byte> compiledShader;
 	private readonly int[] inputMappings;
 	private readonly int[] outputMappings;
-
-	[StructLayout(LayoutKind.Explicit)]
-	private struct Field
-	{
-		[FieldOffset(0)]
-		public int Int32;
-		[FieldOffset(0)]
-		public bool Bool;
-		[FieldOffset(0)]
-		public float Float;
-
-		public static implicit operator Field(int value) => new() { Int32 = value };
-		public static implicit operator Field(bool value) => new() { Bool = value };
-		public static implicit operator Field(float value) => new() { Float = value };
-
-		public static explicit operator int(Field value) => value.Int32;
-		public static explicit operator bool(Field value) => value.Bool;
-		public static explicit operator float(Field value) => value.Float;
-	}
 
 	public ShaderInterpreter(Memory<byte> compiledShader)
 	{
@@ -226,7 +231,7 @@ public class ShaderInterpreter
 		public static UniformPointer FromUInt32(uint value) => new(value);
 	}
 
-	public void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, Builtins inputBuiltins, ReadOnlyMemory<byte>[] input, ref Builtins outputBuiltins, Span<byte> output)
+	public void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, ShaderInterpreter.Builtins inputBuiltins, SpanCollection input, ref ShaderInterpreter.Builtins outputBuiltins, SpanCollection output)
 	{
 		bool isRunning = true;
 
@@ -259,9 +264,9 @@ public class ShaderInterpreter
 		Span<byte> outputBuffer = stackalloc byte[this.OutputSize + builtinSize];
 
 		new BitWriter(inputBuffer).Write([inputBuiltins]);
-		for (int index = 0; index < input.Length; index++)
+		for (int index = 0; index < this.inputMappings.Length; index++)
 		{
-			var inputSlice = input[index].Span;
+			var inputSlice = input[index];
 
 			inputSlice.CopyTo(inputBuffer[(builtinSize + this.inputMappings[index])..]);
 		}

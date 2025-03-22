@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using Mtgp.Shader;
+using System.Data.Common;
 using System.Diagnostics;
 using System.Text;
 
@@ -49,7 +50,9 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 						Timer = timerValue,
 					};
 
-					var inputs = vertex.Inputs.Select(x =>
+					var inputs = new SpanCollection();
+
+					foreach (var x in vertex.Inputs)
 					{
 						var attribute = vertexAttributes[x.Location];
 
@@ -64,10 +67,21 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 							_ => throw new NotSupportedException(),
 						};
 
-						return (ReadOnlyMemory<byte>)buffer.Buffer.AsMemory(buffer.Offset + bindingOffset + attribute.Offset, attribute.Type.Size);
-					}).ToArray();
+						int offset = buffer.Offset + bindingOffset + attribute.Offset;
+						int size = attribute.Type.Size;
 
-					vertex.Execute(imageAttachments, bufferViewAttachments, inputBuiltins, inputs, ref vertexOutputBuiltins[vertexIndex], vertexOutput.AsSpan(vertexIndex * vertex.OutputSize, vertex.OutputSize));
+						inputs[x.Location] = buffer.Buffer.AsSpan(offset, size);
+					};
+
+					var outputSpan = vertexOutput.AsSpan(vertexIndex * vertex.OutputSize, vertex.OutputSize);
+					var outputs = new SpanCollection();
+
+					foreach(var output in vertex.Outputs)
+					{
+						outputs[output.Location] = outputSpan[output.Offset..][..output.Type.Size];
+					}
+
+					vertex.Execute(imageAttachments, bufferViewAttachments, inputBuiltins, inputs, ref vertexOutputBuiltins[vertexIndex], outputs);
 				}
 
 				int fromX = vertexOutputBuiltins[0].PositionX;
@@ -125,10 +139,12 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 
 			var fragmentInput = new byte[fragment.InputSize];
 
-			var inputs = fragment.Inputs.Select(x =>
+			var inputs = new SpanCollection();
+
+			foreach (var input in fragment.Inputs)
 			{
-				var attribute = fragmentAttributes[x.Location];
-				var vertexOutputAttribute = vertex.Outputs[x.Location];
+				var attribute = fragmentAttributes[input.Location];
+				var vertexOutputAttribute = vertex.Outputs[input.Location];
 
 				int dataSize = vertexOutputAttribute.Type.ElementType!.Size;
 
@@ -138,18 +154,23 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 				var scale = MathsUtil.Normalise(attribute.InterpolationScale);
 				float scaleLength = MathsUtil.GetLength(attribute.InterpolationScale);
 
-				var output = fragmentInput.AsMemory(x.Offset, dataSize);
+				var inputSpan = fragmentInput.AsSpan(input.Offset, dataSize);
 
-				MathsUtil.Lerp(fromValue, toValue, output.Span, MathsUtil.DotProduct((xNormalised, yNormalised, 0), scale) / scaleLength, attribute.Type);
+				MathsUtil.Lerp(fromValue, toValue, inputSpan, MathsUtil.DotProduct((xNormalised, yNormalised, 0), scale) / scaleLength, attribute.Type);
 
-				return (ReadOnlyMemory<byte>)output;
-			}).ToArray();
+				inputs[input.Location] = inputSpan;
+			};
 
 			int outputSize = ShaderType.Textel.Size;
 
 			var output = new byte[outputSize];
 
-			fragment.Execute(imageAttachments, bufferViewAttachments, inputBuiltins, inputs, ref outputBuiltins, output);
+			var outputs = new SpanCollection();
+			outputs[0] = output.AsSpan(0, 4);
+			outputs[1] = output.AsSpan(4, 12);
+			outputs[2] = output.AsSpan(16, 16);
+
+			fragment.Execute(imageAttachments, bufferViewAttachments, inputBuiltins, inputs, ref outputBuiltins, outputs);
 
 			int pixelX = x + viewport.Offset.X;
 			int pixelY = y + viewport.Offset.Y;

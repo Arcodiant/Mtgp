@@ -14,7 +14,7 @@ public  class ComputePipeline(ShaderInterpreter shader)
 
 		var outputBuiltins = new ShaderInterpreter.Builtins();
 
-		shader.Execute([], bufferViewAttachments, new(), [], ref outputBuiltins, []);
+		shader.Execute([], bufferViewAttachments, new(), new(), ref outputBuiltins, new());
 
 		foreach (var buffer in bufferViewAttachments)
 		{
