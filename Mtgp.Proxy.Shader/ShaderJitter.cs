@@ -1,298 +1,420 @@
 ﻿using Mtgp.Shader;
 using Sigil;
 using System.Reflection;
+using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace Mtgp.Proxy.Shader
+namespace Mtgp.Proxy.Shader;
+
+internal static class JitterMethods
 {
-	public class ShaderJitter
-		: IShaderExecutor
-	{
-		private readonly static Lazy<MethodInfo> BitConverter__TryWriteBytes_Int32 = new(() => typeof(BitConverter).GetMethod(nameof(BitConverter.TryWriteBytes), [typeof(Span<byte>), typeof(int)])!);
+    public static int ReadInt32(Span<byte> buffer) => BitConverter.ToInt32(buffer);
+    public static float ReadFloat32(Span<byte> buffer) => BitConverter.ToSingle(buffer);
+}
 
-		private readonly static Lazy<MethodInfo> Span_Byte__Slice_Int32 = new(() => typeof(Span<byte>).GetMethod(nameof(Span<byte>.Slice), [typeof(int)])!);
+public class ShaderJitter
+    : IShaderExecutor
+{
+    private readonly static Lazy<MethodInfo> ReadInt32 = new(() => typeof(JitterMethods).GetMethod("ReadInt32")!);
+    private readonly static Lazy<MethodInfo> ReadFloat32 = new(() => typeof(JitterMethods).GetMethod("ReadFloat32")!);
 
-		private readonly static Lazy<MethodInfo> Unsafe__As_Int_Byte = new(() => typeof(Unsafe).GetMethods().Single(x => x.Name == nameof(Unsafe.As) && x.GetGenericArguments().Length == 2).MakeGenericMethod([typeof(int), typeof(byte)]));
+    private readonly static Lazy<MethodInfo> BitConverter__TryWriteBytes_Int32 = new(() => typeof(BitConverter).GetMethod(nameof(BitConverter.TryWriteBytes), [typeof(Span<byte>), typeof(int)])!);
+    private readonly static Lazy<MethodInfo> BitConverter__TryWriteBytes_Single = new(() => typeof(BitConverter).GetMethod(nameof(BitConverter.TryWriteBytes), [typeof(Span<byte>), typeof(float)])!);
+    private readonly static Lazy<MethodInfo> BitConverter__ToInt32_Span = new(() => typeof(BitConverter).GetMethod(nameof(BitConverter.ToInt32), [typeof(ReadOnlySpan<byte>)])!);
 
-		private readonly static Lazy<MethodInfo> MemoryMarshal__CreateSpan = new(() => typeof(MemoryMarshal).GetMethod(nameof(MemoryMarshal.CreateSpan))!.MakeGenericMethod([typeof(byte)]));
+    private readonly static Lazy<MethodInfo> Span_Byte__Slice_Int32 = new(() => typeof(Span<byte>).GetMethod(nameof(Span<byte>.Slice), [typeof(int)])!);
 
-		private const int outputIndex = 0;
-		private const int outputBuiltinsIndex = 1;
-		private delegate void ExecuteDelegate(SpanCollection output, ref ShaderInterpreter.Builtins outputBuiltins);
+    private readonly static Lazy<MethodInfo> Unsafe__As_Int_Byte = new(() => typeof(Unsafe).GetMethods().Single(x => x.Name == nameof(Unsafe.As) && x.GetGenericArguments().Length == 2).MakeGenericMethod([typeof(int), typeof(byte)]));
 
-		private readonly ExecuteDelegate execute;
+    private readonly static Lazy<MethodInfo> MemoryMarshal__CreateSpan = new(() => typeof(MemoryMarshal).GetMethod(nameof(MemoryMarshal.CreateSpan))!.MakeGenericMethod([typeof(byte)]));
 
-		public ShaderJitter(Memory<byte> compiledShader, Dictionary<int, int> outputLocationMappings)
-		{
-			var methodEmitter = Emit<ExecuteDelegate>.NewDynamicMethod();
+    private readonly static Lazy<MethodInfo> SpanCollection__GetItem = new(() => typeof(SpanCollection).GetMethod("get_Item", [typeof(int)])!);
 
-			var reader = new ShaderReader(compiledShader.Span);
+    private const int inputIndex = 0;
+    private const int inputBuiltinsIndex = 1;
+    private const int outputIndex = 2;
+    private const int outputBuiltinsIndex = 3;
+    private delegate void ExecuteDelegate(SpanCollection input, ref ShaderInterpreter.Builtins inputBuiltins, SpanCollection output, ref ShaderInterpreter.Builtins outputBuiltins);
 
-			reader = reader.EntryPointSection(out var entryPointVariables);
+    private readonly ExecuteDelegate execute;
 
-			reader = reader.DecorationSection(out var builtins, out var locations);
+    public ShaderJitter(Memory<byte> compiledShader)
+    {
+        var methodEmitter = Emit<ExecuteDelegate>.NewDynamicMethod();
 
-			reader = reader.TypeSection(out var types, out var constants, out var variables);
+        var reader = new ShaderReader(compiledShader.Span);
 
-			var values = new Dictionary<int, List<Action<Emit<ExecuteDelegate>>>>();
+        reader = reader.EntryPointSection(out var entryPointVariables);
 
-			Emit<ExecuteDelegate> LoadValue(int id)
-			{
-				if (values.TryGetValue(id, out var actions))
-				{
-					actions.ForEach(action => action(methodEmitter));
+        reader = reader.DecorationSection(out var builtins, out var locations);
 
-					return methodEmitter;
-				}
-				else
-				{
-					throw new InvalidOperationException($"Value {id} not found.");
-				}
-			}
+        reader = reader.TypeSection(out var types, out var constants, out var variables);
 
-			foreach (var (id, constant) in constants)
-			{
-				if (constant.Type == ShaderType.Int(4))
-				{
-					values[id] = [emitter => emitter.LoadConstant(constant.Value.Int32)];
-				}
-				else if (constant.Type == ShaderType.Float(4))
-				{
-					values[id] = [emitter => emitter.LoadConstant(constant.Value.Float)];
-				}
-				else
-				{
-					throw new NotImplementedException($"Unimplemented constant type {constant.Type}.");
-				}
-			}
+        var values = new Dictionary<int, Func<Emit<ExecuteDelegate>, Emit<ExecuteDelegate>>>();
 
-			foreach (var (id, variable) in variables)
-			{
-				var local = methodEmitter.DeclareLocal(typeof(Span<byte>), $"output_variable_{id}");
+        void SetValue(int id, ShaderType type, Func<Emit<ExecuteDelegate>, Emit<ExecuteDelegate>> emitAction)
+        {
+            values[id] = emitAction;
+            types[id] = type;
+        }
 
-				if (locations.TryGetValue(id, out uint locationValue))
-				{
-					methodEmitter.LoadArgumentAddress(outputIndex)
-									.LoadConstant(outputLocationMappings[(int)locationValue])
-									.Call(Span_Byte__Slice_Int32.Value);
-				}
-				else if (builtins.TryGetValue(id, out Builtin builtinValue))
-				{
-					methodEmitter.LoadArgument(outputBuiltinsIndex)
-									.LoadFieldAddress(typeof(ShaderInterpreter.Builtins).GetField(builtinValue.ToString())!)
-									.Call(Unsafe__As_Int_Byte.Value)
-									.LoadConstant(4)
-									.Call(MemoryMarshal__CreateSpan.Value);
-				}
-				else
-				{
-					throw new InvalidOperationException($"Variable {id} has no location or builtin decoration.");
-				}
+        Emit<ExecuteDelegate> EmitValue(Emit<ExecuteDelegate> emitter, int id)
+        {
+            if (values.TryGetValue(id, out var action))
+            {
+                return action(emitter);
+            }
+            else
+            {
+                throw new InvalidOperationException($"Value {id} not found.");
+            }
+        }
 
-				methodEmitter.StoreLocal(local);
+        Emit<ExecuteDelegate> EmitValues(Emit<ExecuteDelegate> emitter, params int[] ids)
+        {
+            foreach (var id in ids)
+            {
+                emitter = EmitValue(emitter, id);
+            }
 
-				values[id] = variable.StorageClass switch
-				{
-					ShaderStorageClass.Output => [emitter => emitter.LoadLocal(local)],
-					_ => throw new NotImplementedException($"Unimplemented storage class {variable.StorageClass}."),
-				};
-			}
+            return emitter;
+        }
 
-			while (!reader.EndOfStream && reader.Next != ShaderOp.None && reader.Next != ShaderOp.Return)
-			{
-				switch (reader.Next)
-				{
-					case ShaderOp.Store:
-						reader.Store(out int targetId, out int valueId);
-						LoadValue(targetId);
-						LoadValue(valueId);
-						methodEmitter.Call(BitConverter__TryWriteBytes_Int32.Value);
-						methodEmitter.Pop();
-						break;
-					default:
-						throw new NotImplementedException($"Unimplemented op {reader.Next} in main function.");
-				}
+        foreach (var (id, constant) in constants)
+        {
+            if (constant.Type == ShaderType.Int(4))
+            {
+                SetValue(id, constant.Type, emitter => emitter.LoadConstant(constant.Value.Int32));
+            }
+            else if (constant.Type == ShaderType.Float(4))
+            {
+                SetValue(id, constant.Type, emitter => emitter.LoadConstant(constant.Value.Float));
+            }
+            else
+            {
+                throw new NotImplementedException($"Unimplemented constant type {constant.Type}.");
+            }
+        }
 
-				reader = reader.Skip();
-			}
+        foreach (var (id, variable) in variables)
+        {
+            switch (variable.StorageClass)
+            {
+                case ShaderStorageClass.Output:
+                    {
+                        var local = methodEmitter.DeclareLocal(typeof(Span<byte>), $"output_variable_{id}");
 
-			methodEmitter.Return();
+                        if (locations.TryGetValue(id, out uint locationValue))
+                        {
+                            methodEmitter.LoadArgumentAddress(outputIndex)
+                                            .LoadConstant((int)locationValue)
+                                            .Call(SpanCollection__GetItem.Value);
+                        }
+                        else if (builtins.TryGetValue(id, out Builtin builtinValue))
+                        {
+                            methodEmitter.LoadArgument(outputBuiltinsIndex)
+                                            .LoadFieldAddress(typeof(ShaderInterpreter.Builtins).GetField(builtinValue.ToString())!)
+                                            .Call(Unsafe__As_Int_Byte.Value)
+                                            .LoadConstant(4)
+                                            .Call(MemoryMarshal__CreateSpan.Value);
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException($"Variable {id} has no location or builtin decoration.");
+                        }
 
-			this.execute = methodEmitter.CreateDelegate();
-		}
+                        methodEmitter.StoreLocal(local);
 
-		public void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, ShaderInterpreter.Builtins inputBuiltins, SpanCollection input, ref ShaderInterpreter.Builtins outputBuiltins, SpanCollection output)
-		{
-			this.execute(output, ref outputBuiltins);
-		}
-	}
+                        SetValue(id, variable.Type, emitter => emitter.LoadLocal(local));
 
-	internal static class ShaderReaderSectionExtensions
-	{
-		public static ShaderReader EntryPointSection(this ShaderReader reader, out int[] entryPointVariables)
-		{
-			if (reader.Next != ShaderOp.EntryPoint)
-			{
-				throw new InvalidOperationException($"Invalid op {reader.Next} in EntryPoint section.");
-			}
+                        break;
+                    }
+                case ShaderStorageClass.Input:
+                    {
+                        var local = methodEmitter.DeclareLocal(typeof(Span<byte>), $"input_variable_{id}");
 
-			reader.EntryPoint(out uint variableCount);
+                        if (locations.TryGetValue(id, out uint locationValue))
+                        {
+                            methodEmitter.LoadArgumentAddress(inputIndex)
+                                            .LoadConstant((int)locationValue)
+                                            .Call(SpanCollection__GetItem.Value);
+                        }
+                        else if (builtins.TryGetValue(id, out Builtin builtinValue))
+                        {
+                            methodEmitter.LoadArgument(inputBuiltinsIndex)
+                                            .LoadFieldAddress(typeof(ShaderInterpreter.Builtins).GetField(builtinValue.ToString())!)
+                                            .Call(Unsafe__As_Int_Byte.Value)
+                                            .LoadConstant(4)
+                                            .Call(MemoryMarshal__CreateSpan.Value);
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException($"Variable {id} has no location or builtin decoration.");
+                        }
 
-			entryPointVariables = new int[(int)variableCount];
+                        methodEmitter.StoreLocal(local);
 
-			reader = reader.EntryPoint(entryPointVariables, out _);
+                        SetValue(id, variable.Type, emitter => emitter.LoadLocal(local));
 
-			return reader;
-		}
+                        break;
+                    }
+                default:
+                    throw new NotImplementedException($"Variables of storage class {variable.StorageClass} are not imolemented");
+            }
+        }
 
-		public static ShaderReader DecorationSection(this ShaderReader reader, out Dictionary<int, Builtin> builtins, out Dictionary<int, uint> locations)
-		{
-			builtins = [];
-			locations = [];
+        bool isReturned = false;
 
-			while (reader.Next == ShaderOp.Decorate)
-			{
-				reader.Decorate(out _, out ShaderDecoration shaderDecoration);
+        while (!(reader.EndOfStream || isReturned))
+        {
+            switch (reader.Next)
+            {
+                case ShaderOp.Store:
+                    {
+                        reader.Store(out int targetId, out int valueId);
 
-				int target;
+                        var storeType = types[valueId];
+                        MethodInfo writeMethod;
 
-				switch (shaderDecoration)
-				{
-					case ShaderDecoration.Builtin:
-						{
-							reader.DecorateBuiltin(out target, out Builtin builtin);
+                        if (storeType == ShaderType.Int(4))
+                        {
+                            writeMethod = BitConverter__TryWriteBytes_Int32.Value;
+                        }
+                        else if (storeType == ShaderType.Float(4))
+                        {
+                            writeMethod = BitConverter__TryWriteBytes_Single.Value;
+                        }
+                        else
+                        {
+                            throw new NotSupportedException($"Cannot load type {storeType}");
+                        }
 
-							if (builtins.TryGetValue(target, out Builtin existingValue))
-							{
-								throw new InvalidOperationException($"Builtin {existingValue} already defined for variable {target}, cannot add {builtin}.");
-							}
-							else
-							{
-								builtins[target] = builtin;
-							}
-							break;
-						}
-					case ShaderDecoration.Location:
-						{
-							reader.DecorateLocation(out target, out uint location);
+                        EmitValues(methodEmitter, targetId, valueId)
+                            .Call(writeMethod)
+                            .Pop();
 
-							if (locations.TryGetValue(target, out uint existingValue))
-							{
-								throw new InvalidOperationException($"Location {existingValue} already defined for variable {target}, cannot add {location}.");
-							}
-							else
-							{
-								locations[target] = location;
-							}
-							break;
-						}
-					default:
-						throw new InvalidOperationException($"Invalid decoration {shaderDecoration}.");
-				}
+                        break;
+                    }
+                case ShaderOp.Load:
+                    {
+                        reader.Load(out int resultId, out int typeId, out int pointerId);
 
-				reader = reader.Skip();
-			}
+                        var loadType = types[typeId];
+                        MethodInfo readMethod;
 
-			return reader;
-		}
+                        if (loadType == ShaderType.Int(4))
+                        {
+                            readMethod = ReadInt32.Value;
+                        }
+                        else if (loadType == ShaderType.Float(4))
+                        {
+                            readMethod = ReadFloat32.Value;
+                        }
+                        else
+                        {
+                            throw new NotSupportedException($"Cannot load type {loadType}");
+                        }
 
-		public static ShaderReader TypeSection(this ShaderReader reader,
-												 out Dictionary<int, ShaderType> types,
-												 out Dictionary<int, (ShaderType Type, Field Value)> constants,
-												 out Dictionary<int, (ShaderType Type, ShaderStorageClass StorageClass)> variables)
-		{
-			types = [];
-			constants = [];
-			variables = [];
+                        SetValue(resultId, loadType, emitter => EmitValue(emitter, pointerId)
+                                                        .Call(readMethod));
+                        break;
+                    }
+                case ShaderOp.Add:
+                    {
+                        reader.Add(out int resultId, out int typeId, out int leftId, out int rightId);
 
-			bool isTypeSection = true;
+                        var opType = types[typeId];
 
-			while (isTypeSection)
-			{
-				switch (reader.Next)
-				{
-					case ShaderOp.TypeBool:
-						{
-							reader = reader.TypeBool(out int id);
+                        SetValue(resultId, opType, emitter => EmitValues(emitter, leftId, rightId).Add());
 
-							types[id] = ShaderType.Bool;
+                        break;
+                    }
+                case ShaderOp.Return:
+                    isReturned = true;
+                    break;
+                default:
+                    throw new NotImplementedException($"Unimplemented op {reader.Next} in main function.");
+            }
 
-							break;
-						}
-					case ShaderOp.TypeInt:
-						{
-							reader = reader.TypeInt(out int id, out int width);
+            reader = reader.Skip();
+        }
 
-							types[id] = ShaderType.Int(width);
+        methodEmitter.Return();
 
-							break;
-						}
-					case ShaderOp.TypeFloat:
-						{
-							reader = reader.TypeFloat(out int id, out int width);
+        this.execute = methodEmitter.CreateDelegate();
+    }
 
-							types[id] = ShaderType.Float(width);
+    public void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, ShaderInterpreter.Builtins inputBuiltins, SpanCollection input, ref ShaderInterpreter.Builtins outputBuiltins, SpanCollection output)
+    {
+        this.execute(input, ref inputBuiltins, output, ref outputBuiltins);
+    }
+}
 
-							break;
-						}
-					case ShaderOp.TypeVector:
-						{
-							reader = reader.TypeVector(out int id, out int componentTypeId, out int componentCount);
+internal static class ShaderReaderSectionExtensions
+{
+    public static ShaderReader EntryPointSection(this ShaderReader reader, out int[] entryPointVariables)
+    {
+        if (reader.Next != ShaderOp.EntryPoint)
+        {
+            throw new InvalidOperationException($"Invalid op {reader.Next} in EntryPoint section.");
+        }
 
-							types[id] = ShaderType.VectorOf(types[componentTypeId], componentCount);
+        reader.EntryPoint(out uint variableCount);
 
-							break;
-						}
-					case ShaderOp.TypeImage:
-						{
-							reader = reader.TypeImage(out int id, out int elementTypeId, out int dim);
+        entryPointVariables = new int[(int)variableCount];
 
-							types[id] = ShaderType.ImageOf(types[elementTypeId], dim);
+        reader = reader.EntryPoint(entryPointVariables, out _);
 
-							break;
-						}
-					case ShaderOp.TypeRuntimeArray:
-						{
-							reader = reader.TypeRuntimeArray(out int id, out int elementTypeId);
+        return reader;
+    }
 
-							types[id] = ShaderType.RuntimeArrayOf(types[elementTypeId]);
+    public static ShaderReader DecorationSection(this ShaderReader reader, out Dictionary<int, Builtin> builtins, out Dictionary<int, uint> locations)
+    {
+        builtins = [];
+        locations = [];
 
-							break;
-						}
-					case ShaderOp.TypePointer:
-						{
-							reader = reader.TypePointer(out int id, out ShaderStorageClass storageClass, out int elementTypeId);
+        while (reader.Next == ShaderOp.Decorate)
+        {
+            reader.Decorate(out _, out ShaderDecoration shaderDecoration);
 
-							types[id] = ShaderType.PointerOf(types[elementTypeId], storageClass);
+            int target;
 
-							break;
-						}
-					case ShaderOp.Variable:
-						{
-							reader = reader.Variable(out int id, out ShaderStorageClass storageClass, out int typeId);
+            switch (shaderDecoration)
+            {
+                case ShaderDecoration.Builtin:
+                    {
+                        reader.DecorateBuiltin(out target, out Builtin builtin);
 
-							variables[id] = (types[typeId], storageClass);
+                        if (builtins.TryGetValue(target, out Builtin existingValue))
+                        {
+                            throw new InvalidOperationException($"Builtin {existingValue} already defined for variable {target}, cannot add {builtin}.");
+                        }
+                        else
+                        {
+                            builtins[target] = builtin;
+                        }
+                        break;
+                    }
+                case ShaderDecoration.Location:
+                    {
+                        reader.DecorateLocation(out target, out uint location);
 
-							break;
-						}
-					case ShaderOp.Constant:
-						{
-							reader = reader.Constant(out int id, out int typeId, out int value);
+                        if (locations.TryGetValue(target, out uint existingValue))
+                        {
+                            throw new InvalidOperationException($"Location {existingValue} already defined for variable {target}, cannot add {location}.");
+                        }
+                        else
+                        {
+                            locations[target] = location;
+                        }
+                        break;
+                    }
+                default:
+                    throw new InvalidOperationException($"Invalid decoration {shaderDecoration}.");
+            }
 
-							var type = types[typeId];
+            reader = reader.Skip();
+        }
 
-							constants[id] = (type, value);
+        return reader;
+    }
 
-							break;
-						}
-					default:
-						isTypeSection = false;
-						break;
-				}
+    public static ShaderReader TypeSection(this ShaderReader reader,
+                                             out Dictionary<int, ShaderType> types,
+                                             out Dictionary<int, (ShaderType Type, Field Value)> constants,
+                                             out Dictionary<int, (ShaderType Type, ShaderStorageClass StorageClass)> variables)
+    {
+        types = [];
+        constants = [];
+        variables = [];
 
-			}
-			return reader;
-		}
-	}
+        bool isTypeSection = true;
+
+        while (isTypeSection)
+        {
+            switch (reader.Next)
+            {
+                case ShaderOp.TypeBool:
+                    {
+                        reader = reader.TypeBool(out int id);
+
+                        types[id] = ShaderType.Bool;
+
+                        break;
+                    }
+                case ShaderOp.TypeInt:
+                    {
+                        reader = reader.TypeInt(out int id, out int width);
+
+                        types[id] = ShaderType.Int(width);
+
+                        break;
+                    }
+                case ShaderOp.TypeFloat:
+                    {
+                        reader = reader.TypeFloat(out int id, out int width);
+
+                        types[id] = ShaderType.Float(width);
+
+                        break;
+                    }
+                case ShaderOp.TypeVector:
+                    {
+                        reader = reader.TypeVector(out int id, out int componentTypeId, out int componentCount);
+
+                        types[id] = ShaderType.VectorOf(types[componentTypeId], componentCount);
+
+                        break;
+                    }
+                case ShaderOp.TypeImage:
+                    {
+                        reader = reader.TypeImage(out int id, out int elementTypeId, out int dim);
+
+                        types[id] = ShaderType.ImageOf(types[elementTypeId], dim);
+
+                        break;
+                    }
+                case ShaderOp.TypeRuntimeArray:
+                    {
+                        reader = reader.TypeRuntimeArray(out int id, out int elementTypeId);
+
+                        types[id] = ShaderType.RuntimeArrayOf(types[elementTypeId]);
+
+                        break;
+                    }
+                case ShaderOp.TypePointer:
+                    {
+                        reader = reader.TypePointer(out int id, out ShaderStorageClass storageClass, out int elementTypeId);
+
+                        types[id] = ShaderType.PointerOf(types[elementTypeId], storageClass);
+
+                        break;
+                    }
+                case ShaderOp.Variable:
+                    {
+                        reader = reader.Variable(out int id, out ShaderStorageClass storageClass, out int typeId);
+
+                        variables[id] = (types[typeId], storageClass);
+
+                        break;
+                    }
+                case ShaderOp.Constant:
+                    {
+                        reader = reader.Constant(out int id, out int typeId, out int value);
+
+                        var type = types[typeId];
+
+                        constants[id] = (type, value);
+
+                        break;
+                    }
+                default:
+                    isTypeSection = false;
+                    break;
+            }
+
+        }
+        return reader;
+    }
 }

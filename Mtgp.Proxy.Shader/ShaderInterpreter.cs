@@ -30,8 +30,8 @@ public class ShaderInterpreter
 	: IShaderExecutor
 {
 	private readonly Memory<byte> compiledShader;
-	private readonly int[] inputMappings;
-	private readonly int[] outputMappings;
+	private readonly Dictionary<int, int> inputMappings;
+	private readonly Dictionary<int, int> outputMappings;
 
 	public ShaderInterpreter(Memory<byte> compiledShader)
 	{
@@ -41,10 +41,10 @@ public class ShaderInterpreter
 
 		var (inputs, outputs) = GetAttributes(compiledShader);
 
-		this.inputMappings = inputs.Select(x => x.Type.ElementType!.Size).RunningOffset().ToArray();
-		this.outputMappings = outputs.Select(x => x.Type.ElementType!.Size).RunningOffset().ToArray();
+		this.inputMappings = inputs.Select(x => (x.Location, x.Type.ElementType!.Size)).RunningOffset().ToDictionary();
+		this.outputMappings = outputs.Select(x => (x.Location, x.Type.ElementType!.Size)).RunningOffset().ToDictionary();
 
-		this.InputSize = inputs.Sum(x => x.Type.ElementType!.Size);
+        this.InputSize = inputs.Sum(x => x.Type.ElementType!.Size);
 		this.OutputSize = outputs.Sum(x => x.Type.ElementType!.Size);
 
 		this.Inputs = inputs.Select(x => new ShaderAttribute(x.Type, x.Location, this.inputMappings[x.Location])).ToArray();
@@ -264,11 +264,11 @@ public class ShaderInterpreter
 		Span<byte> outputBuffer = stackalloc byte[this.OutputSize + builtinSize];
 
 		new BitWriter(inputBuffer).Write([inputBuiltins]);
-		for (int index = 0; index < this.inputMappings.Length; index++)
+		for (int index = 0; index < this.inputMappings.Count; index++)
 		{
 			var inputSlice = input[index];
 
-			inputSlice.CopyTo(inputBuffer[(builtinSize + this.inputMappings[index])..]);
+			inputSlice.CopyTo(inputBuffer[(builtinSize + this.inputMappings.ElementAt(index).Value)..]);
 		}
 
 		int workingSetSize = 4096;
@@ -405,7 +405,7 @@ public class ShaderInterpreter
 							case ShaderStorageClass.Input:
 								if (variableDecorations[result].Location is not null)
 								{
-									pointer = builtinSize + this.inputMappings[variableDecorations[result].Location!.Value];
+									pointer = builtinSize + this.inputMappings[(int)variableDecorations[result].Location!.Value];
 								}
 								else if (variableDecorations[result].Builtin is not null)
 								{
@@ -419,7 +419,7 @@ public class ShaderInterpreter
 							case ShaderStorageClass.Output:
 								if (variableDecorations[result].Location is not null)
 								{
-									pointer = builtinSize + this.outputMappings[variableDecorations[result].Location!.Value];
+									pointer = builtinSize + this.outputMappings[(int)variableDecorations[result].Location!.Value];
 								}
 								else if (variableDecorations[result].Builtin is not null)
 								{
@@ -828,8 +828,13 @@ public class ShaderInterpreter
 		new BitReader(outputBuffer)
 			.ReadUnmanaged(out outputBuiltins);
 
-		outputBuffer[builtinSize..]
-			.CopyTo(output);
+		var outputBase = outputBuffer[builtinSize..];
+
+		foreach(var outputInfo in this.Outputs)
+		{
+			outputBase[..outputInfo.Type.Size].CopyTo(output[outputInfo.Location]);
+			outputBase = outputBase[outputInfo.Type.Size..];
+		}
 	}
 
 	private static void ApplyOperator(ShaderType type, Span<byte> value, Span<byte> target, Func<float, float> floatOp, Func<int, int> intOp)

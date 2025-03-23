@@ -8,7 +8,7 @@
 		{
 		}
 
-		private static IShaderExecutor BuildExecutor(Memory<byte> compiledShader, Dictionary<int, int> outputLocationMappings)
-			=> new ShaderJitter(compiledShader, outputLocationMappings);
+		private static IShaderExecutor BuildExecutor(Memory<byte> compiledShader)
+			=> new ShaderJitter(compiledShader);
 	}
 }

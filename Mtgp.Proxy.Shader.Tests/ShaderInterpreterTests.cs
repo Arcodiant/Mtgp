@@ -9,7 +9,7 @@ namespace Mtgp.Proxy.Shader.Tests
 		{
 		}
 
-		private static IShaderExecutor BuildExecutor(Memory<byte> compiledShader, Dictionary<int, int> outputLocationMappings)
+		private static IShaderExecutor BuildExecutor(Memory<byte> compiledShader)
 			=> new ShaderInterpreter(compiledShader);
 	}
 }

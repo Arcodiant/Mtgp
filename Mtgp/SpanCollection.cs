@@ -1,6 +1,4 @@
-﻿using System.Runtime.CompilerServices;
-
-namespace Mtgp;
+﻿namespace Mtgp;
 
 public ref struct SpanCollection
 {
@@ -99,16 +97,5 @@ public ref struct SpanCollection
 					throw new IndexOutOfRangeException();
 			}
 		}
-	}
-}
-
-
-public static class Test
-{
-	public static void RunTest()
-	{
-		var collection = new SpanCollection();
-
-		var test = collection[0];
 	}
 }
