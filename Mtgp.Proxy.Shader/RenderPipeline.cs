@@ -1,6 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
 using Mtgp.Shader;
-using System.Data.Common;
 using System.Diagnostics;
 using System.Text;
 
@@ -168,7 +167,8 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 			var outputs = new SpanCollection();
 			outputs[0] = output.AsSpan(0, 4);
 			outputs[1] = output.AsSpan(4, 12);
-			outputs[2] = output.AsSpan(16, 16);
+			outputs[2] = output.AsSpan(16, 12);
+			outputs[3] = output.AsSpan(28, 4);
 
 			fragment.Execute(imageAttachments, bufferViewAttachments, inputBuiltins, inputs, ref outputBuiltins, outputs);
 

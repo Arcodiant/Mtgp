@@ -226,8 +226,39 @@ namespace Mtgp.Proxy.Shader.Tests
             outputValue.Should().Be(15f);
         }
 
+		[TestMethod]
+		public void ShouldStoreToUniformBinding()
+		{
+			var shader = new byte[1024];
+
+			new ShaderWriter(shader)
+				.EntryPoint([])
+				.DecorateBinding(4, 0)
+				.TypeInt(1, 4)
+				.TypeRuntimeArray(2, 1)
+				.TypePointer(3, ShaderStorageClass.Uniform, 2)
+				.TypePointer(8, ShaderStorageClass.Uniform, 1)
+                .Variable(4, ShaderStorageClass.Uniform, 3)
+				.Constant(5, 1, 123)
+				.Constant(6, 1, 0)
+                .AccessChain(7, 8, 4, [6])
+                .Store(7, 5)
+				.Return();
+
+			var target = buildExecutor(shader);
+
+            var outputBuiltins = new ShaderInterpreter.Builtins();
+
+            var uniformBinding = new byte[4];
+
+            target.Execute([], [uniformBinding], new(), new(), ref outputBuiltins, new());
+
+            new BitReader(uniformBinding).Read(out int actual);
+            actual.Should().Be(123);
+        }
+
         [TestMethod]
-		public void ShouldStoreViaAccessChain()
+		public void ShouldStoreVectorViaAccessChain()
 		{
 			var shader = new byte[1024];
 
@@ -245,8 +276,7 @@ namespace Mtgp.Proxy.Shader.Tests
 				.Constant(15, 4, 456)
 				.Constant(16, 4, 789)
 				.CompositeConstruct(12, 8, [11, 15, 16])
-				.Constant(13, 4, 0)
-				.AccessChain(14, 17, 2, [13])
+				.AccessChain(14, 17, 2, [10])
 				.Store(14, 12)
 				.Return();
 

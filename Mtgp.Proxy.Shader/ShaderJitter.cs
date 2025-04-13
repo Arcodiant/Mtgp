@@ -1,7 +1,6 @@
 ﻿using Mtgp.Shader;
 using Sigil;
 using System.Reflection;
-using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -11,13 +10,15 @@ internal static class JitterMethods
 {
     public static int ReadInt32(Span<byte> buffer) => BitConverter.ToInt32(buffer);
     public static float ReadFloat32(Span<byte> buffer) => BitConverter.ToSingle(buffer);
+    public static Span<byte> Slice(Span<byte> buffer, int start, int length) => buffer.Slice(start, length);
 }
 
 public class ShaderJitter
     : IShaderExecutor
 {
-    private readonly static Lazy<MethodInfo> ReadInt32 = new(() => typeof(JitterMethods).GetMethod("ReadInt32")!);
-    private readonly static Lazy<MethodInfo> ReadFloat32 = new(() => typeof(JitterMethods).GetMethod("ReadFloat32")!);
+    private readonly static Lazy<MethodInfo> ReadInt32 = new(() => typeof(JitterMethods).GetMethod(nameof(JitterMethods.ReadInt32))!);
+    private readonly static Lazy<MethodInfo> ReadFloat32 = new(() => typeof(JitterMethods).GetMethod(nameof(JitterMethods.ReadFloat32))!);
+    private readonly static Lazy<MethodInfo> Slice = new(() => typeof(JitterMethods).GetMethod(nameof(JitterMethods.Slice))!);
 
     private readonly static Lazy<MethodInfo> BitConverter__TryWriteBytes_Int32 = new(() => typeof(BitConverter).GetMethod(nameof(BitConverter.TryWriteBytes), [typeof(Span<byte>), typeof(int)])!);
     private readonly static Lazy<MethodInfo> BitConverter__TryWriteBytes_Single = new(() => typeof(BitConverter).GetMethod(nameof(BitConverter.TryWriteBytes), [typeof(Span<byte>), typeof(float)])!);
@@ -35,7 +36,8 @@ public class ShaderJitter
     private const int inputBuiltinsIndex = 1;
     private const int outputIndex = 2;
     private const int outputBuiltinsIndex = 3;
-    private delegate void ExecuteDelegate(SpanCollection input, ref ShaderInterpreter.Builtins inputBuiltins, SpanCollection output, ref ShaderInterpreter.Builtins outputBuiltins);
+    private const int bufferAttachmentsIndex = 4;
+    private delegate void ExecuteDelegate(SpanCollection input, ref ShaderInterpreter.Builtins inputBuiltins, SpanCollection output, ref ShaderInterpreter.Builtins outputBuiltins, SpanCollection bufferAttachments);
 
     private readonly ExecuteDelegate execute;
 
@@ -47,7 +49,7 @@ public class ShaderJitter
 
         reader = reader.EntryPointSection(out var entryPointVariables);
 
-        reader = reader.DecorationSection(out var builtins, out var locations);
+        reader = reader.DecorationSection(out var builtins, out var locations, out var bindings);
 
         reader = reader.TypeSection(out var types, out var constants, out var variables);
 
@@ -159,6 +161,25 @@ public class ShaderJitter
 
                         break;
                     }
+                case ShaderStorageClass.Uniform:
+                    {
+                        var local = methodEmitter.DeclareLocal(typeof(Span<byte>), $"uniform_variable_{id}");
+
+                        if (!bindings.TryGetValue(id, out var bindingValue))
+                        {
+                            throw new InvalidOperationException($"Variable {id} has no binding decoration.");
+                        }
+
+                        methodEmitter.LoadArgumentAddress(bufferAttachmentsIndex)
+                                        .LoadConstant((int)bindingValue)
+                                        .Call(SpanCollection__GetItem.Value);
+
+                        methodEmitter.StoreLocal(local);
+
+                        SetValue(id, variable.Type, emitter => emitter.LoadLocal(local));
+
+                        break;
+                    }
                 default:
                     throw new NotImplementedException($"Variables of storage class {variable.StorageClass} are not imolemented");
             }
@@ -230,6 +251,29 @@ public class ShaderJitter
 
                         break;
                     }
+                case ShaderOp.AccessChain:
+                    {
+                        reader.AccessChain(out int count);
+
+                        if (count != 1)
+                        {
+                            throw new NotImplementedException("Only one access chain index is implemented");
+                        }
+
+                        var ids = new int[count];
+
+                        reader.AccessChain(out int resultId, out int typeId, out int baseId, ids.AsSpan(), out _);
+
+                        var resultType = types[typeId];
+
+                        SetValue(resultId, resultType, emitter => EmitValue(EmitValue(emitter, baseId), ids[0])
+                                                                        .LoadConstant(resultType.ElementType!.Size)
+                                                                        .Multiply()
+                                                                        .LoadConstant(resultType.ElementType!.Size)
+                                                                        .Call(Slice.Value));
+
+                        break;
+                    }
                 case ShaderOp.Return:
                     isReturned = true;
                     break;
@@ -247,7 +291,14 @@ public class ShaderJitter
 
     public void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, ShaderInterpreter.Builtins inputBuiltins, SpanCollection input, ref ShaderInterpreter.Builtins outputBuiltins, SpanCollection output)
     {
-        this.execute(input, ref inputBuiltins, output, ref outputBuiltins);
+        var bufferCollection = new SpanCollection();
+
+        for(int index = 0;index < bufferAttachments.Length; index++)
+        {
+            bufferCollection[index] = bufferAttachments[index].Span;
+        }
+
+        this.execute(input, ref inputBuiltins, output, ref outputBuiltins, bufferCollection);
     }
 }
 
@@ -269,10 +320,11 @@ internal static class ShaderReaderSectionExtensions
         return reader;
     }
 
-    public static ShaderReader DecorationSection(this ShaderReader reader, out Dictionary<int, Builtin> builtins, out Dictionary<int, uint> locations)
+    public static ShaderReader DecorationSection(this ShaderReader reader, out Dictionary<int, Builtin> builtins, out Dictionary<int, uint> locations, out Dictionary<int, uint> bindings)
     {
         builtins = [];
         locations = [];
+        bindings = [];
 
         while (reader.Next == ShaderOp.Decorate)
         {
@@ -308,6 +360,21 @@ internal static class ShaderReaderSectionExtensions
                         {
                             locations[target] = location;
                         }
+                        break;
+                    }
+                case ShaderDecoration.Binding:
+                    {
+                        reader.DecorateBinding(out target, out uint binding);
+
+                        if (bindings.TryGetValue(target, out uint existingValue))
+                        {
+                            throw new InvalidOperationException($"Binding {existingValue} already defined for variable {target}, cannot add {binding}.");
+                        }
+                        else
+                        {
+                            bindings[target] = binding;
+                        }
+
                         break;
                     }
                 default:
