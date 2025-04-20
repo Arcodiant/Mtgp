@@ -1,7 +1,6 @@
-﻿using Mtgp.Shader;
-using System.Text;
+﻿using System.Text;
 
-namespace Mtgp.Proxy.Shader;
+namespace Mtgp.Shader;
 
 public static class ShaderDisassembler
 {

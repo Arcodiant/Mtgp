@@ -227,6 +227,16 @@ public class ShaderCompiler
 			=> $"{nameof(ShaderFile)} {{ {FormatArray(StructDefinitions)}, {FormatArray(FuncDefinitions)}, {FormatArray(BindingDefinitions)} }}";
 	}
 
+	private readonly ref struct ShaderState(ShaderWriter typesWriter, ShaderWriter codeWriter)
+	{
+		public ShaderWriter TypesWriter { get; } = typesWriter;
+		public ShaderWriter CodeWriter { get; } = codeWriter;
+
+		public ShaderState WithTypesWriter(ShaderWriter newTypesWriter) => new(newTypesWriter, this.CodeWriter);
+		public ShaderState WithCodeWriter(ShaderWriter newCodeWriter) => new(this.TypesWriter, newCodeWriter);
+	}
+
+
 	public byte[] Compile(string source, string entrypointName = "Main")
 	{
 		ShaderType GetPrimitiveType(TypeReference type)
@@ -365,12 +375,13 @@ public class ShaderCompiler
 		}
 
 		var shaderHeader = new byte[1024];
+		var shaderTypes = new byte[1024];
 		var shaderCode = new byte[1024];
 
 		var headerWriter = new ShaderWriter(shaderHeader)
 							.EntryPoint(vars.Where(x => x.IsInEntryPoint).Select(x => x.Id).ToArray());
 
-		var writer = new ShaderWriter(shaderCode);
+		var shaderState = new ShaderState(new ShaderWriter(shaderTypes), new ShaderWriter(shaderCode));
 
 		foreach (var location in locations)
 		{
@@ -436,38 +447,47 @@ public class ShaderCompiler
 
 		foreach (var (id, storage, type, _) in vars)
 		{
-			writer = writer.Variable(id, storage, GetTypeId(ref headerWriter, type));
+			var typesWriter = shaderState.TypesWriter;
+			typesWriter = typesWriter.Variable(id, storage, GetTypeId(ref typesWriter, type));
+			shaderState = shaderState.WithTypesWriter(typesWriter);
 		}
 
 		var expressionImplementations = new Dictionary<Expression, (int Id, ShaderType Type)>();
 
 		foreach (var statement in mainFunc.Statements)
 		{
-			writer = statement switch
+			shaderState = statement switch
 			{
-				AssignStatement assignment => WriteAssignment(writer, assignment),
+				AssignStatement assignment => WriteAssignment(shaderState, assignment),
 				_ => throw new Exception($"Unknown statement type: {statement}")
 			};
 		}
 
-		writer = writer.Return();
+		shaderState = shaderState.WithCodeWriter(shaderState.CodeWriter.Return());
 
-		ShaderWriter WriteAssignment(ShaderWriter writer, AssignStatement assignment)
+		ShaderState WriteAssignment(ShaderState state, AssignStatement assignment)
 		{
-			writer = WriteExpression(writer, assignment.RightHand, out int rightId, out _);
-			writer = assignment.LeftHand switch
+			state = WriteExpression(state, assignment.RightHand, out int rightId, out _);
+			state = assignment.LeftHand switch
 			{
-				BinaryExpression binaryExpression => writer.Store(GetVarId(binaryExpression), rightId),
-				ArrayAccessExpression arrayAccessExpression => WriteLeftHandArrayAccessExpression(writer, arrayAccessExpression, out int pointerId).Store(pointerId, rightId),
+				BinaryExpression binaryExpression => state.WithCodeWriter(state.CodeWriter.Store(GetVarId(binaryExpression), rightId)),
+				ArrayAccessExpression arrayAccessExpression => WriteLeftHandArrayAccessExpressionAndStore(state, arrayAccessExpression, rightId),
 				_ => throw new Exception($"Unknown left hand type: {assignment.LeftHand}")
 			};
 
-			return writer;
+			return state;
 		}
 
-		ShaderWriter WriteLeftHandArrayAccessExpression(ShaderWriter writer, ArrayAccessExpression expression, out int pointerId)
+		ShaderState WriteLeftHandArrayAccessExpressionAndStore(ShaderState state, ArrayAccessExpression expression, int rightId)
 		{
-			writer = WriteExpression(writer, expression.Index, out int indexId, out var type);
+			state = WriteLeftHandArrayAccessExpression(state, expression, out int pointerId);
+
+			return state.WithCodeWriter(state.CodeWriter.Store(pointerId, rightId));
+		}
+
+		ShaderState WriteLeftHandArrayAccessExpression(ShaderState state, ArrayAccessExpression expression, out int pointerId)
+		{
+			state = WriteExpression(state, expression.Index, out int indexId, out var type);
 
 			int baseId = GetTokenVarId((TokenExpression)expression.Base);
 
@@ -476,24 +496,26 @@ public class ShaderCompiler
 
 			pointerId = GetNextId(pointerType);
 
-			writer = writer.AccessChain(pointerId, GetTypeId(ref writer, pointerType), GetTokenVarId((TokenExpression)expression.Base), new int[] { indexId });
+			var typesWriter = state.TypesWriter;
+			int typeId = GetTypeId(ref typesWriter, pointerType);
+			var codeWriter = state.CodeWriter.AccessChain(pointerId, typeId, GetTokenVarId((TokenExpression)expression.Base), new int[] { indexId });
 
-			return writer;
+			return state.WithTypesWriter(typesWriter).WithCodeWriter(codeWriter);
 		}
 
-		ShaderWriter WriteExpression(ShaderWriter writer, Expression expression, out int id, out ShaderType type)
+		ShaderState WriteExpression(ShaderState state, Expression expression, out int id, out ShaderType type)
 		{
 			if (!expressionImplementations.TryGetValue(expression, out var info))
 			{
-				writer = expression switch
+				state = expression switch
 				{
-					TokenExpression tokenExpression => WriteTokenExpression(writer, tokenExpression, out id, out type),
-					IntegerLiteralExpression integerLiteralExpression => WriteIntegerLiteralExpression(writer, integerLiteralExpression, out id, out type),
-					BinaryExpression binaryExpression => WriteBinaryExpression(writer, binaryExpression, out id, out type),
-					FunctionExpression functionExpression => WriteFunctionExpression(writer, functionExpression, out id, out type),
-					TernaryExpression ternaryExpression => WriteTernaryExpression(writer, ternaryExpression, out id, out type),
-					FloatLiteralExpression floatLiteralExpression => WriteFloatLiteralExpression(writer, floatLiteralExpression, out id, out type),
-					ArrayAccessExpression arrayAccessExpression => WriteRightHandArrayAccessExpression(writer, arrayAccessExpression, out id, out type),
+					TokenExpression tokenExpression => WriteTokenExpression(state, tokenExpression, out id, out type),
+					IntegerLiteralExpression integerLiteralExpression => WriteIntegerLiteralExpression(state, integerLiteralExpression, out id, out type),
+					BinaryExpression binaryExpression => WriteBinaryExpression(state, binaryExpression, out id, out type),
+					FunctionExpression functionExpression => WriteFunctionExpression(state, functionExpression, out id, out type),
+					TernaryExpression ternaryExpression => WriteTernaryExpression(state, ternaryExpression, out id, out type),
+					FloatLiteralExpression floatLiteralExpression => WriteFloatLiteralExpression(state, floatLiteralExpression, out id, out type),
+					ArrayAccessExpression arrayAccessExpression => WriteRightHandArrayAccessExpression(state, arrayAccessExpression, out id, out type),
 					_ => throw new Exception($"Unknown expression type: {expression}")
 				};
 
@@ -505,34 +527,37 @@ public class ShaderCompiler
 				type = info.Type;
 			}
 
-			return writer;
+			return state;
 		}
 
-		ShaderWriter WriteRightHandArrayAccessExpression(ShaderWriter writer, ArrayAccessExpression expression, out int id, out ShaderType type)
+		ShaderState WriteRightHandArrayAccessExpression(ShaderState state, ArrayAccessExpression expression, out int id, out ShaderType type)
 		{
 			throw new NotImplementedException();
 		}
 
-		ShaderWriter WriteTokenExpression(ShaderWriter writer, TokenExpression expression, out int id, out ShaderType type)
+		ShaderState WriteTokenExpression(ShaderState state, TokenExpression expression, out int id, out ShaderType type)
 		{
 			int varId = GetTokenVarId(expression);
 			type = vars.Single(x => x.Id == varId).Type.ElementType!;
 
 			id = GetNextId(type);
 
-			return writer.Load(id, GetTypeId(ref writer, type), varId);
+			var typesWriter = state.TypesWriter;
+			int typeId = GetTypeId(ref typesWriter, type);
+
+			return new(typesWriter, state.CodeWriter.Load(id, typeId, varId));
 		}
 
-		ShaderWriter WriteTernaryExpression(ShaderWriter writer, TernaryExpression expression, out int id, out ShaderType type)
+		ShaderState WriteTernaryExpression(ShaderState state, TernaryExpression expression, out int id, out ShaderType type)
 		{
-			writer = WriteExpression(writer, expression.Condition, out int conditionId, out var conditionType);
+			state = WriteExpression(state, expression.Condition, out int conditionId, out var conditionType);
 			if (!conditionType.IsBool())
 			{
 				throw new Exception($"Ternary condition must be a bool, got {conditionType}");
 			}
 
-			writer = WriteExpression(writer, expression.TrueBranch, out int trueBranchId, out var trueBranchType);
-			writer = WriteExpression(writer, expression.FalseBranch, out int falseBranchId, out var falseBranchType);
+			state = WriteExpression(state, expression.TrueBranch, out int trueBranchId, out var trueBranchType);
+			state = WriteExpression(state, expression.FalseBranch, out int falseBranchId, out var falseBranchType);
 			if (trueBranchType != falseBranchType)
 			{
 				throw new Exception($"Ternary branches must have the same type, got {trueBranchType} and {falseBranchType}");
@@ -541,40 +566,45 @@ public class ShaderCompiler
 			type = trueBranchType;
 			id = GetNextId(type);
 
-			writer = writer.Conditional(id, GetTypeId(ref writer, trueBranchType), conditionId, trueBranchId, falseBranchId);
+			var typesWriter = state.TypesWriter;
+			int conditionTypeId = GetTypeId(ref typesWriter, trueBranchType);
 
-			return writer;
+			return new(typesWriter, state.CodeWriter.Conditional(id, conditionTypeId, conditionId, trueBranchId, falseBranchId));
 		}
-		ShaderWriter WriteFunctionExpression(ShaderWriter writer, FunctionExpression expression, out int id, out ShaderType type)
+		ShaderState WriteFunctionExpression(ShaderState state, FunctionExpression expression, out int id, out ShaderType type)
 		{
 			return expression.Name switch
 			{
-				"Gather" => WriteGatherFunction(writer, expression, out id, out type),
-				"Vec" => WriteVecFunction(writer, expression, out id, out type),
-				"Abs" => WriteAbsFunction(writer, expression, out id, out type),
+				"Gather" => WriteGatherFunction(state, expression, out id, out type),
+				"Vec" => WriteVecFunction(state, expression, out id, out type),
+				"Abs" => WriteAbsFunction(state, expression, out id, out type),
 				_ => throw new Exception($"Unknown function: {expression.Name}")
 			};
 		}
-		ShaderWriter WriteAbsFunction(ShaderWriter writer, FunctionExpression expression, out int id, out ShaderType type)
+		ShaderState WriteAbsFunction(ShaderState state, FunctionExpression expression, out int id, out ShaderType type)
 		{
 			if (expression.Arguments.Length != 1)
 			{
 				throw new Exception($"Abs function expects 1 argument, got {expression.Arguments.Length}");
 			}
 
-			writer = WriteExpression(writer, expression.Arguments[0], out int valueId, out type);
+			state = WriteExpression(state, expression.Arguments[0], out int valueId, out type);
 
 			id = GetNextId(type);
-			return writer.Abs(id, GetTypeId(ref writer, type), valueId);
+
+			var typesWriter = state.TypesWriter;
+			int typeId = GetTypeId(ref typesWriter, type);
+
+			return new(typesWriter, state.CodeWriter.Abs(id, typeId, valueId));
 		}
-		ShaderWriter WriteVecFunction(ShaderWriter writer, FunctionExpression expression, out int id, out ShaderType type)
+		ShaderState WriteVecFunction(ShaderState state, FunctionExpression expression, out int id, out ShaderType type)
 		{
 			if (expression.Arguments.Length < 2)
 			{
 				throw new Exception($"Vec function expects at least 2 arguments, got {expression.Arguments.Length}");
 			}
 
-			writer = WriteExpression(writer, expression.Arguments[0], out int firstId, out var firstType);
+			state = WriteExpression(state, expression.Arguments[0], out int firstId, out var firstType);
 
 			var elementType = firstType.IsVector() ? firstType.ElementType! : firstType;
 
@@ -585,7 +615,7 @@ public class ShaderCompiler
 
 			foreach (var argument in expression.Arguments.Skip(1))
 			{
-				writer = WriteExpression(writer, argument, out int argumentId, out var argumentType);
+				state = WriteExpression(state, argument, out int argumentId, out var argumentType);
 
 				if (!(argumentType.IsVector() ? argumentType.ElementType == elementType : argumentType == elementType))
 				{
@@ -598,9 +628,12 @@ public class ShaderCompiler
 			type = ShaderType.VectorOf(elementType, expressionList.Count);
 			id = GetNextId(type);
 
-			return writer.CompositeConstruct(id, GetTypeId(ref writer, type), expressionList.ToArray());
+			var typesWriter = state.TypesWriter;
+			int typeId = GetTypeId(ref typesWriter, type);
+
+			return new(typesWriter, state.CodeWriter.CompositeConstruct(id, typeId, expressionList.ToArray()));
 		}
-		ShaderWriter WriteGatherFunction(ShaderWriter writer, FunctionExpression expression, out int id, out ShaderType type)
+		ShaderState WriteGatherFunction(ShaderState state, FunctionExpression expression, out int id, out ShaderType type)
 		{
 			if (expression.Arguments.Length != 2)
 			{
@@ -610,51 +643,60 @@ public class ShaderCompiler
 			var imageVarId = varNames[(((TokenExpression)expression.Arguments[0]).Value, "")];
 			var imageType = vars.Single(x => x.Id == imageVarId).Type.ElementType!;
 			var imageElementType = imageType.ElementType!;
-			var imageElementTypeId = GetTypeId(ref writer, imageElementType);
-			writer = WriteExpression(writer, expression.Arguments[1], out int coordId, out var coordIdType);
-			var coordIdTypeId = GetTypeId(ref writer, coordIdType);
+			var typesWriter = state.TypesWriter;
+			var imageElementTypeId = GetTypeId(ref typesWriter, imageElementType);
+			state = WriteExpression(state.WithTypesWriter(typesWriter), expression.Arguments[1], out int coordId, out var coordIdType);
+			typesWriter = state.TypesWriter;
+			var coordIdTypeId = GetTypeId(ref typesWriter, coordIdType);
 
 			type = imageElementType;
 			id = GetNextId(type);
 
-			return writer.Gather(id, imageElementTypeId, imageVarId, coordId);
+			return new(typesWriter, state.CodeWriter.Gather(id, imageElementTypeId, imageVarId, coordId));
 		}
-		ShaderWriter WriteBinaryExpression(ShaderWriter writer, BinaryExpression expression, out int id, out ShaderType type) => expression.Operator switch
+		ShaderState WriteBinaryExpression(ShaderState state, BinaryExpression expression, out int id, out ShaderType type) => expression.Operator switch
 		{
-			"." => WriteDotExpression(writer, expression, out id, out type),
-			"==" => WriteEqualityExpression(writer, expression, out id, out type),
-			"+" => WriteAddExpression(writer, expression, out id, out type),
-			"-" => WriteSubtractExpression(writer, expression, out id, out type),
-			"*" => WriteMultiplyExpression(writer, expression, out id, out type),
-			"/" => WriteDivideExpression(writer, expression, out id, out type),
-			"%" => WriteModuloExpression(writer, expression, out id, out type),
+			"." => WriteDotExpression(state, expression, out id, out type),
+			"==" => WriteEqualityExpression(state, expression, out id, out type),
+			"+" => WriteAddExpression(state, expression, out id, out type),
+			"-" => WriteSubtractExpression(state, expression, out id, out type),
+			"*" => WriteMultiplyExpression(state, expression, out id, out type),
+			"/" => WriteDivideExpression(state, expression, out id, out type),
+			"%" => WriteModuloExpression(state, expression, out id, out type),
 			_ => throw new Exception($"Unknown operator: {expression.Operator}")
 		};
-		ShaderWriter WriteIntegerLiteralExpression(ShaderWriter writer, IntegerLiteralExpression expression, out int id, out ShaderType type)
+		ShaderState WriteIntegerLiteralExpression(ShaderState state, IntegerLiteralExpression expression, out int id, out ShaderType type)
 		{
 			type = ShaderType.Int(4);
 			id = GetNextId(type);
 
-			return writer.Constant(id, GetTypeId(ref writer, ShaderType.Int(4)), expression.Value);
+			var typesWriter = state.TypesWriter;
+
+			return state.WithTypesWriter(typesWriter.Constant(id, GetTypeId(ref typesWriter, type), expression.Value));
 		}
-		ShaderWriter WriteFloatLiteralExpression(ShaderWriter writer, FloatLiteralExpression expression, out int id, out ShaderType type)
+		ShaderState WriteFloatLiteralExpression(ShaderState state, FloatLiteralExpression expression, out int id, out ShaderType type)
 		{
 			type = ShaderType.Float(4);
 			id = GetNextId(type);
 
-			return writer.Constant(id, GetTypeId(ref writer, ShaderType.Float(4)), expression.Value);
+			var typesWriter = state.TypesWriter;
+
+			return state.WithTypesWriter(typesWriter.Constant(id, GetTypeId(ref typesWriter, type), expression.Value));
 		}
-		ShaderWriter WriteDotExpression(ShaderWriter writer, BinaryExpression expression, out int id, out ShaderType type)
+		ShaderState WriteDotExpression(ShaderState state, BinaryExpression expression, out int id, out ShaderType type)
 		{
 			type = ShaderType.Int(4);
 			id = GetNextId(type);
 
-			return writer.Load(id, GetTypeId(ref writer, GetVarType(expression).ElementType!), GetVarId(expression));
+			var typesWriter = state.TypesWriter;
+			int typeId = GetTypeId(ref typesWriter, GetVarType(expression).ElementType!);
+
+			return new(typesWriter, state.CodeWriter.Load(id, typeId, GetVarId(expression)));
 		}
-		ShaderWriter WriteEqualityExpression(ShaderWriter writer, BinaryExpression expression, out int id, out ShaderType type)
+		ShaderState WriteEqualityExpression(ShaderState state, BinaryExpression expression, out int id, out ShaderType type)
 		{
-			writer = WriteExpression(writer, expression.Left, out int leftId, out var leftType);
-			writer = WriteExpression(writer, expression.Right, out int rightId, out var rightType);
+			state = WriteExpression(state, expression.Left, out int leftId, out var leftType);
+			state = WriteExpression(state, expression.Right, out int rightId, out var rightType);
 			if (leftType != rightType)
 			{
 				throw new Exception($"Equality operands must have the same type, got {leftType} and {rightType}");
@@ -663,82 +705,106 @@ public class ShaderCompiler
 			type = ShaderType.Bool;
 			id = GetNextId(type);
 
-			return writer.Equals(id, GetTypeId(ref writer, ShaderType.Bool), leftId, rightId);
+			var typesWriter = state.TypesWriter;
+			int typeId = GetTypeId(ref typesWriter, ShaderType.Bool);
+
+			return new(typesWriter, state.CodeWriter.Equals(id, typeId, leftId, rightId));
 		}
-		ShaderWriter WriteIntToFloat(ShaderWriter writer, int value, out int id, out ShaderType type)
+		ShaderState WriteIntToFloat(ShaderState state, int value, out int id, out ShaderType type)
 		{
 			type = ShaderType.Float(4);
 			id = GetNextId(type);
-			return writer.IntToFloat(id, GetTypeId(ref writer, type), value);
+
+			var typesWriter = state.TypesWriter;
+			int typeId = GetTypeId(ref typesWriter, type);
+
+			return new(typesWriter, state.CodeWriter.IntToFloat(id, typeId, value));
 		}
-		ShaderWriter PrepOperatorExpression(ShaderWriter writer, BinaryExpression expression, out ShaderType type, out int leftId, out int rightId)
+		ShaderState PrepOperatorExpression(ShaderState state, BinaryExpression expression, out ShaderType type, out int leftId, out int rightId)
 		{
-			writer = WriteExpression(writer, expression.Left, out leftId, out var leftType);
-			writer = WriteExpression(writer, expression.Right, out rightId, out var rightType);
+			state = WriteExpression(state, expression.Left, out leftId, out var leftType);
+			state = WriteExpression(state, expression.Right, out rightId, out var rightType);
 
 			if (leftType != rightType)
 			{
 				if (leftType.IsInt())
 				{
-					writer = WriteIntToFloat(writer, leftId, out leftId, out leftType);
+					state = WriteIntToFloat(state, leftId, out leftId, out leftType);
 				}
 
 				if(rightType.IsInt())
 				{
-					writer = WriteIntToFloat(writer, rightId, out rightId, out rightType);
+					state = WriteIntToFloat(state, rightId, out rightId, out rightType);
 				}
 			}
 
 			type = leftType;
 
-			return writer;
+			return state;
 		}
-		ShaderWriter WriteAddExpression(ShaderWriter writer, BinaryExpression expression, out int id, out ShaderType type)
+		ShaderState WriteAddExpression(ShaderState state, BinaryExpression expression, out int id, out ShaderType type)
 		{
-			writer = PrepOperatorExpression(writer, expression, out type, out int leftId, out int rightId);
+			state = PrepOperatorExpression(state, expression, out type, out int leftId, out int rightId);
 
 			id = GetNextId(type);
 
-			return writer.Add(id, GetTypeId(ref writer, type), leftId, rightId);
+			var typesWriter = state.TypesWriter;
+			int typeId = GetTypeId(ref typesWriter, type);
+
+			return new(typesWriter, state.CodeWriter.Add(id, typeId, leftId, rightId));
 		}
-		ShaderWriter WriteSubtractExpression(ShaderWriter writer, BinaryExpression expression, out int id, out ShaderType type)
+		ShaderState WriteSubtractExpression(ShaderState state, BinaryExpression expression, out int id, out ShaderType type)
 		{
-			writer = PrepOperatorExpression(writer, expression, out type, out int leftId, out int rightId);
+			state = PrepOperatorExpression(state, expression, out type, out int leftId, out int rightId);
 
 			id = GetNextId(type);
 
-			return writer.Subtract(id, GetTypeId(ref writer, type), leftId, rightId);
+			var typesWriter = state.TypesWriter;
+			int typeId = GetTypeId(ref typesWriter, type);
+
+			return new(typesWriter, state.CodeWriter.Subtract(id, typeId, leftId, rightId));
 		}
-		ShaderWriter WriteMultiplyExpression(ShaderWriter writer, BinaryExpression expression, out int id, out ShaderType type)
+		ShaderState WriteMultiplyExpression(ShaderState state, BinaryExpression expression, out int id, out ShaderType type)
 		{
-			writer = PrepOperatorExpression(writer, expression, out type, out int leftId, out int rightId);
+			state = PrepOperatorExpression(state, expression, out type, out int leftId, out int rightId);
 
 			id = GetNextId(type);
 
-			return writer.Multiply(id, GetTypeId(ref writer, type), leftId, rightId);
+			var typesWriter = state.TypesWriter;
+			int typeId = GetTypeId(ref typesWriter, type);
+
+			return new(typesWriter, state.CodeWriter.Multiply(id, typeId, leftId, rightId));
 		}
-		ShaderWriter WriteDivideExpression(ShaderWriter writer, BinaryExpression expression, out int id, out ShaderType type)
+		ShaderState WriteDivideExpression(ShaderState state, BinaryExpression expression, out int id, out ShaderType type)
 		{
-			writer = PrepOperatorExpression(writer, expression, out type, out int leftId, out int rightId);
+			state = PrepOperatorExpression(state, expression, out type, out int leftId, out int rightId);
 
 			id = GetNextId(type);
 
-			return writer.Divide(id, GetTypeId(ref writer, type), leftId, rightId);
+			var typesWriter = state.TypesWriter;
+			int typeId = GetTypeId(ref typesWriter, type);
+
+			return new(typesWriter, state.CodeWriter.Divide(id, typeId, leftId, rightId));
 		}
-		ShaderWriter WriteModuloExpression(ShaderWriter writer, BinaryExpression expression, out int id, out ShaderType type)
+		ShaderState WriteModuloExpression(ShaderState state, BinaryExpression expression, out int id, out ShaderType type)
 		{
-			writer = PrepOperatorExpression(writer, expression, out type, out int leftId, out int rightId);
+			state = PrepOperatorExpression(state, expression, out type, out int leftId, out int rightId);
 
 			id = GetNextId(type);
 
-			return writer.Mod(id, GetTypeId(ref writer, type), leftId, rightId);
+			var typesWriter = state.TypesWriter;
+			int typeId = GetTypeId(ref typesWriter, type);
+
+			return new(typesWriter, state.CodeWriter.Mod(id, typeId, leftId, rightId));
 		}
 
 		int GetVarId(BinaryExpression expression) => varNames[(((TokenExpression)expression.Left).Value, ((TokenExpression)expression.Right).Value)];
 		ShaderType GetVarType(BinaryExpression expression) => vars.Single(x => x.Id == GetVarId(expression)).Type;
 		int GetTokenVarId(TokenExpression expression) => varNames[(expression.Value, "")];
 
-		byte[] result = [.. shaderHeader[..headerWriter.Writer.WriteCount], .. shaderCode[..writer.Writer.WriteCount]];
+		byte[] result = [.. shaderHeader[..headerWriter.Writer.WriteCount],
+							.. shaderTypes[..shaderState.TypesWriter.Writer.WriteCount],
+							.. shaderCode[..shaderState.CodeWriter.Writer.WriteCount]];
 
 		return result;
 	}

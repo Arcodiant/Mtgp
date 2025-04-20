@@ -336,7 +336,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 
 							result = resource.Info switch
 							{
-								CreateShaderInfo shaderInfo => Create((IShaderExecutor)ShaderInterpreter.Create(shaderInfo.ShaderData)),
+								CreateShaderInfo shaderInfo => Create((IShaderExecutor)ShaderJitter.Create(shaderInfo.ShaderData)),
 								CreatePipeInfo pipeInfo => Create(new PipeInfo(GetId(pipeInfo.ActionList))),
 								CreateActionListInfo actionListInfo => Create(new ActionListInfo([])),
 								CreateBufferInfo bufferInfo => Create(new BufferInfo(new byte[bufferInfo.Size])),
@@ -410,13 +410,13 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 
 			var pipeStopwatch = Stopwatch.StartNew();
 
-			logger.LogDebug("Running Pipe {PipeId}/Action List {ActionList}", request.Pipe, pipeInfo.ActionList);
+			logger.LogTrace("Running Pipe {PipeId}/Action List {ActionList}", request.Pipe, pipeInfo.ActionList);
 
 			RunActionList(pipeInfo.ActionList, request.Value);
 
 			pipeStopwatch.Stop();
 
-			logger.LogDebug("Pipe {PipeId}/Action List {ActionList} took {ElapsedMs}ms", request.Pipe, pipeInfo.ActionList, pipeStopwatch.Elapsed.TotalMilliseconds);
+			logger.LogTrace("Pipe {PipeId}/Action List {ActionList} took {ElapsedMs}ms", request.Pipe, pipeInfo.ActionList, pipeStopwatch.Elapsed.TotalMilliseconds);
 
 			return new MtgpResponse(0, "ok");
 		}
@@ -439,7 +439,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 
 			stopwatch.Stop();
 
-			logger.LogDebug("Action List {ActionList} Action {Action} took {ElapsedMs}ms", actionList, action.ToString(), stopwatch.Elapsed.TotalMilliseconds);
+			logger.LogTrace("Action List {ActionList} Action {Action} took {ElapsedMs}ms", actionList, action.ToString(), stopwatch.Elapsed.TotalMilliseconds);
 		}
 	}
 

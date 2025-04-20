@@ -26,13 +26,25 @@ internal static class JitterMethods
 	public static Vector_3<int> Vec_Int32_3(int x, int y, int z) => new(x, y, z);
 	public static Vector_4<int> Vec_Int32_4(int x, int y, int z, int w) => new(x, y, z, w);
 
-	public static Vector_2<float> Vec_Float_2(float x, float y) => new(x, y);
-	public static Vector_3<float> Vec_Float_3(float x, float y, float z) => new(x, y, z);
-	public static Vector_4<float> Vec_Float_4(float x, float y, float z, float w) => new(x, y, z, w);
+	public static Vector_2<float> Vec_Single_2(float x, float y) => new(x, y);
+	public static Vector_3<float> Vec_Single_3(float x, float y, float z) => new(x, y, z);
+	public static Vector_4<float> Vec_Single_4(float x, float y, float z, float w) => new(x, y, z, w);
 
 	public static void Write<T>(Span<byte> buffer, T value)
 		where T : unmanaged
 		=> MemoryMarshal.Write(buffer, value);
+
+	public static T Read<T>(Span<byte> buffer)
+		where T : unmanaged
+		=> MemoryMarshal.Read<T>(buffer);
+
+	public static int Gather_Int_Int_2(Span<byte> buffer, Vector_2<int> coordinate, Vector_3<int> dimensions)
+	{
+		int x = coordinate.V1;
+		int y = coordinate.V2;
+
+		return BitConverter.ToInt32(buffer[(y * 4 * dimensions.V2 + x * 4)..]);
+	}
 }
 
 public class ShaderJitter
@@ -58,11 +70,12 @@ public class ShaderJitter
 	}
 
 	private readonly static Dictionary<(Type, int), MethodInfo> writeVecs = [];
+	private readonly static Dictionary<(Type, int), MethodInfo> readVecs = [];
 
 	private static MethodInfo WriteVec<T>(int count)
 		=> WriteVec(typeof(T), count);
 
-	public static MethodInfo WriteVec(Type type, int count)
+	private static MethodInfo WriteVec(Type type, int count)
 	{
 		var key = (type, count);
 
@@ -85,6 +98,32 @@ public class ShaderJitter
 		return methodInfo;
 	}
 
+	private static MethodInfo ReadVec<T>(int count)
+		=> ReadVec(typeof(T), count);
+
+	private static MethodInfo ReadVec(Type type, int count)
+	{
+		var key = (type, count);
+
+		var vectorType = count switch
+		{
+			2 => typeof(JitterMethods.Vector_2<>),
+			3 => typeof(JitterMethods.Vector_3<>),
+			4 => typeof(JitterMethods.Vector_4<>),
+			_ => throw new NotImplementedException($"Vectors of size {count} are not implemented.")
+		};
+
+		vectorType = vectorType.MakeGenericType(type);
+
+		if (!readVecs.TryGetValue(key, out var methodInfo))
+		{
+			methodInfo = typeof(JitterMethods).GetMethod("Read")!.MakeGenericMethod(vectorType);
+			readVecs[key] = methodInfo;
+		}
+
+		return methodInfo;
+	}
+
 	private readonly static Lazy<MethodInfo> BitConverter__TryWriteBytes_Int32 = new(() => typeof(BitConverter).GetMethod(nameof(BitConverter.TryWriteBytes), [typeof(Span<byte>), typeof(int)])!);
 	private readonly static Lazy<MethodInfo> BitConverter__TryWriteBytes_Single = new(() => typeof(BitConverter).GetMethod(nameof(BitConverter.TryWriteBytes), [typeof(Span<byte>), typeof(float)])!);
 	private readonly static Lazy<MethodInfo> BitConverter__ToInt32_Span = new(() => typeof(BitConverter).GetMethod(nameof(BitConverter.ToInt32), [typeof(ReadOnlySpan<byte>)])!);
@@ -100,7 +139,9 @@ public class ShaderJitter
 	private const int inputIndex = 0;
 	private const int outputIndex = 1;
 	private const int bufferAttachmentsIndex = 2;
-	private delegate void ExecuteDelegate(Span<byte> input, Span<byte> output, SpanCollection bufferAttachments);
+	private const int imageAttachmentsIndex = 3;
+	private const int imageDimensionsIndex = 4;
+	private delegate void ExecuteDelegate(Span<byte> input, Span<byte> output, SpanCollection bufferAttachments, SpanCollection imageAttachments, SpanCollection imageDimensionCollection);
 
 	private readonly ExecuteDelegate execute;
 	public ShaderIoMappings InputMappings { get; private set; }
@@ -122,6 +163,8 @@ public class ShaderJitter
 		reader = reader.TypeSection(out var types, out var constants, out var variables);
 
 		var values = new Dictionary<int, Func<Emit<ExecuteDelegate>, Emit<ExecuteDelegate>>>();
+
+		var imageDimensions = new Dictionary<int, Local>();
 
 		void SetValue(int id, ShaderType type, Func<Emit<ExecuteDelegate>, Emit<ExecuteDelegate>> emitAction)
 		{
@@ -179,14 +222,14 @@ public class ShaderJitter
 						{
 							methodEmitter.LoadArgument(outputIndex)
 											.LoadConstant(outputMappings.Locations[(int)locationValue])
-											.LoadConstant(variable.Type.Size)
+											.LoadConstant(variable.Type.ElementType!.Size)
 											.Call(Slice.Value);
 						}
 						else if (builtins.TryGetValue(id, out Builtin builtinValue))
 						{
 							methodEmitter.LoadArgument(outputIndex)
 											.LoadConstant(outputMappings.Builtins[builtinValue])
-											.LoadConstant(variable.Type.Size)
+											.LoadConstant(variable.Type.ElementType!.Size)
 											.Call(Slice.Value);
 						}
 						else
@@ -202,14 +245,14 @@ public class ShaderJitter
 						{
 							methodEmitter.LoadArgument(inputIndex)
 											.LoadConstant(inputMappings.Locations[(int)locationValue])
-											.LoadConstant(variable.Type.Size)
+											.LoadConstant(variable.Type.ElementType!.Size)
 											.Call(Slice.Value);
 						}
 						else if (builtins.TryGetValue(id, out Builtin builtinValue))
 						{
 							methodEmitter.LoadArgument(inputIndex)
 											.LoadConstant(inputMappings.Builtins[builtinValue])
-											.LoadConstant(variable.Type.Size)
+											.LoadConstant(variable.Type.ElementType!.Size)
 											.Call(Slice.Value);
 						}
 						else
@@ -232,8 +275,31 @@ public class ShaderJitter
 
 						break;
 					}
+				case ShaderStorageClass.Image:
+					{
+						if (!bindings.TryGetValue(id, out var bindingValue))
+						{
+							throw new InvalidOperationException($"Variable {id} has no binding decoration.");
+						}
+
+						var dimensionLocal = methodEmitter.DeclareLocal(typeof(JitterMethods.Vector_3<int>), $"image_dimensions_{id}");
+
+						methodEmitter.LoadArgumentAddress(imageDimensionsIndex)
+										.LoadConstant((int)bindingValue)
+										.Call(SpanCollection__GetItem.Value)
+										.Call(ReadVec<int>(3))
+										.StoreLocal(dimensionLocal);
+
+						imageDimensions[id] = dimensionLocal;
+
+						methodEmitter.LoadArgumentAddress(imageAttachmentsIndex)
+										.LoadConstant((int)bindingValue)
+										.Call(SpanCollection__GetItem.Value);
+
+						break;
+					}
 				default:
-					throw new NotImplementedException($"Variables of storage class {variable.StorageClass} are not imolemented");
+					throw new NotImplementedException($"Variables of storage class {variable.StorageClass} are not implemented");
 			}
 
 			methodEmitter.StoreLocal(local);
@@ -315,6 +381,23 @@ public class ShaderJitter
 						{
 							readMethod = ReadFloat32.Value;
 						}
+						else if (loadType.IsVector())
+						{
+							var elementType = loadType.ElementType!;
+
+							if (elementType == ShaderType.Int(4))
+							{
+								readMethod = ReadVec<int>(loadType.ElementCount);
+							}
+							else if (elementType == ShaderType.Float(4))
+							{
+								readMethod = ReadVec<float>(loadType.ElementCount);
+							}
+							else
+							{
+								throw new NotSupportedException($"Cannot load type {loadType}");
+							}
+						}
 						else
 						{
 							throw new NotSupportedException($"Cannot load type {loadType}");
@@ -331,6 +414,67 @@ public class ShaderJitter
 						var opType = types[typeId];
 
 						SetValue(resultId, opType, emitter => EmitValues(emitter, leftId, rightId).Add());
+
+						break;
+					}
+				case ShaderOp.Subtract:
+					{
+						reader.Subtract(out int resultId, out int typeId, out int leftId, out int rightId);
+
+						var opType = types[typeId];
+
+						SetValue(resultId, opType, emitter => EmitValues(emitter, leftId, rightId).Subtract());
+
+						break;
+					}
+				case ShaderOp.Equals:
+					{
+						reader.Equals(out int resultId, out int type, out int a, out int b);
+
+						if (types[a] != types[b])
+						{
+							throw new InvalidOperationException($"Equals operands must have the same type");
+						}
+
+						if (types[type] != ShaderType.Bool)
+						{
+							throw new InvalidOperationException($"Equals result must be bool");
+						}
+
+						SetValue(resultId, ShaderType.Bool, emitter => EmitValues(emitter, a, b).CompareEqual());
+
+						break;
+					}
+				case ShaderOp.Conditional:
+					{
+						reader.Conditional(out int resultId, out int type, out int condition, out int trueValue, out int falseValue);
+
+						if (types[condition] != ShaderType.Bool)
+						{
+							throw new InvalidOperationException("Conditional condition must be bool");
+						}
+
+						if (types[trueValue] != types[falseValue])
+						{
+							throw new InvalidOperationException("Conditional true and false values must have the same type");
+						}
+
+						SetValue(resultId, types[trueValue], emitter =>
+						{
+							emitter = EmitValue(emitter, condition)
+										.DefineLabel(out var trueLabel)
+										.DefineLabel(out var endLabel)
+										.BranchIfTrue(trueLabel);
+
+							emitter = EmitValues(emitter, falseValue)
+										.Branch(endLabel)
+										.MarkLabel(trueLabel);
+
+							emitter = EmitValues(emitter, trueValue)
+										.MarkLabel(endLabel);
+
+							return emitter;
+						});
 
 						break;
 					}
@@ -370,7 +514,38 @@ public class ShaderJitter
 
 						var opType = types[typeId];
 
-						SetValue(resultId, opType, emitter => EmitValues(emitter, ids).Call(Vec<int>(count)));
+						if (opType.ElementType == ShaderType.Float(4))
+						{
+							SetValue(resultId, opType, emitter => EmitValues(emitter, ids).Call(Vec<float>(count)));
+						}
+						else if (opType.ElementType == ShaderType.Int(4))
+						{
+							SetValue(resultId, opType, emitter => EmitValues(emitter, ids).Call(Vec<int>(count)));
+						}
+						else
+						{
+							throw new NotImplementedException($"Unimplemented composite construct type {opType}.");
+						}
+
+						break;
+					}
+				case ShaderOp.Gather:
+					{
+						reader.Gather(out int resultId, out int typeId, out int imageId, out int coordinateId);
+
+						var imageType = types[imageId].ElementType!;
+						if (imageType != ShaderType.ImageOf(ShaderType.Int(4), 2))
+						{
+							throw new NotImplementedException($"Unimplemented image type {imageType} for gather operation.");
+						}
+
+						var pixelType = imageType.ElementType!;
+
+						var gatherMethod = typeof(JitterMethods).GetMethod(nameof(JitterMethods.Gather_Int_Int_2))!;
+
+						SetValue(resultId, pixelType, emitter => EmitValues(emitter, imageId, coordinateId)
+																	.LoadLocal(imageDimensions[imageId])
+																	.Call(gatherMethod));
 
 						break;
 					}
@@ -395,7 +570,25 @@ public class ShaderJitter
 			bufferCollection.Add(bufferAttachments[index].Span);
 		}
 
-		this.execute(input, output, bufferCollection);
+		var imageCollection = new SpanCollection();
+		var imageDimensionCollection = new SpanCollection();
+
+		Span<byte> dimensionSpan = new byte[12 * imageAttachments.Length];
+
+		for (int index = 0; index < imageAttachments.Length; index++)
+		{
+			var attachment = imageAttachments[index];
+
+			imageCollection.Add(attachment.Data.Span);
+
+			var imageDimensionSpan = dimensionSpan[(index * 12)..][..12];
+
+			JitterMethods.Write(imageDimensionSpan, new JitterMethods.Vector_3<int>(attachment.Size.Width, attachment.Size.Height, attachment.Size.Depth));
+
+			imageDimensionCollection.Add(imageDimensionSpan);
+		}
+
+		this.execute(input, output, bufferCollection, imageCollection, imageDimensionCollection);
 	}
 
 	public static ShaderJitter Create(byte[] shaderData)

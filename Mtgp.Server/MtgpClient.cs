@@ -225,7 +225,7 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 		{
 			var resource = item;
 
-			results.Add(Task.Run(() => resource.Result == ResourceCreateResultType.Success ? resource.ResourceId : throw new Exception($"Resource creation failed with '{resource.Result}'")));
+			results.Add(Task.Run(async () => resource?.Result == ResourceCreateResultType.Success ? resource.ResourceId : throw new Exception($"Resource creation failed with '{resource?.Result}'")));
 		}
 
 		return [.. results];

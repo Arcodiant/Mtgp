@@ -1,4 +1,5 @@
 ﻿using FluentAssertions;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Mtgp.Shader;
 
 namespace Mtgp.Proxy.Shader.Tests
@@ -337,6 +338,101 @@ namespace Mtgp.Proxy.Shader.Tests
 			x.Should().Be(123);
 			y.Should().Be(456);
 			z.Should().Be(789);
+		}
+
+		[TestMethod]
+		public void ShouldGather()
+		{
+			var shader = new byte[1024];
+
+			new ShaderWriter(shader)
+				.EntryPoint([0])
+				.DecorateLocation(0, 0)
+				.DecorateBinding(1, 0)
+				.TypeInt(2, 4)
+				.TypeImage(4, 2, 2)
+				.TypeVector(7, 2, 2)
+				.TypePointer(9, ShaderStorageClass.Output, 2)
+				.TypePointer(3, ShaderStorageClass.Image, 4)
+				.Variable(0, ShaderStorageClass.Output, 9)
+				.Variable(1, ShaderStorageClass.Image, 3)
+				.Constant(8, 2, 0)
+				.CompositeConstruct(6, 7, [8, 8])
+				.Gather(5, 2, 1, 6)
+				.Store(0, 5)
+				.Return();
+
+			var outputMappings = new ShaderIoMappings(new() { [0] = 0 }, [], 4);
+
+			var target = buildExecutor(default, outputMappings, shader);
+
+			var imageAttachments = new ImageState[]
+			{
+				new(new(1, 1, 1), ImageFormat.T32_SInt)
+			};
+
+			new BitWriter(imageAttachments[0].Data.Span).Write(654);
+
+			var outputSpan = new byte[outputMappings.Size];
+
+			target.Execute(
+				imageAttachments,
+				[],
+				default,
+				outputSpan
+			);
+
+			new BitReader(outputMappings.GetLocation(outputSpan, 0)).Read(out int outputValue);
+
+			outputValue.Should().Be(654);
+		}
+
+		[TestMethod]
+		public void ShouldGatherWithCoords()
+		{
+			var shader = new byte[1024];
+
+			new ShaderWriter(shader)
+				.EntryPoint([0])
+				.DecorateLocation(0, 0)
+				.DecorateBinding(1, 0)
+				.TypeInt(2, 4)
+				.TypeImage(4, 2, 2)
+				.TypeVector(7, 2, 2)
+				.TypePointer(9, ShaderStorageClass.Output, 2)
+				.TypePointer(3, ShaderStorageClass.Image, 4)
+				.Variable(0, ShaderStorageClass.Output, 9)
+				.Variable(1, ShaderStorageClass.Image, 3)
+				.Constant(8, 2, 5)
+				.Constant(9, 2, 9)
+				.CompositeConstruct(6, 7, [8, 9])
+				.Gather(5, 2, 1, 6)
+				.Store(0, 5)
+				.Return();
+
+			var outputMappings = new ShaderIoMappings(new() { [0] = 0 }, [], 4);
+
+			var target = buildExecutor(default, outputMappings, shader);
+
+			var imageAttachments = new ImageState[]
+			{
+				new(new(10, 10, 1), ImageFormat.T32_SInt)
+			};
+
+			new BitWriter(imageAttachments[0].Data.Span[((9 * 10 + 5) * 4)..]).Write(753);
+
+			var outputSpan = new byte[outputMappings.Size];
+
+			target.Execute(
+				imageAttachments,
+				[],
+				default,
+				outputSpan
+			);
+
+			new BitReader(outputMappings.GetLocation(outputSpan, 0)).Read(out int outputValue);
+
+			outputValue.Should().Be(753);
 		}
 	}
 }
