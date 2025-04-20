@@ -98,16 +98,19 @@ public class ShaderJitter
 	private readonly static Lazy<MethodInfo> SpanCollection__GetItem = new(() => typeof(SpanCollection).GetMethod("get_Item", [typeof(int)])!);
 
 	private const int inputIndex = 0;
-	private const int inputBuiltinsIndex = 1;
-	private const int outputIndex = 2;
-	private const int outputBuiltinsIndex = 3;
-	private const int bufferAttachmentsIndex = 4;
-	private delegate void ExecuteDelegate(SpanCollection input, ref ShaderInterpreter.Builtins inputBuiltins, SpanCollection output, ref ShaderInterpreter.Builtins outputBuiltins, SpanCollection bufferAttachments);
+	private const int outputIndex = 1;
+	private const int bufferAttachmentsIndex = 2;
+	private delegate void ExecuteDelegate(Span<byte> input, Span<byte> output, SpanCollection bufferAttachments);
 
 	private readonly ExecuteDelegate execute;
+	public ShaderIoMappings InputMappings { get; private set; }
+	public ShaderIoMappings OutputMappings { get; private set; }
 
-	public ShaderJitter(Memory<byte> compiledShader)
+	public ShaderJitter(Memory<byte> compiledShader, ShaderIoMappings inputMappings, ShaderIoMappings outputMappings)
 	{
+		this.InputMappings = inputMappings;
+		this.OutputMappings = outputMappings;
+
 		var methodEmitter = Emit<ExecuteDelegate>.NewDynamicMethod();
 
 		var reader = new ShaderReader(compiledShader.Span);
@@ -166,70 +169,58 @@ public class ShaderJitter
 
 		foreach (var (id, variable) in variables)
 		{
+			var local = methodEmitter.DeclareLocal(typeof(Span<byte>), $"{variable.StorageClass.ToString().ToLower()}_variable_{id}");
+
 			switch (variable.StorageClass)
 			{
 				case ShaderStorageClass.Output:
 					{
-						var local = methodEmitter.DeclareLocal(typeof(Span<byte>), $"output_variable_{id}");
-
 						if (locations.TryGetValue(id, out uint locationValue))
 						{
-							methodEmitter.LoadArgumentAddress(outputIndex)
-											.LoadConstant((int)locationValue)
-											.Call(SpanCollection__GetItem.Value);
+							methodEmitter.LoadArgument(outputIndex)
+											.LoadConstant(outputMappings.Locations[(int)locationValue])
+											.LoadConstant(variable.Type.Size)
+											.Call(Slice.Value);
 						}
 						else if (builtins.TryGetValue(id, out Builtin builtinValue))
 						{
-							methodEmitter.LoadArgument(outputBuiltinsIndex)
-											.LoadFieldAddress(typeof(ShaderInterpreter.Builtins).GetField(builtinValue.ToString())!)
-											.Call(Unsafe__As_Int_Byte.Value)
-											.LoadConstant(4)
-											.Call(MemoryMarshal__CreateSpan.Value);
+							methodEmitter.LoadArgument(outputIndex)
+											.LoadConstant(outputMappings.Builtins[builtinValue])
+											.LoadConstant(variable.Type.Size)
+											.Call(Slice.Value);
 						}
 						else
 						{
 							throw new InvalidOperationException($"Variable {id} has no location or builtin decoration.");
 						}
-
-						methodEmitter.StoreLocal(local);
-
-						SetValue(id, variable.Type, emitter => emitter.LoadLocal(local));
 
 						break;
 					}
 				case ShaderStorageClass.Input:
 					{
-						var local = methodEmitter.DeclareLocal(typeof(Span<byte>), $"input_variable_{id}");
-
 						if (locations.TryGetValue(id, out uint locationValue))
 						{
-							methodEmitter.LoadArgumentAddress(inputIndex)
-											.LoadConstant((int)locationValue)
-											.Call(SpanCollection__GetItem.Value);
+							methodEmitter.LoadArgument(inputIndex)
+											.LoadConstant(inputMappings.Locations[(int)locationValue])
+											.LoadConstant(variable.Type.Size)
+											.Call(Slice.Value);
 						}
 						else if (builtins.TryGetValue(id, out Builtin builtinValue))
 						{
-							methodEmitter.LoadArgument(inputBuiltinsIndex)
-											.LoadFieldAddress(typeof(ShaderInterpreter.Builtins).GetField(builtinValue.ToString())!)
-											.Call(Unsafe__As_Int_Byte.Value)
-											.LoadConstant(4)
-											.Call(MemoryMarshal__CreateSpan.Value);
+							methodEmitter.LoadArgument(inputIndex)
+											.LoadConstant(inputMappings.Builtins[builtinValue])
+											.LoadConstant(variable.Type.Size)
+											.Call(Slice.Value);
 						}
 						else
 						{
 							throw new InvalidOperationException($"Variable {id} has no location or builtin decoration.");
 						}
 
-						methodEmitter.StoreLocal(local);
-
-						SetValue(id, variable.Type, emitter => emitter.LoadLocal(local));
-
 						break;
 					}
 				case ShaderStorageClass.Uniform:
 					{
-						var local = methodEmitter.DeclareLocal(typeof(Span<byte>), $"uniform_variable_{id}");
-
 						if (!bindings.TryGetValue(id, out var bindingValue))
 						{
 							throw new InvalidOperationException($"Variable {id} has no binding decoration.");
@@ -239,15 +230,15 @@ public class ShaderJitter
 										.LoadConstant((int)bindingValue)
 										.Call(SpanCollection__GetItem.Value);
 
-						methodEmitter.StoreLocal(local);
-
-						SetValue(id, variable.Type, emitter => emitter.LoadLocal(local));
-
 						break;
 					}
 				default:
 					throw new NotImplementedException($"Variables of storage class {variable.StorageClass} are not imolemented");
 			}
+
+			methodEmitter.StoreLocal(local);
+
+			SetValue(id, variable.Type, emitter => emitter.LoadLocal(local));
 		}
 
 		bool isReturned = false;
@@ -395,16 +386,23 @@ public class ShaderJitter
 		this.execute = methodEmitter.CreateDelegate();
 	}
 
-	public void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, ShaderInterpreter.Builtins inputBuiltins, SpanCollection input, ref ShaderInterpreter.Builtins outputBuiltins, SpanCollection output)
+	public void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, Span<byte> input, Span<byte> output)
 	{
 		var bufferCollection = new SpanCollection();
 
 		for (int index = 0; index < bufferAttachments.Length; index++)
 		{
-			bufferCollection[index] = bufferAttachments[index].Span;
+			bufferCollection.Add(bufferAttachments[index].Span);
 		}
 
-		this.execute(input, ref inputBuiltins, output, ref outputBuiltins, bufferCollection);
+		this.execute(input, output, bufferCollection);
+	}
+
+	public static ShaderJitter Create(byte[] shaderData)
+	{
+		var (inputMappings, outputMappings) = ShaderAnalyser.GetMappings(shaderData);
+
+		return new(shaderData, inputMappings, outputMappings);
 	}
 }
 

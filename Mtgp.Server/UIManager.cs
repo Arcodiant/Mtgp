@@ -141,14 +141,14 @@ public class UIManager(IShaderManager shaderManager, MtgpClient client)
 												new(0, 16, InputRate.PerInstance)
 											],
 											[
-												new(0, 0, ShaderType.Float(4), 0),
-												new(1, 0, ShaderType.Float(4), 4),
-												new(2, 0, ShaderType.Float(4), 8),
-												new(3, 0, ShaderType.Float(4), 12),
+												new(0, 0, ShaderType.Int(4), 0),
+												new(1, 0, ShaderType.Int(4), 4),
+												new(2, 0, ShaderType.Int(4), 8),
+												new(3, 0, ShaderType.Int(4), 12),
 											]),
 										[
-											new(0, ShaderType.Float(4), (1, 0, 0)),
-											new(1, ShaderType.Float(4), (0, 1, 0)),
+											new(0, ShaderType.Int(4), (1, 0, 0)),
+											new(1, ShaderType.Int(4), (0, 1, 0)),
 										],
 										new((area.Offset.X, area.Offset.Y, 0), (area.Extent.Width, area.Extent.Height, 1)),
 										[],

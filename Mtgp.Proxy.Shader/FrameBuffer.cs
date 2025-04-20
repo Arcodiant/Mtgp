@@ -1,3 +1,3 @@
 ﻿namespace Mtgp.Proxy.Shader;
 
-public record FrameBuffer(ImageState? Character, ImageState? Foreground, ImageState? Background);
+public record FrameBuffer(ImageState[] Attachments);

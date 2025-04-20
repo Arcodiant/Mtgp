@@ -1,11 +1,10 @@
 ﻿using Microsoft.Extensions.Logging;
 using Mtgp.Shader;
 using System.Diagnostics;
-using System.Text;
 
 namespace Mtgp.Proxy.Shader;
 
-public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderStages,
+public class RenderPipeline(Dictionary<ShaderStage, IShaderExecutor> shaderStages,
 							  (int Binding, int Stride, InputRate InputRate)[] vertexBufferBindings,
 							  (int Location, int Binding, ShaderType Type, int Offset)[] vertexAttributes,
 							  (int Location, ShaderType Type, Scale InterpolationScale)[] fragmentAttributes,
@@ -15,7 +14,7 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 							  PolygonMode polygonMode)
 {
 
-	public void Execute(ILogger logger, int instanceCount, int vertexCount, (byte[] Buffer, int Offset)[] vertexBuffers, ImageState[] imageAttachments, Memory<byte>[] bufferViewAttachments, FrameBuffer[] frameBuffers)
+	public void Execute(ILogger logger, int instanceCount, int vertexCount, (byte[] Buffer, int Offset)[] vertexBuffers, ImageState[] imageAttachments, Memory<byte>[] bufferViewAttachments, FrameBuffer frameBuffer)
 	{
 		int timerValue = Environment.TickCount;
 
@@ -24,36 +23,29 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 
 		const int vertexPerPrimitive = 2;
 
-		var inputBuiltins = new ShaderInterpreter.Builtins();
-		Span<ShaderInterpreter.Builtins> vertexOutputBuiltins = stackalloc ShaderInterpreter.Builtins[2];
-
-		var deltaBuffer = new List<RuneDelta>();
-
 		int primitiveCount = vertexCount / vertexPerPrimitive;
 
-		var fragments = new List<(int X, int Y, float XNormalised, float YNormalised, int InstanceIndex, byte[] VertexOutput)>();
+		var fragments = new List<(int X, int Y, float XNormalised, float YNormalised, int InstanceIndex, int PrimitiveIndex)>();
 
 		var vertexStopwatch = Stopwatch.StartNew();
+
+		Span<byte> inputSpan = stackalloc byte[vertex.InputMappings.Size];
+		var vertexOutput = new byte[vertex.OutputMappings.Size * vertexCount * instanceCount];
+
+		Span<byte> GetPrimitiveSpan(int instanceIndex, int primitiveIndex) =>
+			vertexOutput.AsSpan((instanceIndex * primitiveCount + primitiveIndex) * vertexPerPrimitive * vertex.OutputMappings.Size, vertexPerPrimitive * vertex.OutputMappings.Size);
 
 		for (int instanceIndex = 0; instanceIndex < instanceCount; instanceIndex++)
 		{
 			for (int primitiveIndex = 0; primitiveIndex < primitiveCount; primitiveIndex++)
 			{
-				var vertexOutput = new byte[vertex.OutputSize * vertexPerPrimitive];
+				var primitiveSpan = GetPrimitiveSpan(instanceIndex, primitiveIndex);
 
 				for (int vertexIndex = 0; vertexIndex < vertexPerPrimitive; vertexIndex++)
 				{
-					inputBuiltins = new()
+					foreach (var (location, offset) in vertex.InputMappings.Locations)
 					{
-						VertexIndex = vertexIndex,
-						Timer = timerValue,
-					};
-
-					var inputs = new SpanCollection();
-
-					foreach (var x in vertex.Inputs)
-					{
-						var attribute = vertexAttributes[x.Location];
+						var attribute = vertexAttributes[location];
 
 						var buffer = vertexBuffers[attribute.Binding];
 
@@ -66,27 +58,40 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 							_ => throw new NotSupportedException(),
 						};
 
-						int offset = buffer.Offset + bindingOffset + attribute.Offset;
 						int size = attribute.Type.Size;
 
-						inputs[x.Location] = buffer.Buffer.AsSpan(offset, size);
+						buffer.Buffer.AsSpan(bindingOffset + attribute.Offset, size).CopyTo(inputSpan[offset..]);
 					};
 
-					var outputSpan = vertexOutput.AsSpan(vertexIndex * vertex.OutputSize, vertex.OutputSize);
-					var outputs = new SpanCollection();
-
-					foreach(var output in vertex.Outputs)
+					foreach (var (builtin, offset) in vertex.InputMappings.Builtins)
 					{
-						outputs[output.Location] = outputSpan[output.Offset..][..output.Type.Size];
-					}
+						var builtinValue = vertex.InputMappings.GetBuiltin(inputSpan, builtin);
 
-					vertex.Execute(imageAttachments, bufferViewAttachments, inputBuiltins, inputs, ref vertexOutputBuiltins[vertexIndex], outputs);
+						switch (builtin)
+						{
+							case Builtin.VertexIndex:
+								new BitWriter(builtinValue).Write(vertexIndex);
+								break;
+							case Builtin.InstanceIndex:
+								new BitWriter(builtinValue).Write(instanceIndex);
+								break;
+							case Builtin.Timer:
+								new BitWriter(builtinValue).Write(timerValue);
+								break;
+							default:
+								throw new NotSupportedException($"Builtin {builtin} is not supported in vertex shader input.");
+						}
+					};
+
+					var outputSpan = primitiveSpan[(vertexIndex * vertex.OutputMappings.Size)..][..vertex.OutputMappings.Size];
+
+					vertex.Execute(imageAttachments, bufferViewAttachments, inputSpan, outputSpan);
 				}
 
-				int fromX = vertexOutputBuiltins[0].PositionX;
-				int fromY = vertexOutputBuiltins[0].PositionY;
-				int toX = vertexOutputBuiltins[1].PositionX;
-				int toY = vertexOutputBuiltins[1].PositionY;
+				int fromX = BitConverter.ToInt32(vertex.OutputMappings.GetBuiltin(primitiveSpan, Builtin.PositionX, 0));
+				int fromY = BitConverter.ToInt32(vertex.OutputMappings.GetBuiltin(primitiveSpan, Builtin.PositionY, 0));
+				int toX = BitConverter.ToInt32(vertex.OutputMappings.GetBuiltin(primitiveSpan, Builtin.PositionX, 1));
+				int toY = BitConverter.ToInt32(vertex.OutputMappings.GetBuiltin(primitiveSpan, Builtin.PositionY, 1));
 
 				int deltaX = toX - fromX;
 				int deltaY = toY - fromY;
@@ -109,7 +114,7 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 
 						float xNormalised = deltaX == 0f ? 0f : (float)(x - fromX) / deltaX;
 
-						fragments.Add((x, y, xNormalised, yNormalised, instanceIndex, vertexOutput));
+						fragments.Add((x, y, xNormalised, yNormalised, instanceIndex, primitiveIndex));
 					}
 				}
 			}
@@ -123,80 +128,76 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderInterpreter> shaderSta
 
 		Parallel.ForEach(fragments, frag =>
 		{
-			var (x, y, xNormalised, yNormalised, instanceIndex, vertexOutput) = frag;
+			var (x, y, xNormalised, yNormalised, instanceIndex, primitiveIndex) = frag;
 
-			var outputBuiltins = new ShaderInterpreter.Builtins();
+			var primitiveOutput = GetPrimitiveSpan(instanceIndex, primitiveIndex);
 
-			var inputBuiltins = new ShaderInterpreter.Builtins
+			Span<byte> fragmentInput = stackalloc byte[fragment.InputMappings.Size];
+
+			foreach (var (location, offset) in fragment.InputMappings.Locations)
 			{
-				VertexIndex = 0,
-				InstanceIndex = instanceIndex,
-				PositionX = x,
-				PositionY = y,
-				Timer = timerValue,
-			};
+				var attribute = fragmentAttributes[location];
+				var vertexOutputOffset = vertex.OutputMappings.Locations[location];
 
-			var fragmentInput = new byte[fragment.InputSize];
+				int dataSize = attribute.Type.Size;
 
-			var inputs = new SpanCollection();
-
-			foreach (var input in fragment.Inputs)
-			{
-				var attribute = fragmentAttributes[input.Location];
-				var vertexOutputAttribute = vertex.Outputs[input.Location];
-
-				int dataSize = vertexOutputAttribute.Type.ElementType!.Size;
-
-				var fromValue = vertexOutput[vertexOutputAttribute.Offset..][..dataSize];
-				var toValue = vertexOutput[(vertex.OutputSize + vertexOutputAttribute.Offset)..][..dataSize];
+				var fromValue = primitiveOutput[vertexOutputOffset..][..dataSize];
+				var toValue = primitiveOutput[(vertex.OutputMappings.Size + vertexOutputOffset)..][..dataSize];
 
 				var scale = MathsUtil.Normalise(attribute.InterpolationScale);
 				float scaleLength = MathsUtil.GetLength(attribute.InterpolationScale);
 
-				var inputSpan = fragmentInput.AsSpan(input.Offset, dataSize);
+				var inputSpan = fragmentInput[offset..][..dataSize];
 
 				MathsUtil.Lerp(fromValue, toValue, inputSpan, MathsUtil.DotProduct((xNormalised, yNormalised, 0), scale) / scaleLength, attribute.Type);
+			};
 
-				inputs[input.Location] = inputSpan;
+			foreach (var (builtin, offset) in fragment.InputMappings.Builtins)
+			{
+				var builtinValue = fragment.InputMappings.GetBuiltin(fragmentInput, builtin);
+
+				switch (builtin)
+				{
+					case Builtin.InstanceIndex:
+						new BitWriter(builtinValue).Write(instanceIndex);
+						break;
+					case Builtin.PositionX:
+						new BitWriter(builtinValue).Write(x);
+						break;
+					case Builtin.PositionY:
+						new BitWriter(builtinValue).Write(y);
+						break;
+					case Builtin.Timer:
+						new BitWriter(builtinValue).Write(timerValue);
+						break;
+					default:
+						throw new NotSupportedException($"Builtin {builtin} is not supported in fragment shader input.");
+				}
 			};
 
 			int outputSize = ShaderType.Textel.Size;
 
 			var output = new byte[outputSize];
 
-			var outputs = new SpanCollection();
-			outputs[0] = output.AsSpan(0, 4);
-			outputs[1] = output.AsSpan(4, 12);
-			outputs[2] = output.AsSpan(16, 12);
-			outputs[3] = output.AsSpan(28, 4);
-
-			fragment.Execute(imageAttachments, bufferViewAttachments, inputBuiltins, inputs, ref outputBuiltins, outputs);
+			fragment.Execute(imageAttachments, bufferViewAttachments, fragmentInput, output);
 
 			int pixelX = x + viewport.Offset.X;
 			int pixelY = y + viewport.Offset.Y;
 
-			new BitReader(output)
-				.Read(out Rune character)
-				.Read(out float foregroundRed)
-				.Read(out float foregroundGreen)
-				.Read(out float foregroundBlue)
-				.Read(out float backgroundRed)
-				.Read(out float backgroundGreen)
-				.Read(out float backgroundBlue)
-				.Read(out float alpha);
+			//alpha = enableAlpha ? alpha : 1.0f;
 
-			alpha = enableAlpha ? alpha : 1.0f;
+			for (int frameAttachmentIndex = 0; frameAttachmentIndex < frameBuffer.Attachments.Length; frameAttachmentIndex++)
+			{
+				var attachment = frameBuffer.Attachments[frameAttachmentIndex];
+				int index = pixelX + pixelY * attachment.Size.Width;
 
-			TextelUtil.Set(frameBuffers[0].Character!.Data.Span,
-								frameBuffers[0].Foreground!.Data.Span,
-								frameBuffers[0].Background!.Data.Span,
-								(character, (foregroundRed, foregroundGreen, foregroundBlue), (backgroundRed, backgroundGreen, backgroundBlue)),
-								frameBuffers[0].Character!.Format,
-								frameBuffers[0].Foreground!.Format,
-								frameBuffers[0].Background!.Format,
-								alpha,
-								new(pixelX, pixelY, 0),
-								new(frameBuffers[0].Character!.Size.Width, frameBuffers[0].Character!.Size.Height, frameBuffers[0].Character!.Size.Depth));
+				var format = attachment.Format;
+				int size = format.GetSize();
+
+				var target = attachment.Data.Span[(index * size)..][..size];
+
+				fragment.OutputMappings.GetLocation(output, frameAttachmentIndex)[..size].CopyTo(target);
+			}
 		});
 
 		fragmentStopwatch.Stop();

@@ -167,13 +167,17 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 	{
 		var actionList = this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions;
 
-		actionList.Add(new PresentAction(GetFrameBuffer(), telnetClient));
+		actionList.Add(new PresentAction(this.resourceStore.Get<ImageState>(0), this.resourceStore.Get<ImageState>(1), this.resourceStore.Get<ImageState>(2), telnetClient));
 
 		return new MtgpResponse(0, "ok");
 	}
 
 	private FrameBuffer GetFrameBuffer(int character = 0, int foreground = 1, int background = 2)
-		=> new(this.resourceStore.Get<ImageState>(character), this.resourceStore.Get<ImageState>(foreground), this.resourceStore.Get<ImageState>(background));
+		=> new([
+				this.resourceStore.Get<ImageState>(character),
+				this.resourceStore.Get<ImageState>(foreground),
+				this.resourceStore.Get<ImageState>(background)
+			]);
 
 	private MtgpResponse AddDrawAction(AddDrawActionRequest request)
 	{
@@ -270,7 +274,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 								 Rect3D[]? scissors,
 								 bool enableAlpha,
 								 PolygonMode polygonMode)
-			=> new(shaderStages.ToDictionary(x => x.Key, x => this.resourceStore.Get<ShaderInterpreter>(x.Value)), vertexBufferBindings, vertexAttributes, fragmentAttributes, viewport, scissors, enableAlpha, polygonMode);
+			=> new(shaderStages.ToDictionary(x => x.Key, x => this.resourceStore.Get<IShaderExecutor>(x.Value)), vertexBufferBindings, vertexAttributes, fragmentAttributes, viewport, scissors, enableAlpha, polygonMode);
 
 
 		var remainingResources = request.Resources.Select((x, y) => (Info: x, Index: y)).ToList();
@@ -282,6 +286,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 		while (remainingResources.Count != 0)
 		{
 			List<int> createdResources = [];
+			List<int> failedResources = [];
 
 			foreach (var resource in remainingResources)
 			{
@@ -331,13 +336,13 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 
 							result = resource.Info switch
 							{
-								CreateShaderInfo shaderInfo => Create(new ShaderInterpreter(shaderInfo.ShaderData)),
+								CreateShaderInfo shaderInfo => Create((IShaderExecutor)ShaderInterpreter.Create(shaderInfo.ShaderData)),
 								CreatePipeInfo pipeInfo => Create(new PipeInfo(GetId(pipeInfo.ActionList))),
 								CreateActionListInfo actionListInfo => Create(new ActionListInfo([])),
 								CreateBufferInfo bufferInfo => Create(new BufferInfo(new byte[bufferInfo.Size])),
 								CreateBufferViewInfo bufferViewInfo => Create(new BufferViewInfo(this.resourceStore.Get<BufferInfo>(GetId(bufferViewInfo.Buffer)).Data.AsMemory()[bufferViewInfo.Offset..(bufferViewInfo.Offset + bufferViewInfo.Size)])),
 								CreateImageInfo imageInfo => Create(new ImageState(imageInfo.Size, imageInfo.Format)),
-								CreateStringSplitPipelineInfo stringSplitPipelineInfo => Create<IFixedFunctionPipeline>(new StringSplitPipeline(this.resourceStore.Get<ImageState>(GetId(stringSplitPipelineInfo.LineImage)).Data,
+								CreateStringSplitPipelineInfo stringSplitPipelineInfo => Create((IFixedFunctionPipeline)new StringSplitPipeline(this.resourceStore.Get<ImageState>(GetId(stringSplitPipelineInfo.LineImage)).Data,
 																																				  this.resourceStore.Get<BufferViewInfo>(GetId(stringSplitPipelineInfo.InstanceBufferView)).View,
 																																				  this.resourceStore.Get<BufferViewInfo>(GetId(stringSplitPipelineInfo.IndirectCommandBufferView)).View,
 																																				  stringSplitPipelineInfo.Height,
@@ -369,8 +374,12 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 				{
 					logger.LogError(ex, "Error creating resource: {@CreateInfo}", resource);
 					result = ResourceCreateResult.InternalError;
+
+					failedResources.Add(resource.Index);
 				}
 			}
+
+			remainingResources = remainingResources.Where(x => !failedResources.Contains(x.Index)).ToList();
 
 			if (createdResources.Count == 0)
 			{

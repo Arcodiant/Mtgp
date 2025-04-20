@@ -26,167 +26,27 @@ public readonly struct Field
 	public static explicit operator float(Field value) => value.Float;
 }
 
+public record ShaderAttribute(ShaderType Type, int Location, int Offset);
+
 public class ShaderInterpreter
-	: IShaderExecutor
+		: IShaderExecutor
 {
 	private readonly Memory<byte> compiledShader;
-	private readonly Dictionary<int, int> inputMappings;
-	private readonly Dictionary<int, int> outputMappings;
+	public ShaderIoMappings InputMappings { get; }
+	public ShaderIoMappings OutputMappings { get; }
 
-	public ShaderInterpreter(Memory<byte> compiledShader)
+	public static ShaderInterpreter Create(Memory<byte> compiledShader)
 	{
-		Console.WriteLine(ShaderDisassembler.Disassemble(compiledShader.ToArray()));
+		var (inputMappings, outputMappings) = ShaderAnalyser.GetMappings(compiledShader);
 
-		this.compiledShader = compiledShader;
-
-		var (inputs, outputs) = GetAttributes(compiledShader);
-
-		this.inputMappings = inputs.Select(x => (x.Location, x.Type.ElementType!.Size)).RunningOffset().ToDictionary();
-		this.outputMappings = outputs.Select(x => (x.Location, x.Type.ElementType!.Size)).RunningOffset().ToDictionary();
-
-        this.InputSize = inputs.Sum(x => x.Type.ElementType!.Size);
-		this.OutputSize = outputs.Sum(x => x.Type.ElementType!.Size);
-
-		this.Inputs = inputs.Select(x => new ShaderAttribute(x.Type, x.Location, this.inputMappings[x.Location])).ToArray();
-		this.Outputs = outputs.Select(x => new ShaderAttribute(x.Type, x.Location, this.outputMappings[x.Location])).ToArray();
+		return new (compiledShader, inputMappings, outputMappings);
 	}
 
-	public int InputSize { get; private set; }
-	public int OutputSize { get; private set; }
-
-	public ShaderAttribute[] Inputs { get; private set; }
-	public ShaderAttribute[] Outputs { get; private set; }
-
-	public record ShaderAttribute(ShaderType Type, int Location, int Offset);
-
-	private static (ShaderAttribute[] Inputs, ShaderAttribute[] Outputs) GetAttributes(Memory<byte> compiledShader)
+	public ShaderInterpreter(Memory<byte> compiledShader, ShaderIoMappings inputMappings, ShaderIoMappings outputMappings)
 	{
-		var shaderReader = new ShaderReader(compiledShader.Span);
-
-		while (!shaderReader.EndOfStream && shaderReader.Next != ShaderOp.EntryPoint)
-		{
-			shaderReader = shaderReader.Skip();
-		}
-
-		if (shaderReader.EndOfStream)
-		{
-			throw new InvalidOperationException("No entry point found");
-		}
-
-		shaderReader.EntryPoint(out uint variableCount);
-
-		var inputs = new List<ShaderAttribute>();
-		var outputs = new List<ShaderAttribute>();
-		Span<int> variables = stackalloc int[(int)variableCount];
-
-		shaderReader.EntryPoint(variables, out _);
-
-		shaderReader = shaderReader.EntryPoint(out _);
-
-		var locations = new Dictionary<int, uint>();
-		var storageClasses = new Dictionary<int, ShaderStorageClass>();
-		var variableTypes = new Dictionary<int, int>();
-
-		var types = new Dictionary<int, ShaderType>();
-
-		while (!shaderReader.EndOfStream && shaderReader.Next != ShaderOp.None)
-		{
-			var op = shaderReader.Next;
-
-			switch (op)
-			{
-				case ShaderOp.Decorate:
-					shaderReader.Decorate(out int target, out var decoration);
-
-					if (variables.Contains(target) && decoration == ShaderDecoration.Location)
-					{
-						shaderReader.DecorateLocation(out _, out uint location);
-
-						locations[target] = location;
-					}
-					break;
-				case ShaderOp.TypeInt:
-					{
-						shaderReader.TypeInt(out int result, out int width);
-						types[result] = ShaderType.Int(width);
-					}
-					break;
-				case ShaderOp.TypeFloat:
-					{
-						shaderReader.TypeFloat(out int result, out int width);
-						types[result] = ShaderType.Float(width);
-					}
-					break;
-				case ShaderOp.TypeBool:
-					{
-						shaderReader.TypeBool(out int result);
-						types[result] = ShaderType.Bool;
-					}
-					break;
-				case ShaderOp.TypeImage:
-					{
-						shaderReader.TypeImage(out int result, out int imageType, out int dim);
-						var type = types[imageType];
-						types[result] = ShaderType.ImageOf(type, dim);
-					}
-					break;
-				case ShaderOp.TypeVector:
-					{
-						shaderReader.TypeVector(out int result, out int componentType, out int componentCount);
-						var type = types[componentType];
-						types[result] = ShaderType.VectorOf(type, componentCount);
-					}
-					break;
-				case ShaderOp.TypeRuntimeArray:
-					{
-						shaderReader.TypeRuntimeArray(out int result, out int elementType);
-						var type = types[elementType];
-						types[result] = ShaderType.RuntimeArrayOf(type);
-					}
-					break;
-				case ShaderOp.TypePointer:
-					{
-						shaderReader.TypePointer(out int result, out var storageClass, out int typeId);
-						var type = types[typeId];
-						types[result] = ShaderType.PointerOf(type, storageClass);
-					}
-					break;
-				case ShaderOp.Variable:
-					{
-						shaderReader.Variable(out int result, out var storageClass, out var type);
-
-						if (variables.Contains(result))
-						{
-							variableTypes[result] = type;
-							storageClasses[result] = storageClass;
-						}
-					}
-					break;
-			}
-
-			shaderReader = shaderReader.Skip();
-		}
-
-		foreach (var variable in variables)
-		{
-			if (locations.TryGetValue(variable, out var location)
-				&& variableTypes.TryGetValue(variable, out var type)
-				&& storageClasses.TryGetValue(variable, out var storageClass))
-			{
-				var attribute = new ShaderAttribute(types[type], (int)location, 0);
-
-				if (storageClass == ShaderStorageClass.Input)
-				{
-					inputs.Add(attribute);
-				}
-				else if (storageClass == ShaderStorageClass.Output)
-				{
-					outputs.Add(attribute);
-				}
-			}
-		}
-
-		return (inputs.ToArray(), outputs.ToArray());
+		this.compiledShader = compiledShader;
+		this.InputMappings = inputMappings;
+		this.OutputMappings = outputMappings;
 	}
 
 	private class VariableInfo
@@ -231,11 +91,11 @@ public class ShaderInterpreter
 		public static UniformPointer FromUInt32(uint value) => new(value);
 	}
 
-	public void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, ShaderInterpreter.Builtins inputBuiltins, SpanCollection input, ref ShaderInterpreter.Builtins outputBuiltins, SpanCollection output)
+	public void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, Span<byte> input, Span<byte> output)
 	{
 		bool isRunning = true;
 
-		var shaderReader = new ShaderReader(this.compiledShader.Span);
+		var shaderReader = new ShaderReader(compiledShader.Span);
 
 		var variableDecorations = new Dictionary<int, VariableInfo>();
 
@@ -252,24 +112,6 @@ public class ShaderInterpreter
 
 		var results = new Dictionary<int, int>();
 		var types = new Dictionary<int, ShaderType>();
-
-		int builtinSize = 0;
-
-		unsafe
-		{
-			builtinSize = sizeof(Builtins);
-		}
-
-		Span<byte> inputBuffer = stackalloc byte[this.InputSize + builtinSize];
-		Span<byte> outputBuffer = stackalloc byte[this.OutputSize + builtinSize];
-
-		new BitWriter(inputBuffer).Write([inputBuiltins]);
-		for (int index = 0; index < this.inputMappings.Count; index++)
-		{
-			var inputSlice = input[index];
-
-			inputSlice.CopyTo(inputBuffer[(builtinSize + this.inputMappings.ElementAt(index).Value)..]);
-		}
 
 		int workingSetSize = 4096;
 		Span<byte> workingSet = stackalloc byte[workingSetSize];
@@ -405,11 +247,11 @@ public class ShaderInterpreter
 							case ShaderStorageClass.Input:
 								if (variableDecorations[result].Location is not null)
 								{
-									pointer = builtinSize + this.inputMappings[(int)variableDecorations[result].Location!.Value];
+									pointer = this.InputMappings.Locations[(int)variableDecorations[result].Location!.Value];
 								}
 								else if (variableDecorations[result].Builtin is not null)
 								{
-									pointer = (int)Marshal.OffsetOf<Builtins>(variableDecorations[result].Builtin.ToString()!);
+									pointer = this.InputMappings.Builtins[variableDecorations[result].Builtin!.Value];
 								}
 								else
 								{
@@ -419,11 +261,11 @@ public class ShaderInterpreter
 							case ShaderStorageClass.Output:
 								if (variableDecorations[result].Location is not null)
 								{
-									pointer = builtinSize + this.outputMappings[(int)variableDecorations[result].Location!.Value];
+									pointer = this.OutputMappings.Locations[(int)variableDecorations[result].Location!.Value];
 								}
 								else if (variableDecorations[result].Builtin is not null)
 								{
-									pointer = (int)Marshal.OffsetOf<Builtins>(variableDecorations[result].Builtin.ToString()!);
+									pointer = this.OutputMappings.Builtins[variableDecorations[result].Builtin!.Value];
 								}
 								else
 								{
@@ -499,7 +341,7 @@ public class ShaderInterpreter
 
 								var targetSpan = GetTarget(result, resultType, workingSet);
 
-								var inputSpan = inputBuffer[pointerValue..][..type.Size];
+								var inputSpan = input[pointerValue..][..type.Size];
 
 								inputSpan.CopyTo(targetSpan);
 								break;
@@ -529,7 +371,7 @@ public class ShaderInterpreter
 						switch (pointerType.StorageClass)
 						{
 							case ShaderStorageClass.Output:
-								var outputSpan = outputBuffer[pointerValue..][..valueType.Size];
+								var outputSpan = output[pointerValue..][..valueType.Size];
 
 								valueToStore.CopyTo(outputSpan);
 								break;
@@ -823,17 +665,6 @@ public class ShaderInterpreter
 				default:
 					throw new InvalidOperationException($"Unknown opcode {op}");
 			}
-		}
-
-		new BitReader(outputBuffer)
-			.ReadUnmanaged(out outputBuiltins);
-
-		var outputBase = outputBuffer[builtinSize..];
-
-		foreach(var outputInfo in this.Outputs)
-		{
-			outputBase[..outputInfo.Type.Size].CopyTo(output[outputInfo.Location]);
-			outputBase = outputBase[outputInfo.Type.Size..];
 		}
 	}
 

@@ -6,5 +6,5 @@ public class DrawAction(RenderPipeline pipeline, ImageState[] imageAttachments, 
 	: IAction
 {
 	public void Execute(ILogger logger, ActionExecutionState state)
-		=> pipeline.Execute(logger, instanceCount, vertexCount, [.. state.VertexBuffers], imageAttachments, bufferViewAttachments, [frameBuffer]);
+		=> pipeline.Execute(logger, instanceCount, vertexCount, [.. state.VertexBuffers], imageAttachments, bufferViewAttachments, frameBuffer);
 }

@@ -3,7 +3,7 @@ using Mtgp.Shader;
 
 namespace Mtgp.Proxy.Shader.Tests
 {
-	public class ShaderTestsBase(Func<Memory<byte>, IShaderExecutor> buildExecutor)
+	public class ShaderTestsBase(Func<ShaderIoMappings, ShaderIoMappings, Memory<byte>, IShaderExecutor> buildExecutor)
 	{
 		[TestMethod]
 		public void ShouldSetPositionX()
@@ -20,13 +20,17 @@ namespace Mtgp.Proxy.Shader.Tests
 				.Store(3, 4)
 				.Return();
 
-			var target = buildExecutor(shader);
+			var outputMappings = new ShaderIoMappings([], new() { [Builtin.PositionX] = 0 }, 4);
 
-			var outputBuiltins = new ShaderInterpreter.Builtins();
+			var target = buildExecutor(default, outputMappings, shader);
 
-			target.Execute([], [], new(), new(), ref outputBuiltins, new());
+			Span<byte> outputData = stackalloc byte[4];
 
-			outputBuiltins.PositionX.Should().Be(123);
+			target.Execute([], [], default, outputData);
+
+			new BitReader(outputMappings.GetBuiltin(outputData, Builtin.PositionX)).Read(out int outputValue);
+
+			outputValue.Should().Be(123);
 		}
 
 		[TestMethod]
@@ -44,13 +48,17 @@ namespace Mtgp.Proxy.Shader.Tests
 				.Store(3, 4)
 				.Return();
 
-			var target = buildExecutor(shader);
+			var outputMappings = new ShaderIoMappings([], new() { [Builtin.PositionY] = 0 }, 4);
 
-			var outputBuiltins = new ShaderInterpreter.Builtins();
+			var target = buildExecutor(default, outputMappings, shader);
 
-            target.Execute([], [], new(), new(), ref outputBuiltins, new());
+			Span<byte> outputData = stackalloc byte[4];
 
-            outputBuiltins.PositionY.Should().Be(456);
+			target.Execute([], [], default, outputData);
+
+			new BitReader(outputMappings.GetBuiltin(outputData, Builtin.PositionY)).Read(out int outputValue);
+
+			outputValue.Should().Be(456);
 		}
 
 		[TestMethod]
@@ -68,16 +76,16 @@ namespace Mtgp.Proxy.Shader.Tests
 				.Store(3, 4)
 				.Return();
 
-			var target = buildExecutor(shader);
+			var outputMappings = new ShaderIoMappings(new() { [0] = 0 }, [], 4);
 
-			var outputBuiltins = new ShaderInterpreter.Builtins();
+			var target = buildExecutor(default, outputMappings, shader);
 
-			var output = new SpanCollection();
-			output[0] = new byte[4];
+			Span<byte> outputData = stackalloc byte[4];
 
-			target.Execute([], [], new(), new(), ref outputBuiltins, output);
+			target.Execute([], [], default, outputData);
 
-			new BitReader(output[0]).Read(out int outputValue);
+			new BitReader(outputMappings.GetLocation(outputData, 0)).Read(out int outputValue);
+
 			outputValue.Should().Be(456);
 		}
 
@@ -96,16 +104,16 @@ namespace Mtgp.Proxy.Shader.Tests
 				.Store(3, 4)
 				.Return();
 
-			var target = buildExecutor(shader);
+			var outputMappings = new ShaderIoMappings(new() { [1] = 0 }, [], 4);
 
-			var outputBuiltins = new ShaderInterpreter.Builtins();
+			var target = buildExecutor(default, outputMappings, shader);
 
-			var output = new SpanCollection();
-			output[1] = new byte[4];
+			Span<byte> outputData = stackalloc byte[4];
 
-			target.Execute([], [], new(), new(), ref outputBuiltins, output);
+			target.Execute([], [], default, outputData);
 
-			new BitReader(output[1]).Read(out int outputValue);
+			new BitReader(outputMappings.GetLocation(outputData, 1)).Read(out int outputValue);
+
 			outputValue.Should().Be(159);
 		}
 
@@ -123,24 +131,63 @@ namespace Mtgp.Proxy.Shader.Tests
 				.TypePointer(3, ShaderStorageClass.Output, 1)
 				.Variable(4, ShaderStorageClass.Input, 2)
 				.Variable(5, ShaderStorageClass.Output, 3)
+			.Load(8, 1, 4)
+			.Store(5, 8)
+				.Return();
+
+			var inputMappings = new ShaderIoMappings(new() { [0] = 0 }, [], 4);
+
+			var outputMappings = new ShaderIoMappings(new() { [0] = 0 }, [], 4);
+
+			var target = buildExecutor(inputMappings, outputMappings, shader);
+
+			Span<byte> inputData = stackalloc byte[4];
+
+			new BitWriter(inputMappings.GetLocation(inputData, 0)).Write(789);
+
+			Span<byte> outputData = stackalloc byte[4];
+
+			target.Execute([], [], inputData, outputData);
+
+			new BitReader(outputMappings.GetLocation(outputData, 0)).Read(out int outputValue);
+
+			outputValue.Should().Be(789);
+		}
+
+		[TestMethod]
+		public void ShouldCopyFromInputToOutputWithOffsets()
+		{
+			var shader = new byte[1024];
+
+			new ShaderWriter(shader)
+				.EntryPoint([4, 5])
+				.DecorateLocation(4, 1)
+				.DecorateLocation(5, 2)
+				.TypeInt(1, 4)
+				.TypePointer(2, ShaderStorageClass.Input, 1)
+				.TypePointer(3, ShaderStorageClass.Output, 1)
+				.Variable(4, ShaderStorageClass.Input, 2)
+				.Variable(5, ShaderStorageClass.Output, 3)
 				.Load(8, 1, 4)
 				.Store(5, 8)
 				.Return();
 
-			var target = buildExecutor(shader);
+			var inputMappings = new ShaderIoMappings(new() { [1] = 8 }, [], 16);
 
-			var outputBuiltins = new ShaderInterpreter.Builtins();
+			var outputMappings = new ShaderIoMappings(new() { [2] = 12 }, [], 16);
 
-			var input = new SpanCollection();
-            input[0] = new byte[4];
-			var output = new SpanCollection();
-            output[0] = new byte[4];
+			var target = buildExecutor(inputMappings, outputMappings, shader);
 
-			new BitWriter(input[0]).Write(789);
+			Span<byte> inputData = stackalloc byte[16];
 
-			target.Execute([], [], new(), input, ref outputBuiltins, output);
+			new BitWriter(inputMappings.GetLocation(inputData, 1)).Write(789);
 
-			new BitReader(output[0]).Read(out int outputValue);
+			Span<byte> outputData = stackalloc byte[16];
+
+			target.Execute([], [], inputData, outputData);
+
+			new BitReader(outputMappings.GetLocation(outputData, 2)).Read(out int outputValue);
+
 			outputValue.Should().Be(789);
 		}
 
@@ -166,24 +213,25 @@ namespace Mtgp.Proxy.Shader.Tests
 				.Store(6, 9)
 				.Return();
 
-			var target = buildExecutor(shader);
+			var inputMappings = new ShaderIoMappings(new() { [0] = 0, [1] = 4 }, [], 8);
 
-			var outputBuiltins = new ShaderInterpreter.Builtins();
+			var outputMappings = new ShaderIoMappings(new() { [0] = 0 }, [], 4);
 
-			var input = new SpanCollection();
-            input[0] = new byte[4];
-            input[1] = new byte[4];
-			var output = new SpanCollection();
-            output[0] = new byte[4];
+			var target = buildExecutor(inputMappings, outputMappings, shader);
 
-			new BitWriter(input[0]).Write(5);
-            new BitWriter(input[1]).Write(10);
+			Span<byte> inputData = stackalloc byte[8];
 
-			target.Execute([], [], new(), input, ref outputBuiltins, output);
+			new BitWriter(inputMappings.GetLocation(inputData, 0)).Write(5);
+			new BitWriter(inputMappings.GetLocation(inputData, 1)).Write(10);
 
-			new BitReader(output[0]).Read(out int outputValue);
+			Span<byte> outputData = stackalloc byte[4];
+
+			target.Execute([], [], inputData, outputData);
+
+			new BitReader(outputMappings.GetLocation(outputData, 0)).Read(out int outputValue);
+
 			outputValue.Should().Be(15);
-        }
+		}
 
         [TestMethod]
         public void ShouldAddFloat32()
@@ -207,24 +255,25 @@ namespace Mtgp.Proxy.Shader.Tests
                 .Store(6, 9)
                 .Return();
 
-            var target = buildExecutor(shader);
+			var inputMappings = new ShaderIoMappings(new() { [0] = 0, [1] = 4 }, [], 8);
 
-            var outputBuiltins = new ShaderInterpreter.Builtins();
+			var outputMappings = new ShaderIoMappings(new() { [0] = 0 }, [], 4);
 
-            var input = new SpanCollection();
-            input[0] = new byte[4];
-            input[1] = new byte[4];
-            var output = new SpanCollection();
-            output[0] = new byte[4];
+			var target = buildExecutor(inputMappings, outputMappings, shader);
 
-            new BitWriter(input[0]).Write(5f);
-            new BitWriter(input[1]).Write(10f);
+			Span<byte> inputData = stackalloc byte[8];
 
-            target.Execute([], [], new(), input, ref outputBuiltins, output);
+			new BitWriter(inputMappings.GetLocation(inputData, 0)).Write(5f);
+			new BitWriter(inputMappings.GetLocation(inputData, 1)).Write(10f);
 
-            new BitReader(output[0]).Read(out float outputValue);
-            outputValue.Should().Be(15f);
-        }
+			Span<byte> outputData = stackalloc byte[4];
+
+			target.Execute([], [], inputData, outputData);
+
+			new BitReader(outputMappings.GetLocation(outputData, 0)).Read(out float outputValue);
+
+			outputValue.Should().Be(15f);
+		}
 
 		[TestMethod]
 		public void ShouldStoreToUniformBinding()
@@ -245,13 +294,11 @@ namespace Mtgp.Proxy.Shader.Tests
                 .Store(7, 5)
 				.Return();
 
-			var target = buildExecutor(shader);
+			var target = buildExecutor(default, default, shader);
 
-            var outputBuiltins = new ShaderInterpreter.Builtins();
+			var uniformBinding = new byte[4];
 
-            var uniformBinding = new byte[4];
-
-            target.Execute([], [uniformBinding], new(), new(), ref outputBuiltins, new());
+            target.Execute([], [uniformBinding], default, default);
 
             new BitReader(uniformBinding).Read(out int actual);
             actual.Should().Be(123);
@@ -280,13 +327,11 @@ namespace Mtgp.Proxy.Shader.Tests
 				.Store(14, 12)
 				.Return();
 
-			var target = buildExecutor(shader);
-
-			var outputBuiltins = new ShaderInterpreter.Builtins();
+			var target = buildExecutor(default, default, shader);
 
 			var uniformBinding = new byte[12];
 
-			target.Execute([], [uniformBinding], new(), new(), ref outputBuiltins, new());
+			target.Execute([], [uniformBinding], default, default);
 
 			new BitReader(uniformBinding).Read(out int x).Read(out int y).Read(out int z);
 			x.Should().Be(123);
