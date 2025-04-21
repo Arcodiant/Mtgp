@@ -1,17 +1,14 @@
-﻿using Arch.Core;
-using Arch.Relationships;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Mtgp.Server;
 using Mtgp.SpaceGame;
-using Mtgp.SpaceGame.Components;
 using Mtgp.SpaceGame.Services;
 using Serilog;
 
 Log.Logger = new LoggerConfiguration()
 	.Enrich.FromLogContext()
-	.WriteTo.Console()
-	.WriteTo.Seq("http://localhost:5341")
+	.WriteTo.Async(config => config.Console())
+	//.WriteTo.Seq("http://localhost:5341")
 	.MinimumLevel.Debug()
 	.CreateLogger();
 

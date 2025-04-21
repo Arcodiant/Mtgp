@@ -38,12 +38,12 @@ internal static class JitterMethods
 		where T : unmanaged
 		=> MemoryMarshal.Read<T>(buffer);
 
-	public static int Gather_Int_Int_2(Span<byte> buffer, Vector_2<int> coordinate, Vector_3<int> dimensions)
+	public static Span<byte> Gather_Int_2(Span<byte> buffer, Vector_2<int> coordinate, Vector_3<int> dimensions)
 	{
 		int x = coordinate.V1;
 		int y = coordinate.V2;
 
-		return BitConverter.ToInt32(buffer[(y * 4 * dimensions.V2 + x * 4)..]);
+		return buffer[(y * 4 * dimensions.V2 + x * 4)..];
 	}
 }
 
@@ -122,6 +122,39 @@ public class ShaderJitter
 		}
 
 		return methodInfo;
+	}
+
+	private static MethodInfo ReadByType(ShaderType loadType)
+	{
+		if (loadType == ShaderType.Int(4))
+		{
+			return ReadInt32.Value;
+		}
+		else if (loadType == ShaderType.Float(4))
+		{
+			return ReadFloat32.Value;
+		}
+		else if (loadType.IsVector())
+		{
+			var elementType = loadType.ElementType!;
+
+			if (elementType == ShaderType.Int(4))
+			{
+				return ReadVec<int>(loadType.ElementCount);
+			}
+			else if (elementType == ShaderType.Float(4))
+			{
+				return ReadVec<float>(loadType.ElementCount);
+			}
+			else
+			{
+				throw new NotSupportedException($"Cannot load type {loadType}");
+			}
+		}
+		else
+		{
+			throw new NotSupportedException($"Cannot load type {loadType}");
+		}
 	}
 
 	private readonly static Lazy<MethodInfo> BitConverter__TryWriteBytes_Int32 = new(() => typeof(BitConverter).GetMethod(nameof(BitConverter.TryWriteBytes), [typeof(Span<byte>), typeof(int)])!);
@@ -371,40 +404,9 @@ public class ShaderJitter
 						reader.Load(out int resultId, out int typeId, out int pointerId);
 
 						var loadType = types[typeId];
-						MethodInfo readMethod;
-
-						if (loadType == ShaderType.Int(4))
-						{
-							readMethod = ReadInt32.Value;
-						}
-						else if (loadType == ShaderType.Float(4))
-						{
-							readMethod = ReadFloat32.Value;
-						}
-						else if (loadType.IsVector())
-						{
-							var elementType = loadType.ElementType!;
-
-							if (elementType == ShaderType.Int(4))
-							{
-								readMethod = ReadVec<int>(loadType.ElementCount);
-							}
-							else if (elementType == ShaderType.Float(4))
-							{
-								readMethod = ReadVec<float>(loadType.ElementCount);
-							}
-							else
-							{
-								throw new NotSupportedException($"Cannot load type {loadType}");
-							}
-						}
-						else
-						{
-							throw new NotSupportedException($"Cannot load type {loadType}");
-						}
 
 						SetValue(resultId, loadType, emitter => EmitValue(emitter, pointerId)
-														.Call(readMethod));
+														.Call(ReadByType(loadType)));
 						break;
 					}
 				case ShaderOp.Add:
@@ -534,18 +536,15 @@ public class ShaderJitter
 						reader.Gather(out int resultId, out int typeId, out int imageId, out int coordinateId);
 
 						var imageType = types[imageId].ElementType!;
-						if (imageType != ShaderType.ImageOf(ShaderType.Int(4), 2))
-						{
-							throw new NotImplementedException($"Unimplemented image type {imageType} for gather operation.");
-						}
 
 						var pixelType = imageType.ElementType!;
 
-						var gatherMethod = typeof(JitterMethods).GetMethod(nameof(JitterMethods.Gather_Int_Int_2))!;
+						var gatherMethod = typeof(JitterMethods).GetMethod(nameof(JitterMethods.Gather_Int_2))!;
 
 						SetValue(resultId, pixelType, emitter => EmitValues(emitter, imageId, coordinateId)
 																	.LoadLocal(imageDimensions[imageId])
-																	.Call(gatherMethod));
+																	.Call(gatherMethod)
+																	.Call(ReadByType(pixelType)));
 
 						break;
 					}

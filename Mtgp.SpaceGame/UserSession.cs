@@ -41,7 +41,7 @@ namespace Mtgp.SpaceGame
 			await uiManager.CreatePanel(new Rect2D((1, 20), (78, 2)));
 
 			await uiManager.StringSplitSend(outputArea, "Welcome to the Space Game!");
-			
+
 			var playerMob = world.GetPlayer("Keeper")!.Value;
 
 			async Task DisplayLocation()

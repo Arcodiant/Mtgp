@@ -429,13 +429,9 @@ public class ShaderInterpreter
 							.Read(out int y);
 
 						int textureIndex = x + y * textureImage.Size.Width;
+						int valueSize = types[type].Size;
 
-						if (types[type] != ShaderType.Int(4))
-						{
-							throw new InvalidOperationException("Gather result type must be int32");
-						}
-
-						textureData[(textureIndex * 4)..][..4].CopyTo(GetTarget(result, type, workingSet));
+						textureData[(textureIndex * valueSize)..][..valueSize].CopyTo(GetTarget(result, type, workingSet));
 						types[result] = types[type];
 						break;
 					}

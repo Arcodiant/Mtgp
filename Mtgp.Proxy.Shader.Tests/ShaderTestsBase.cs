@@ -388,6 +388,63 @@ namespace Mtgp.Proxy.Shader.Tests
 		}
 
 		[TestMethod]
+		public void ShouldGatherColour()
+		{
+			var shader = new byte[1024];
+
+			new ShaderWriter(shader)
+				.EntryPoint([0])
+				.DecorateLocation(0, 0)
+				.DecorateBinding(1, 0)
+				.TypeInt(11, 4)
+				.TypeFloat(10, 4)
+				.TypeVector(2, 10, 3)
+				.TypeImage(4, 2, 2)
+				.TypeVector(7, 11, 2)
+				.TypePointer(9, ShaderStorageClass.Output, 2)
+				.TypePointer(3, ShaderStorageClass.Image, 4)
+				.Variable(0, ShaderStorageClass.Output, 9)
+				.Variable(1, ShaderStorageClass.Image, 3)
+				.Constant(8, 11, 0)
+				.CompositeConstruct(6, 7, [8, 8])
+				.Gather(5, 2, 1, 6)
+				.Store(0, 5)
+				.Return();
+
+			var outputMappings = new ShaderIoMappings(new() { [0] = 0 }, [], 12);
+
+			var target = buildExecutor(default, outputMappings, shader);
+
+			var imageAttachments = new ImageState[]
+			{
+				new(new(1, 1, 1), ImageFormat.R32G32B32_SFloat)
+			};
+
+			new BitWriter(imageAttachments[0].Data.Span)
+				.Write(321f)
+				.Write(654f)
+				.Write(987f);
+
+			var outputSpan = new byte[outputMappings.Size];
+
+			target.Execute(
+				imageAttachments,
+				[],
+				default,
+				outputSpan
+			);
+
+			new BitReader(outputMappings.GetLocation(outputSpan, 0))
+				.Read(out float x)
+				.Read(out float y)
+				.Read(out float z);
+
+			x.Should().Be(321f);
+			y.Should().Be(654f);
+			z.Should().Be(987f);
+		}
+
+		[TestMethod]
 		public void ShouldGatherWithCoords()
 		{
 			var shader = new byte[1024];
