@@ -6,5 +6,6 @@ public enum ShaderStorageClass
 	Output,
 	Uniform,
 	UniformConstant,
-	Image
+	Image,
+	Function
 }

@@ -1,5 +1,4 @@
 ﻿using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Mtgp.Shader;
 
 namespace Mtgp.Proxy.Shader.Tests
@@ -7,7 +6,10 @@ namespace Mtgp.Proxy.Shader.Tests
 	public class ShaderTestsBase(Func<ShaderIoMappings, ShaderIoMappings, Memory<byte>, IShaderExecutor> buildExecutor)
 	{
 		[TestMethod]
-		public void ShouldSetPositionX()
+		[DataRow(123)]
+		[DataRow(456)]
+		[DataRow(789)]
+		public void ShouldSetPositionX(int data)
 		{
 			var shader = new byte[1024];
 
@@ -17,7 +19,7 @@ namespace Mtgp.Proxy.Shader.Tests
 				.TypeInt(1, 4)
 				.TypePointer(2, ShaderStorageClass.Output, 1)
 				.Variable(3, ShaderStorageClass.Output, 2)
-				.Constant(4, 1, 123)
+				.Constant(4, 1, data)
 				.Store(3, 4)
 				.Return();
 
@@ -31,11 +33,14 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			new BitReader(outputMappings.GetBuiltin(outputData, Builtin.PositionX)).Read(out int outputValue);
 
-			outputValue.Should().Be(123);
+			outputValue.Should().Be(data);
 		}
 
 		[TestMethod]
-		public void ShouldSetPositionY()
+		[DataRow(123)]
+		[DataRow(456)]
+		[DataRow(789)]
+		public void ShouldSetPositionY(int data)
 		{
 			var shader = new byte[1024];
 
@@ -45,7 +50,7 @@ namespace Mtgp.Proxy.Shader.Tests
 				.TypeInt(1, 4)
 				.TypePointer(2, ShaderStorageClass.Output, 1)
 				.Variable(3, ShaderStorageClass.Output, 2)
-				.Constant(4, 1, 456)
+				.Constant(4, 1, data)
 				.Store(3, 4)
 				.Return();
 
@@ -59,25 +64,28 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			new BitReader(outputMappings.GetBuiltin(outputData, Builtin.PositionY)).Read(out int outputValue);
 
-			outputValue.Should().Be(456);
+			outputValue.Should().Be(data);
 		}
 
 		[TestMethod]
-		public void ShouldSetOutputLocation()
+		[DataRow(0, 321)]
+		[DataRow(1, 654)]
+		[DataRow(10, 987)]
+		public void ShouldSetOutputLocation(int location, int data)
 		{
 			var shader = new byte[1024];
 
 			new ShaderWriter(shader)
 				.EntryPoint([3])
-				.DecorateLocation(3, 0)
+				.DecorateLocation(3, (uint)location)
 				.TypeInt(1, 4)
 				.TypePointer(2, ShaderStorageClass.Output, 1)
 				.Variable(3, ShaderStorageClass.Output, 2)
-				.Constant(4, 1, 456)
+				.Constant(4, 1, data)
 				.Store(3, 4)
 				.Return();
 
-			var outputMappings = new ShaderIoMappings(new() { [0] = 0 }, [], 4);
+			var outputMappings = new ShaderIoMappings(new() { [location] = 0 }, [], 4);
 
 			var target = buildExecutor(default, outputMappings, shader);
 
@@ -85,37 +93,9 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			target.Execute([], [], default, outputData);
 
-			new BitReader(outputMappings.GetLocation(outputData, 0)).Read(out int outputValue);
+			new BitReader(outputMappings.GetLocation(outputData, location)).Read(out int outputValue);
 
-			outputValue.Should().Be(456);
-		}
-
-		[TestMethod]
-		public void ShouldSetOutputWithLocation1()
-		{
-			var shader = new byte[1024];
-
-			new ShaderWriter(shader)
-				.EntryPoint([3])
-				.DecorateLocation(3, 1)
-				.TypeInt(1, 4)
-				.TypePointer(2, ShaderStorageClass.Output, 1)
-				.Variable(3, ShaderStorageClass.Output, 2)
-				.Constant(4, 1, 159)
-				.Store(3, 4)
-				.Return();
-
-			var outputMappings = new ShaderIoMappings(new() { [1] = 0 }, [], 4);
-
-			var target = buildExecutor(default, outputMappings, shader);
-
-			Span<byte> outputData = stackalloc byte[4];
-
-			target.Execute([], [], default, outputData);
-
-			new BitReader(outputMappings.GetLocation(outputData, 1)).Read(out int outputValue);
-
-			outputValue.Should().Be(159);
+			outputValue.Should().Be(data);
 		}
 
 		[TestMethod]
@@ -132,8 +112,8 @@ namespace Mtgp.Proxy.Shader.Tests
 				.TypePointer(3, ShaderStorageClass.Output, 1)
 				.Variable(4, ShaderStorageClass.Input, 2)
 				.Variable(5, ShaderStorageClass.Output, 3)
-			.Load(8, 1, 4)
-			.Store(5, 8)
+				.Load(8, 1, 4)
+				.Store(5, 8)
 				.Return();
 
 			var inputMappings = new ShaderIoMappings(new() { [0] = 0 }, [], 4);
@@ -490,6 +470,79 @@ namespace Mtgp.Proxy.Shader.Tests
 			new BitReader(outputMappings.GetLocation(outputSpan, 0)).Read(out int outputValue);
 
 			outputValue.Should().Be(753);
+		}
+
+		[TestMethod]
+		public void ShouldUseFunctionVariable()
+		{
+			var shader = new byte[1024];
+
+			new ShaderWriter(shader)
+				.EntryPoint([3])
+				.DecorateLocation(3, 0)
+				.TypeInt(1, 4)
+				.TypePointer(2, ShaderStorageClass.Output, 1)
+				.TypePointer(5, ShaderStorageClass.Function, 1)
+				.Variable(3, ShaderStorageClass.Output, 2)
+				.Variable(6, ShaderStorageClass.Function, 5)
+				.Constant(4, 1, 400)
+				.Constant(8, 1, 2)
+				.Store(6, 4)
+				.Load(7, 1, 6)
+				.Multiply(9, 1, 7, 8)
+				.Store(3, 9)
+				.Return();
+
+			var outputMappings = new ShaderIoMappings(new() { [0] = 0 }, [], 4);
+
+			var target = buildExecutor(default, outputMappings, shader);
+
+			Span<byte> outputData = stackalloc byte[4];
+
+			target.Execute([], [], default, outputData);
+
+			new BitReader(outputMappings.GetLocation(outputData, 0)).Read(out int outputValue);
+
+			outputValue.Should().Be(800);
+		}
+
+		[TestMethod]
+		[DataRow(1, 2, 3, 0, 1)]
+		[DataRow(1, 2, 3, 1, 2)]
+		[DataRow(1, 2, 3, 2, 3)]
+		[DataRow(1, 2, 3, 3, 1)]
+		[DataRow(1, 2, 3, 4, 2)]
+		[DataRow(1, 2, 3, 5, 3)]
+		public void ShouldOutputVectorComponent(int x, int y, int z, int component, int expected)
+		{
+			var shader = new byte[1024];
+
+			new ShaderWriter(shader)
+				.EntryPoint([3])
+				.DecorateLocation(3, 0)
+				.TypeInt(1, 4)
+				.TypeVector(2, 1, 3)
+				.TypePointer(4, ShaderStorageClass.Output, 1)
+				.Variable(3, ShaderStorageClass.Output, 4)
+				.Constant(5, 1, x)
+				.Constant(6, 1, y)
+				.Constant(7, 1, z)
+				.CompositeConstruct(8, 2, [5, 6, 7])
+				.VectorShuffle(9, 1, 8, 8, [component])
+				.Store(3, 9)
+				.Return();
+
+			var outputMappings = new ShaderIoMappings(new() { [0] = 0 }, [], 4);
+
+			var target = buildExecutor(default, outputMappings, shader);
+
+			Span<byte> outputData = stackalloc byte[outputMappings.Size];
+
+			target.Execute([], [], [], outputData);
+
+			new BitReader(outputMappings.GetLocation(outputData, 0)).Read(out int outputValue);
+
+			outputValue.Should().Be(expected);
 		}
 	}
 }

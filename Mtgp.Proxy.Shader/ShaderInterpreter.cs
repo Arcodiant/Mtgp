@@ -39,7 +39,7 @@ public class ShaderInterpreter
 	{
 		var (inputMappings, outputMappings) = ShaderAnalyser.GetMappings(compiledShader);
 
-		return new (compiledShader, inputMappings, outputMappings);
+		return new(compiledShader, inputMappings, outputMappings);
 	}
 
 	public ShaderInterpreter(Memory<byte> compiledShader, ShaderIoMappings inputMappings, ShaderIoMappings outputMappings)
@@ -285,6 +285,9 @@ public class ShaderInterpreter
 									throw new InvalidOperationException("Uniform variable has no binding decoration");
 								}
 								break;
+							case ShaderStorageClass.Function:
+								pointer = GetWorkingSetPointer(variableType.Size);
+								break;
 							case ShaderStorageClass.Image:
 								if (variableDecorations[result].Binding is not null)
 								{
@@ -334,17 +337,26 @@ public class ShaderInterpreter
 							throw new InvalidOperationException("Load result type must match variable element type");
 						}
 
+						var targetSpan = GetTarget(result, resultType, workingSet);
+
 						switch (pointerType.StorageClass)
 						{
 							case ShaderStorageClass.Input:
-								int pointerValue = BitConverter.ToInt32(GetSpan(pointer, workingSet));
+								{
+									int pointerValue = BitConverter.ToInt32(GetSpan(pointer, workingSet));
 
-								var targetSpan = GetTarget(result, resultType, workingSet);
+									var inputSpan = input[pointerValue..][..type.Size];
 
-								var inputSpan = input[pointerValue..][..type.Size];
+									inputSpan.CopyTo(targetSpan);
+									break;
+								}
+							case ShaderStorageClass.Function:
+								{
+									var inputSpan = GetSpan(pointer, workingSet);
 
-								inputSpan.CopyTo(targetSpan);
-								break;
+									inputSpan.CopyTo(targetSpan);
+									break;
+								}
 							default:
 								throw new InvalidOperationException($"Invalid storage class {pointerType.StorageClass}");
 						}
@@ -382,6 +394,11 @@ public class ShaderInterpreter
 								var uniformSpan = bufferAttachments[uniformPointer.Binding].Span[(int)uniformPointer.Pointer..][..valueType.Size];
 
 								valueToStore.CopyTo(uniformSpan);
+								break;
+							case ShaderStorageClass.Function:
+								var targetSpan = GetSpan(pointer, workingSet);
+
+								valueToStore.CopyTo(targetSpan);
 								break;
 							default:
 								throw new InvalidOperationException($"Invalid storage class {pointerType.StorageClass}");
@@ -658,6 +675,61 @@ public class ShaderInterpreter
 						types[result] = types[type];
 					}
 					break;
+				case ShaderOp.VectorShuffle:
+					{
+						shaderReader.VectorShuffle(out int count);
+
+						Span<int> components = new int[count];
+
+						if (count > 4)
+						{
+							throw new NotImplementedException("Vector shuffle with more than 4 components is not implemented");
+						}
+
+						shaderReader = shaderReader.VectorShuffle(out result, out int type, out int vector1, out int vector2, components, out _);
+
+						var resultType = types[type];
+
+						int elementCount = resultType.IsVector() ? resultType.ElementCount : 1;
+
+						if (count != elementCount)
+						{
+							throw new InvalidOperationException("Vector shuffle component count must match element count");
+						}
+
+						if (!types[vector1].IsVector() || !types[vector2].IsVector())
+						{
+							throw new InvalidOperationException("Vector shuffle operands must be vectors");
+						}
+
+						if (types[vector1].ElementType != types[vector2].ElementType)
+						{
+							throw new InvalidOperationException("Vector shuffle operands must have the same element type");
+						}
+
+						var targetSpan = GetTarget(result, type, workingSet);
+
+						var vector1Span = GetSpan(vector1, workingSet);
+						var vector2Span = GetSpan(vector2, workingSet);
+
+						for (int index = 0; index < count; index++)
+						{
+							int component = components[index];
+
+							var vectorSpan = vector1Span;
+
+							if (component >= types[vector1].ElementCount)
+							{
+								component -= types[vector1].ElementCount;
+								vectorSpan = vector2Span;
+							}
+
+							vectorSpan[(component * resultType.Size)..][..resultType.Size].CopyTo(targetSpan[(index * resultType.Size)..][..resultType.Size]);
+						}
+
+						types[result] = types[type];
+						break;
+					}
 				default:
 					throw new InvalidOperationException($"Unknown opcode {op}");
 			}

@@ -15,6 +15,7 @@ internal enum PartType
 	Image,
 	ReadBuffer,
 	WriteBuffer,
+	Var,
 	Identifier,
 	LBlockParen,
 	RBlockParen,
@@ -102,16 +103,26 @@ public class ShaderCompiler
 														.Match(Span.EqualTo("uniform"), PartType.Uniform)
 														.Match(Span.EqualTo("image1d"), PartType.Image)
 														.Match(Span.EqualTo("image2d"), PartType.Image)
+														.Match(Span.EqualTo("var"), PartType.Var)
 														.Match(Float, PartType.DecimalLiteral)
 														.Match(Numerics.Integer, PartType.IntegerLiteral)
 														.Match(Identifier.CStyle, PartType.Identifier)
 														.Build();
 
-	private readonly static TokenListParser<PartType, AssignStatement> assignment = from leftHand in ExpressionParsers.Expression
-																					from @operator in Token.EqualTo(PartType.Assign)
-																					from rightHand in ExpressionParsers.Expression
-																					from endOfLine in Token.EqualTo(PartType.Semicolon)
-																					select new AssignStatement(leftHand, rightHand);
+	private readonly static TokenListParser<PartType, Statement> assignment = from leftHand in ExpressionParsers.Expression
+																			  from @operator in Token.EqualTo(PartType.Assign)
+																			  from rightHand in ExpressionParsers.Expression
+																			  from endOfLine in Token.EqualTo(PartType.Semicolon)
+																			  select (Statement)new AssignStatement(leftHand, rightHand);
+
+	private readonly static TokenListParser<PartType, Statement> variableDeclaration = from varKeyword in Token.EqualTo(PartType.Var)
+																					   from type in typeReference
+																					   from name in Token.EqualTo(PartType.Identifier)
+																					   from lineEnd in Token.EqualTo(PartType.Semicolon)
+																					   select (Statement)new VariableDeclarationStatement(type, name.ToStringValue());
+
+	private readonly static TokenListParser<PartType, Statement> statement = from statement in assignment.Or(variableDeclaration)
+																			 select statement;
 
 	private readonly static TokenListParser<PartType, Decoration> decoration = from open in Token.EqualTo(PartType.LSquareParen)
 																			   from name in Token.EqualTo(PartType.Identifier)
@@ -161,7 +172,7 @@ public class ShaderCompiler
 																						   from name in BaseParsers.Identifier
 																						   from parameters in parameterBlock
 																						   from open in Token.EqualTo(PartType.LBlockParen)
-																						   from statements in assignment.Many()
+																						   from statements in statement.Many()
 																						   from close in Token.EqualTo(PartType.RBlockParen)
 																						   select (TopLevelDefinition)new FuncDefinition(type, name, parameters, statements);
 
@@ -218,6 +229,9 @@ public class ShaderCompiler
 
 	private record Statement();
 
+	private record VariableDeclarationStatement(TypeReference Type, string Name)
+		: Statement;
+
 	private record AssignStatement(Expression LeftHand, Expression RightHand)
 		: Statement;
 
@@ -253,7 +267,7 @@ public class ShaderCompiler
 			{
 				return ShaderType.VectorOf(GetPrimitiveType((TypeReference)type.Arguments[0]), ((IntegerTypeArgument)type.Arguments[1]).Value);
 			}
-			else if(type.Token == "void")
+			else if (type.Token == "void")
 			{
 				return ShaderType.Void;
 			}
@@ -459,11 +473,29 @@ public class ShaderCompiler
 			shaderState = statement switch
 			{
 				AssignStatement assignment => WriteAssignment(shaderState, assignment),
+				VariableDeclarationStatement variableDeclaration => WriteVariableDeclaration(shaderState, variableDeclaration),
 				_ => throw new Exception($"Unknown statement type: {statement}")
 			};
 		}
 
 		shaderState = shaderState.WithCodeWriter(shaderState.CodeWriter.Return());
+
+		ShaderState WriteVariableDeclaration(ShaderState state, VariableDeclarationStatement variableDeclaration)
+		{
+			var type = GetPrimitiveType(variableDeclaration.Type);
+			type = ShaderType.PointerOf(type, ShaderStorageClass.Function);
+			int id = GetNextId(type);
+
+			var typesWriter = state.TypesWriter;
+			int typeId = GetTypeId(ref typesWriter, type);
+
+			typesWriter = typesWriter.Variable(id, ShaderStorageClass.Function, typeId);
+
+			vars.Add((id, ShaderStorageClass.Function, type, false));
+			varNames[(variableDeclaration.Name, "")] = id;
+
+			return state.WithTypesWriter(typesWriter);
+		}
 
 		ShaderState WriteAssignment(ShaderState state, AssignStatement assignment)
 		{
@@ -472,6 +504,7 @@ public class ShaderCompiler
 			{
 				BinaryExpression binaryExpression => state.WithCodeWriter(state.CodeWriter.Store(GetVarId(binaryExpression), rightId)),
 				ArrayAccessExpression arrayAccessExpression => WriteLeftHandArrayAccessExpressionAndStore(state, arrayAccessExpression, rightId),
+				TokenExpression tokenExpression => state.WithCodeWriter(state.CodeWriter.Store(GetTokenVarId(tokenExpression), rightId)),
 				_ => throw new Exception($"Unknown left hand type: {assignment.LeftHand}")
 			};
 
@@ -480,30 +513,30 @@ public class ShaderCompiler
 
 		ShaderState WriteLeftHandArrayAccessExpressionAndStore(ShaderState state, ArrayAccessExpression expression, int rightId)
 		{
-			state = WriteLeftHandArrayAccessExpression(state, expression, out int pointerId);
+			state = WriteArrayAccessExpression(state, expression, out int pointerId, out _);
 
 			return state.WithCodeWriter(state.CodeWriter.Store(pointerId, rightId));
 		}
 
-		ShaderState WriteLeftHandArrayAccessExpression(ShaderState state, ArrayAccessExpression expression, out int pointerId)
+		ShaderState WriteArrayAccessExpression(ShaderState state, ArrayAccessExpression expression, out int pointerId, out ShaderType pointerType)
 		{
 			state = WriteExpression(state, expression.Index, out int indexId, out var type);
 
 			int baseId = GetTokenVarId((TokenExpression)expression.Base);
 
 			var baseType = idTypes[baseId];
-			var pointerType = ShaderType.PointerOf(baseType.ElementType!.ElementType!, baseType.StorageClass!.Value);
+			pointerType = ShaderType.PointerOf(baseType.ElementType!.ElementType!, baseType.StorageClass!.Value);
 
 			pointerId = GetNextId(pointerType);
 
 			var typesWriter = state.TypesWriter;
-			int typeId = GetTypeId(ref typesWriter, pointerType);
-			var codeWriter = state.CodeWriter.AccessChain(pointerId, typeId, GetTokenVarId((TokenExpression)expression.Base), new int[] { indexId });
+			int pointerTypeId = GetTypeId(ref typesWriter, pointerType);
+			var codeWriter = state.CodeWriter.AccessChain(pointerId, pointerTypeId, GetTokenVarId((TokenExpression)expression.Base), new int[] { indexId });
 
 			return state.WithTypesWriter(typesWriter).WithCodeWriter(codeWriter);
 		}
 
-		ShaderState WriteExpression(ShaderState state, Expression expression, out int id, out ShaderType type)
+		ShaderState WriteExpression(ShaderState state, Expression expression, out int id, out ShaderType type, bool loadPointers = true)
 		{
 			if (!expressionImplementations.TryGetValue(expression, out var info))
 			{
@@ -515,9 +548,14 @@ public class ShaderCompiler
 					FunctionExpression functionExpression => WriteFunctionExpression(state, functionExpression, out id, out type),
 					TernaryExpression ternaryExpression => WriteTernaryExpression(state, ternaryExpression, out id, out type),
 					FloatLiteralExpression floatLiteralExpression => WriteFloatLiteralExpression(state, floatLiteralExpression, out id, out type),
-					ArrayAccessExpression arrayAccessExpression => WriteRightHandArrayAccessExpression(state, arrayAccessExpression, out id, out type),
+					ArrayAccessExpression arrayAccessExpression => WriteArrayAccessExpression(state, arrayAccessExpression, out id, out type),
 					_ => throw new Exception($"Unknown expression type: {expression}")
 				};
+
+				if (loadPointers && type.IsPointer())
+				{
+					state = WriteLoad(state, id, type, out id, out type);
+				}
 
 				expressionImplementations[expression] = (id, type);
 			}
@@ -530,22 +568,29 @@ public class ShaderCompiler
 			return state;
 		}
 
-		ShaderState WriteRightHandArrayAccessExpression(ShaderState state, ArrayAccessExpression expression, out int id, out ShaderType type)
+		ShaderState WriteLoad(ShaderState state, int pointerId, ShaderType pointerType, out int id, out ShaderType type)
 		{
-			throw new NotImplementedException();
+			type = pointerType.ElementType!;
+
+			var typesWriter = state.TypesWriter;
+			int typeId = GetTypeId(ref typesWriter, type);
+
+			id = GetNextId(type);
+
+			state = state.WithTypesWriter(typesWriter);
+			state = state.WithCodeWriter(state.CodeWriter.Load(id, typeId, pointerId));
+
+			return state;
 		}
 
 		ShaderState WriteTokenExpression(ShaderState state, TokenExpression expression, out int id, out ShaderType type)
 		{
 			int varId = GetTokenVarId(expression);
-			type = vars.Single(x => x.Id == varId).Type.ElementType!;
+			type = vars.Single(x => x.Id == varId).Type;
 
-			id = GetNextId(type);
+			id = varId;
 
-			var typesWriter = state.TypesWriter;
-			int typeId = GetTypeId(ref typesWriter, type);
-
-			return new(typesWriter, state.CodeWriter.Load(id, typeId, varId));
+			return state;
 		}
 
 		ShaderState WriteTernaryExpression(ShaderState state, TernaryExpression expression, out int id, out ShaderType type)
@@ -685,13 +730,63 @@ public class ShaderCompiler
 		}
 		ShaderState WriteDotExpression(ShaderState state, BinaryExpression expression, out int id, out ShaderType type)
 		{
-			type = ShaderType.Int(4);
-			id = GetNextId(type);
+			var leftExpression = expression.Left;
 
-			var typesWriter = state.TypesWriter;
-			int typeId = GetTypeId(ref typesWriter, GetVarType(expression).ElementType!);
+			string? inputParamName = mainFunc.Parameters.SingleOrDefault()?.Name;
 
-			return new(typesWriter, state.CodeWriter.Load(id, typeId, GetVarId(expression)));
+			if (leftExpression is TokenExpression leftTokenExpression && leftTokenExpression.Value == inputParamName)
+			{
+				id = GetVarId(expression);
+				type = GetVarType(expression);
+
+				return state;
+			}
+
+			state = WriteExpression(state, expression.Left, out int leftId, out var leftType);
+
+			if (leftType.IsPointer())
+			{
+				state = WriteLoad(state, leftId, leftType, out leftId, out leftType);
+			}
+
+			if (leftType.IsVector())
+			{
+				var elementType = leftType.ElementType!;
+
+				if (expression.Right is TokenExpression rightTokenExpression)
+				{
+					int GetIndex(char value) => value switch
+					{
+						'x' => 0,
+						'y' => 1,
+						'z' => 2,
+						'w' => 3,
+						_ => throw new Exception($"Unknown vector component: {value}")
+					};
+
+					var components = rightTokenExpression.Value.ToCharArray()
+						.Select(GetIndex)
+						.ToArray();
+
+					type = components.Length == 1
+							? elementType
+							: ShaderType.VectorOf(elementType, components.Length);
+
+					id = GetNextId(type);
+
+					var typesWriter = state.TypesWriter;
+					int typeId = GetTypeId(ref typesWriter, type);
+					return new(typesWriter, state.CodeWriter.VectorShuffle(id, typeId, leftId, leftId, components));
+				}
+				else
+				{
+					throw new Exception($"Dot operator on vector requires a token expression, got {expression.Right}");
+				}
+			}
+			else
+			{
+				throw new NotImplementedException($"Dot operator is only implemented for vectors, got {leftType} in {expression}");
+			}
 		}
 		ShaderState WriteEqualityExpression(ShaderState state, BinaryExpression expression, out int id, out ShaderType type)
 		{
@@ -732,7 +827,7 @@ public class ShaderCompiler
 					state = WriteIntToFloat(state, leftId, out leftId, out leftType);
 				}
 
-				if(rightType.IsInt())
+				if (rightType.IsInt())
 				{
 					state = WriteIntToFloat(state, rightId, out rightId, out rightType);
 				}

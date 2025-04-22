@@ -14,13 +14,13 @@ internal static class JitterMethods
 	public static Span<byte> Slice(Span<byte> buffer, int start, int length) => buffer.Slice(start, length);
 
 	public record struct Vector_2<T>(T V1, T V2)
-		where T: unmanaged;
+		where T : unmanaged;
 
 	public record struct Vector_3<T>(T V1, T V2, T V3)
-		where T: unmanaged;
+		where T : unmanaged;
 
 	public record struct Vector_4<T>(T V1, T V2, T V3, T V4)
-		where T: unmanaged;
+		where T : unmanaged;
 
 	public static Vector_2<int> Vec_Int32_2(int x, int y) => new(x, y);
 	public static Vector_3<int> Vec_Int32_3(int x, int y, int z) => new(x, y, z);
@@ -45,6 +45,36 @@ internal static class JitterMethods
 
 		return buffer[(y * 4 * dimensions.V2 + x * 4)..];
 	}
+
+	public static T Component_2<T>(Vector_2<T> vector, int component)
+		where T : unmanaged
+		=> component switch
+		{
+			0 => vector.V1,
+			1 => vector.V2,
+			_ => throw new ArgumentOutOfRangeException(nameof(component), "Component index out of range.")
+		};
+
+	public static T Component_3<T>(Vector_3<T> vector, int component)
+		where T : unmanaged
+		=> component switch
+		{
+			0 => vector.V1,
+			1 => vector.V2,
+			2 => vector.V3,
+			_ => throw new ArgumentOutOfRangeException(nameof(component), "Component index out of range.")
+		};
+
+	public static T Component_4<T>(Vector_4<T> vector, int component)
+		where T : unmanaged
+		=> component switch
+		{
+			0 => vector.V1,
+			1 => vector.V2,
+			2 => vector.V3,
+			3 => vector.V4,
+			_ => throw new ArgumentOutOfRangeException(nameof(component), "Component index out of range.")
+		};
 }
 
 public class ShaderJitter
@@ -54,15 +84,51 @@ public class ShaderJitter
 	private readonly static Lazy<MethodInfo> ReadFloat32 = new(() => typeof(JitterMethods).GetMethod(nameof(JitterMethods.ReadFloat32))!);
 	private readonly static Lazy<MethodInfo> Slice = new(() => typeof(JitterMethods).GetMethod(nameof(JitterMethods.Slice))!);
 
+	private static Type GetType(ShaderType type)
+	{
+		if (type == ShaderType.Int(4))
+		{
+			return typeof(int);
+		}
+		else if (type == ShaderType.Float(4))
+		{
+			return typeof(float);
+		}
+		else if (type.IsVector())
+		{
+			var elementType = type.ElementType!;
+
+			if (elementType == ShaderType.Int(4))
+			{
+				return typeof(JitterMethods.Vector_2<int>);
+			}
+			else if (elementType == ShaderType.Float(4))
+			{
+				return typeof(JitterMethods.Vector_2<float>);
+			}
+			else
+			{
+				throw new NotSupportedException($"Cannot load type {type}");
+			}
+		}
+		else
+		{
+			throw new NotSupportedException($"Cannot load type {type}");
+		}
+	}
+
 	private readonly static Dictionary<(Type, int), MethodInfo> vecs = [];
 
 	private static MethodInfo Vec<T>(int count)
+		=> Vec(typeof(T), count);
+
+	private static MethodInfo Vec(Type type, int count)
 	{
-		var key = (typeof(T), count);
+		var key = (type, count);
 
 		if (!vecs.TryGetValue(key, out var methodInfo))
 		{
-			methodInfo = typeof(JitterMethods).GetMethod($"Vec_{typeof(T).Name}_{count}")!;
+			methodInfo = typeof(JitterMethods).GetMethod($"Vec_{type.Name}_{count}")!;
 			vecs[key] = methodInfo;
 		}
 
@@ -124,6 +190,11 @@ public class ShaderJitter
 		return methodInfo;
 	}
 
+	private static MethodInfo CompVec(Type type, int count)
+	{
+		return typeof(JitterMethods).GetMethod($"Component_{count}")!.MakeGenericMethod(type);
+	}
+
 	private static MethodInfo ReadByType(ShaderType loadType)
 	{
 		if (loadType == ShaderType.Int(4))
@@ -162,6 +233,7 @@ public class ShaderJitter
 	private readonly static Lazy<MethodInfo> BitConverter__ToInt32_Span = new(() => typeof(BitConverter).GetMethod(nameof(BitConverter.ToInt32), [typeof(ReadOnlySpan<byte>)])!);
 
 	private readonly static Lazy<MethodInfo> Span_Byte__Slice_Int32 = new(() => typeof(Span<byte>).GetMethod(nameof(Span<byte>.Slice), [typeof(int)])!);
+	private readonly static Lazy<ConstructorInfo> Span_Byte__Ctor_VoidPtr_Int32 = new(() => typeof(Span<byte>).GetConstructor([typeof(void*), typeof(int)])!);
 
 	private readonly static Lazy<MethodInfo> Unsafe__As_Int_Byte = new(() => typeof(Unsafe).GetMethods().Single(x => x.Name == nameof(Unsafe.As) && x.GetGenericArguments().Length == 2).MakeGenericMethod([typeof(int), typeof(byte)]));
 
@@ -331,6 +403,17 @@ public class ShaderJitter
 
 						break;
 					}
+				case ShaderStorageClass.Function:
+					{
+						int size = variable.Type.ElementType!.Size;
+
+						methodEmitter.LoadConstant((uint)size)
+										.LocalAllocate()
+										.LoadConstant(size)
+										.NewObject(Span_Byte__Ctor_VoidPtr_Int32.Value);
+
+						break;
+					}
 				default:
 					throw new NotImplementedException($"Variables of storage class {variable.StorageClass} are not implemented");
 			}
@@ -426,6 +509,26 @@ public class ShaderJitter
 						var opType = types[typeId];
 
 						SetValue(resultId, opType, emitter => EmitValues(emitter, leftId, rightId).Subtract());
+
+						break;
+					}
+				case ShaderOp.Multiply:
+					{
+						reader.Multiply(out int resultId, out int typeId, out int leftId, out int rightId);
+
+						var opType = types[typeId];
+
+						SetValue(resultId, opType, emitter => EmitValues(emitter, leftId, rightId).Multiply());
+
+						break;
+					}
+				case ShaderOp.Divide:
+					{
+						reader.Divide(out int resultId, out int typeId, out int leftId, out int rightId);
+
+						var opType = types[typeId];
+
+						SetValue(resultId, opType, emitter => EmitValues(emitter, leftId, rightId).Divide());
 
 						break;
 					}
@@ -528,6 +631,47 @@ public class ShaderJitter
 						{
 							throw new NotImplementedException($"Unimplemented composite construct type {opType}.");
 						}
+
+						break;
+					}
+				case ShaderOp.VectorShuffle:
+					{
+						reader.VectorShuffle(out int count);
+
+						var components = new int[count];
+
+						reader.VectorShuffle(out int resultId, out int typeId, out int vector1Id, out int vector2Id, components.AsSpan(), out _);
+
+						var opType = types[typeId];
+						var vector1Type = types[vector1Id];
+						var vector2Type = types[vector2Id];
+
+						SetValue(resultId, opType, emitter =>
+						{
+							for (int index = 0; index < count; index++)
+							{
+								int component = components[index];
+								int vectorId = vector1Id;
+								int vectorSize = vector1Type.ElementCount;
+								if (component >= vector1Type.ElementCount)
+								{
+									component -= vector1Type.ElementCount;
+									vectorId = vector2Id;
+									vectorSize = vector2Type.ElementCount;
+								}
+
+								emitter = EmitValue(emitter, vectorId)
+											.LoadConstant(component)
+											.Call(CompVec(GetType(opType), vectorSize));
+							}
+
+							if (count > 1)
+							{
+								emitter = emitter.Call(Vec(GetType(opType), count));
+							}
+
+							return emitter;
+						});
 
 						break;
 					}

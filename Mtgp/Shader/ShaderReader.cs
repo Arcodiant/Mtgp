@@ -431,7 +431,7 @@ public readonly ref struct ShaderReader(BitReader reader)
 	{
 		var reader = this.ReadShaderOp(ShaderOp.AccessChain, out uint wordCount);
 
-		count = (int)wordCount - 4;
+		count = (int)(wordCount - ShaderOpConstants.AccessChainBaseWordCount);
 
 		return reader;
 	}
@@ -454,6 +454,39 @@ public readonly ref struct ShaderReader(BitReader reader)
 		else
 		{
 			reader.Read(indexes);
+			reader = reader.Skip(count * 4);
+		}
+
+		return new(reader);
+	}
+
+	private readonly BitReader ReadVectorShuffle(out int count)
+	{
+		var reader = this.ReadShaderOp(ShaderOp.VectorShuffle, out uint wordCount);
+
+		count = (int)(wordCount - ShaderOpConstants.VectorShuffleBaseWordCount);
+
+		return reader;
+	}
+
+	public readonly ShaderReader VectorShuffle(out int count)
+	{
+		var reader = this.ReadVectorShuffle(out count);
+
+		return new(reader.Skip(count * 4));
+	}
+
+	public readonly ShaderReader VectorShuffle(out int result, out int type, out int vector1, out int vector2, Span<int> components, out int count)
+	{
+		var reader = this.ReadVectorShuffle(out count).Read(out result).Read(out type).Read(out vector1).Read(out vector2);
+
+		if (count <= components.Length)
+		{
+			reader = reader.Read(components[..count]);
+		}
+		else
+		{
+			reader.Read(components);
 			reader = reader.Skip(count * 4);
 		}
 

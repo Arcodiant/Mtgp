@@ -30,5 +30,6 @@ public enum ShaderOp
 	IntToFloat,
 	Abs,
 	Negate,
-	AccessChain
+	AccessChain,
+	VectorShuffle
 }

@@ -3,7 +3,7 @@ using Mtgp.Shader;
 
 namespace Mtgp.Proxy.Shader;
 
-public  class ComputePipeline(ShaderInterpreter shader)
+public  class ComputePipeline(IShaderExecutor shader)
 {
 	public void Execute(ILogger logger, Extent3D dimensions, Memory<byte>[] bufferViewAttachments)
 	{
@@ -12,9 +12,21 @@ public  class ComputePipeline(ShaderInterpreter shader)
 			logger.LogDebug("Buffer: {Buffer}", buffer.ToArray());
 		}
 
-		var outputBuiltins = new ShaderInterpreter.Builtins();
+		Span<byte> inputSpan = stackalloc byte[shader.InputMappings.Size];
 
-		//shader.Execute([], bufferViewAttachments, new(), new(), ref outputBuiltins, new());
+		foreach(var (builtin, location) in shader.InputMappings.Builtins)
+		{
+			var span = shader.InputMappings.GetBuiltin(inputSpan, builtin);
+
+			switch (builtin)
+			{
+				case Builtin.WorkgroupId:
+					new BitWriter(span).Write(0);
+					break;
+			}
+		}
+
+		shader.Execute([], bufferViewAttachments, inputSpan, []);
 
 		foreach (var buffer in bufferViewAttachments)
 		{

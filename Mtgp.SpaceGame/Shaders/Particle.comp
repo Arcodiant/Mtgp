@@ -3,10 +3,12 @@
     [WorkgroupId] int workgroupId;
 }
 
-[Binding=0] uniform vec<int,2> particle;
-[Binding=1] uniform vec<int,3> instance;
+[Binding=0] uniform vec<int,2> particles;
+[Binding=1] uniform vec<int,3> instances;
 
 func void Main(Input input)
 {
-    instance[input.workgroupId] = Vec(1, 2, 3);
+    var vec<int,2> particle;
+    particle = particles[input.workgroupId];
+    instances[input.workgroupId] = Vec(particle.x, 2, 3);
 }

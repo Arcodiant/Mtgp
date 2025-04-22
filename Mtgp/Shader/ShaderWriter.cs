@@ -183,9 +183,17 @@ public readonly ref struct ShaderWriter(BitWriter writer)
 							.Write(value));
 
 	public readonly ShaderWriter AccessChain(int result, int type, int baseId, ReadOnlySpan<int> indexes)
-		=> new(this.Write(ShaderOp.AccessChain, (uint)(4 + indexes.Length))
+		=> new(this.Write(ShaderOp.AccessChain, (uint)(ShaderOpConstants.AccessChainBaseWordCount + indexes.Length))
 							.Write(result)
 							.Write(type)
 							.Write(baseId)
 							.Write(indexes));
+
+	public readonly ShaderWriter VectorShuffle(int result, int type, int vector1, int vector2, ReadOnlySpan<int> components)
+		=> new(this.Write(ShaderOp.VectorShuffle, (uint)(ShaderOpConstants.VectorShuffleBaseWordCount + components.Length))
+							.Write(result)
+							.Write(type)
+							.Write(vector1)
+							.Write(vector2)
+							.Write(components));
 }

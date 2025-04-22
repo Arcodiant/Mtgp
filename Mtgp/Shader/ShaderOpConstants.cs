@@ -19,6 +19,8 @@ internal static class ShaderOpConstants
 	public const uint GatherWordCount = 5;
 	public const uint ConditionalWordCount = 6;
 	public const uint ConvertWordCount = 4;
+	public const uint AccessChainBaseWordCount = 4;
+	public const uint VectorShuffleBaseWordCount = 5;
 
 	public const uint DecorateWordCount = 3;
 	public const uint DecorateLocationWordCount = 4;

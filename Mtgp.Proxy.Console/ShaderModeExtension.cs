@@ -355,7 +355,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 																													renderPipelineInfo.Scissors,
 																													renderPipelineInfo.EnableAlpha,
 																													renderPipelineInfo.PolygonMode)),
-								CreateComputePipelineInfo computePipelineInfo => Create(new ComputePipeline(this.resourceStore.Get<ShaderInterpreter>(GetId(computePipelineInfo.ComputeShader.Shader)))),
+								CreateComputePipelineInfo computePipelineInfo => Create(new ComputePipeline(this.resourceStore.Get<IShaderExecutor>(GetId(computePipelineInfo.ComputeShader.Shader)))),
 								_ => ResourceCreateResult.InvalidRequest
 							};
 						}
