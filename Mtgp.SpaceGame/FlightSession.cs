@@ -20,6 +20,8 @@ namespace Mtgp.SpaceGame
 			var shaderManager = await ShaderManager.CreateAsync(client);
 
 			var particleShader = await shaderManager.CreateShaderFromFileAsync("Shaders/Particle.comp");
+			var particleVertexShader = await shaderManager.CreateShaderFromFileAsync("Shaders/Particle.vert");
+			var particleFragmentShader = await shaderManager.CreateShaderFromFileAsync("Shaders/Particle.frag");
 
 			await client.GetResourceBuilder()
 					.ActionList(out var actionListTask, "ActionList")
@@ -28,6 +30,18 @@ namespace Mtgp.SpaceGame
 					.BufferView(out var bufferView1Task, "Particles", 0, 64)
 					.BufferView(out var bufferView2Task, "Particles", 64, 64)
 					.ComputePipeline(out var pipelineTask, new(particleShader, "Main"))
+					.RenderPipeline(out var renderPipelineTask,
+										[new(ShaderStage.Vertex, particleVertexShader, "Main"), new(ShaderStage.Fragment, particleFragmentShader, "Main")],
+										new([new(0, 8, InputRate.PerInstance)],
+											[
+												new(0, 0, ShaderType.Int(4), 0),
+												new(1, 0, ShaderType.Int(4), 4)
+											]),
+										[],
+										new(new(0, 0, 0), new(80, 24, 1)),
+										[],
+										false,
+										PolygonMode.Fill)
 					.BuildAsync();
 
 			var actionList = await actionListTask;
@@ -35,32 +49,43 @@ namespace Mtgp.SpaceGame
 			var buffer = await bufferTask;
 			var bufferView1 = await bufferView1Task;
 			var bufferView2 = await bufferView2Task;
+			var renderPipeline = await renderPipelineTask;
 
-			var particleBuffer = new byte[12];
+			var particleBuffer = new byte[8];
 
 			new BitWriter(particleBuffer)
 				.Write(10)
-				.Write(10)
-				.Write(1);
+				.Write(10);
+
+			var presentImage = await client.GetPresentImage();
 
 			await client.SetBufferData(buffer, 0, particleBuffer);
 
 			await client.AddDispatchAction(actionList, buffer, (1, 1, 1), [bufferView1, bufferView2]);
-
 			await client.AddCopyBufferAction(actionList, buffer, buffer, 64, 0, 64);
+			await client.AddBindVertexBuffers(actionList, 0, [(bufferView1, 0)]);
+			await client.AddDrawAction(actionList, renderPipeline, [], [], presentImage, 1, 2);
+			await client.AddPresentAction(actionList);
 
 			await client.Send(pipe, []);
 
 			var waitHandle = new TaskCompletionSource();
 
-			client.SendReceived += async message =>
+			client.SendReceived += message =>
 			{
 				waitHandle.SetResult();
+
+				return Task.CompletedTask;
 			};
 
 			await client.SetDefaultPipe(DefaultPipe.Input, -1, [], false);
 
-			await waitHandle.Task;
+			while (!waitHandle.Task.IsCompleted)
+			{
+				await Task.Delay(1000, cancellationToken);
+
+				await client.Send(pipe, []);
+			}
 		}
 	}
 }

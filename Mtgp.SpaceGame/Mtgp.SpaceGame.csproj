@@ -29,6 +29,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="Shaders\Particle.frag">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Shaders\Particle.vert">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="Shaders\Particle.comp">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

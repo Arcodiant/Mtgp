@@ -40,8 +40,6 @@ public class ShaderManager
 
 		var shaderData = shaderCompiler.Compile(code);
 
-		Console.WriteLine(ShaderDisassembler.Disassemble(shaderData));
-
 		await client.GetResourceBuilder()
 					 .Shader(out var shaderTask, shaderData)
 					 .BuildAsync();
