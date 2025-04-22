@@ -136,6 +136,48 @@ namespace Mtgp.Proxy.Shader.Tests
 		}
 
 		[TestMethod]
+		[DataRow(789)]
+		[DataRow(123456)]
+		[DataRow(0)]
+		[DataRow(-987)]
+		public void ShouldNegatet(int value)
+		{
+			var shader = new byte[1024];
+
+			new ShaderWriter(shader)
+				.EntryPoint([4, 5])
+				.DecorateLocation(4, 0)
+				.DecorateLocation(5, 0)
+				.TypeInt(1, 4)
+				.TypePointer(2, ShaderStorageClass.Input, 1)
+				.TypePointer(3, ShaderStorageClass.Output, 1)
+				.Variable(4, ShaderStorageClass.Input, 2)
+				.Variable(5, ShaderStorageClass.Output, 3)
+				.Load(8, 1, 4)
+				.Negate(9, 1, 8)
+				.Store(5, 9)
+				.Return();
+
+			var inputMappings = new ShaderIoMappings(new() { [0] = 0 }, [], 4);
+
+			var outputMappings = new ShaderIoMappings(new() { [0] = 0 }, [], 4);
+
+			var target = buildExecutor(inputMappings, outputMappings, shader);
+
+			Span<byte> inputData = stackalloc byte[4];
+
+			new BitWriter(inputMappings.GetLocation(inputData, 0)).Write(value);
+
+			Span<byte> outputData = stackalloc byte[4];
+
+			target.Execute([], [], inputData, outputData);
+
+			new BitReader(outputMappings.GetLocation(outputData, 0)).Read(out int outputValue);
+
+			outputValue.Should().Be(-value);
+		}
+
+		[TestMethod]
 		public void ShouldCopyFromInputToOutputWithOffsets()
 		{
 			var shader = new byte[1024];

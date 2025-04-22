@@ -1,5 +1,6 @@
 ﻿using Mtgp.Shader;
 using Sigil;
+using System.Diagnostics.Tracing;
 using System.Numerics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -532,6 +533,21 @@ public class ShaderJitter
 
 						break;
 					}
+				case ShaderOp.Negate:
+					{
+						reader.Negate(out int resultId, out int typeId, out int valueId);
+
+						var opType = types[typeId];
+
+						if (opType != types[valueId])
+						{
+							throw new InvalidOperationException($"Negate operand must have the same type as result");
+						}
+
+						SetValue(resultId, opType, emitter => EmitValue(emitter, valueId).Negate());
+
+						break;
+					}
 				case ShaderOp.Equals:
 					{
 						reader.Equals(out int resultId, out int type, out int a, out int b);
@@ -646,6 +662,10 @@ public class ShaderJitter
 						var vector1Type = types[vector1Id];
 						var vector2Type = types[vector2Id];
 
+						var elementType = opType.IsVector()
+												? opType.ElementType!
+												: opType;
+
 						SetValue(resultId, opType, emitter =>
 						{
 							for (int index = 0; index < count; index++)
@@ -662,12 +682,12 @@ public class ShaderJitter
 
 								emitter = EmitValue(emitter, vectorId)
 											.LoadConstant(component)
-											.Call(CompVec(GetType(opType), vectorSize));
+											.Call(CompVec(GetType(elementType), vectorSize));
 							}
 
 							if (count > 1)
 							{
-								emitter = emitter.Call(Vec(GetType(opType), count));
+								emitter = emitter.Call(Vec(GetType(elementType), count));
 							}
 
 							return emitter;

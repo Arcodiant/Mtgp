@@ -549,6 +549,7 @@ public class ShaderCompiler
 					TernaryExpression ternaryExpression => WriteTernaryExpression(state, ternaryExpression, out id, out type),
 					FloatLiteralExpression floatLiteralExpression => WriteFloatLiteralExpression(state, floatLiteralExpression, out id, out type),
 					ArrayAccessExpression arrayAccessExpression => WriteArrayAccessExpression(state, arrayAccessExpression, out id, out type),
+					NegateExpression negateExpression => WriteNegateExpression(state, negateExpression, out id, out type),
 					_ => throw new Exception($"Unknown expression type: {expression}")
 				};
 
@@ -581,6 +582,19 @@ public class ShaderCompiler
 			state = state.WithCodeWriter(state.CodeWriter.Load(id, typeId, pointerId));
 
 			return state;
+		}
+
+		ShaderState WriteNegateExpression(ShaderState state, NegateExpression expression, out int id, out ShaderType type)
+		{
+			state = WriteExpression(state, expression.Inner, out int innerId, out var innerType);
+
+			type = innerType;
+			id = GetNextId(type);
+
+			var typesWriter = state.TypesWriter;
+			int typeId = GetTypeId(ref typesWriter, type);
+
+			return new(typesWriter, state.CodeWriter.Negate(id, typeId, innerId));
 		}
 
 		ShaderState WriteTokenExpression(ShaderState state, TokenExpression expression, out int id, out ShaderType type)
