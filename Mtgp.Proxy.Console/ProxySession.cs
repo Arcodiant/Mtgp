@@ -99,7 +99,7 @@ namespace Mtgp.Proxy.Console
 					{
 						var request = JsonSerializer.Deserialize<MtgpRequest>(block, Shared.JsonSerializerOptions)!;
 
-						logger.LogDebug("Received request: {@Request}", request);
+						logger.LogTrace("Received request: {@Request}", request);
 
 						var stopwatch = Stopwatch.StartNew();
 
@@ -109,7 +109,7 @@ namespace Mtgp.Proxy.Console
 
 						stopwatch.Stop();
 
-						logger.LogDebug("Handled request {RequestID} in {ElapsedMs}ms", request.Id, stopwatch.Elapsed.TotalMilliseconds);
+						logger.LogTrace("Handled request {RequestID} in {ElapsedMs}ms", request.Id, stopwatch.Elapsed.TotalMilliseconds);
 					}
 				}
 			}

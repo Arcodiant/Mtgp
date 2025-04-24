@@ -51,20 +51,26 @@ namespace Mtgp.SpaceGame
 			var bufferView2 = await bufferView2Task;
 			var renderPipeline = await renderPipelineTask;
 
-			var particleBuffer = new byte[8];
-
-			new BitWriter(particleBuffer)
-				.Write(10)
-				.Write(10);
-
 			var presentImage = await client.GetPresentImage();
 
-			await client.SetBufferData(buffer, 0, particleBuffer);
+			var particleBuffer = new byte[8];
 
-			await client.AddDispatchAction(actionList, buffer, (1, 1, 1), [bufferView1, bufferView2]);
+			int particleCount = 5;
+
+			for (int index = 0; index < particleCount; index++)
+			{
+				new BitWriter(particleBuffer)
+					.Write(10 + Random.Shared.Next(15))
+					.Write(10 + (index * 2));
+
+				await client.SetBufferData(buffer, 8 * index, particleBuffer);
+			}
+
+			await client.AddDispatchAction(actionList, buffer, (particleCount, 1, 1), [bufferView1, bufferView2]);
 			await client.AddCopyBufferAction(actionList, buffer, buffer, 64, 0, 64);
+			await client.AddClearBufferAction(actionList, presentImage.Foreground);
 			await client.AddBindVertexBuffers(actionList, 0, [(bufferView1, 0)]);
-			await client.AddDrawAction(actionList, renderPipeline, [], [], presentImage, 1, 2);
+			await client.AddDrawAction(actionList, renderPipeline, [], [], presentImage, particleCount, 2);
 			await client.AddPresentAction(actionList);
 
 			await client.Send(pipe, []);
@@ -82,7 +88,7 @@ namespace Mtgp.SpaceGame
 
 			while (!waitHandle.Task.IsCompleted)
 			{
-				await Task.Delay(1000, cancellationToken);
+				await Task.Delay(200, cancellationToken);
 
 				await client.Send(pipe, []);
 			}
