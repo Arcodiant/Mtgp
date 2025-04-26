@@ -39,12 +39,12 @@ internal static class JitterMethods
 		where T : unmanaged
 		=> MemoryMarshal.Read<T>(buffer);
 
-	public static Span<byte> Gather_Int_2(Span<byte> buffer, Vector_2<int> coordinate, Vector_3<int> dimensions)
+	public static Span<byte> Gather_Int_2(Span<byte> buffer, Vector_2<int> coordinate, Vector_3<int> dimensions, int stepSize)
 	{
 		int x = coordinate.V1;
 		int y = coordinate.V2;
 
-		return buffer[(y * 4 * dimensions.V2 + x * 4)..];
+		return buffer[((y * dimensions.V1 + x) * stepSize)..][..stepSize];
 	}
 
 	public static T Component_2<T>(Vector_2<T> vector, int component)
@@ -738,11 +738,13 @@ public class ShaderJitter
 						var imageType = types[imageId].ElementType!;
 
 						var pixelType = imageType.ElementType!;
+						int pixelSize = pixelType.Size;
 
 						var gatherMethod = typeof(JitterMethods).GetMethod(nameof(JitterMethods.Gather_Int_2))!;
 
 						SetValue(resultId, pixelType, emitter => EmitValues(emitter, imageId, coordinateId)
 																	.LoadLocal(imageDimensions[imageId])
+																	.LoadConstant(pixelSize)
 																	.Call(gatherMethod)
 																	.Call(ReadByType(pixelType)));
 

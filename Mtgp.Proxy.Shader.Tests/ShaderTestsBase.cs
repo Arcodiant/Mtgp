@@ -495,10 +495,10 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			var imageAttachments = new ImageState[]
 			{
-				new(new(10, 10, 1), ImageFormat.T32_SInt)
+				new(new(20, 10, 1), ImageFormat.T32_SInt)
 			};
 
-			new BitWriter(imageAttachments[0].Data.Span[((9 * 10 + 5) * 4)..]).Write(753);
+			new BitWriter(imageAttachments[0].Data.Span[((9 * 20 + 5) * 4)..]).Write(753);
 
 			var outputSpan = new byte[outputMappings.Size];
 

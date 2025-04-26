@@ -1,5 +1,16 @@
 - Demos
   - Parallax
-	- Starfield
-	  - Read from uniform
 	- City Skyline
+  - Menu Select
+  - Fire Animation
+  - Login persistence
+  - Login via Auth0
+  - Loading screen
+  - Data types for Send/Pipes
+  - Default pipes
+- Proxy
+  - Types in shaders
+  	- Struct types
+  	  - Proper member access
+  - Handle incoming ANSI control codes
+  - Different telnet clients

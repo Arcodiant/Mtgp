@@ -25,7 +25,7 @@ public class RenderPipeline(Dictionary<ShaderStage, IShaderExecutor> shaderStage
 
 		int primitiveCount = vertexCount / vertexPerPrimitive;
 
-		var fragments = new List<(int X, int Y, float XNormalised, float YNormalised, int InstanceIndex, int PrimitiveIndex)>();
+		var fragments = new List<(int X, int Y, double XNormalised, double YNormalised, int InstanceIndex, int PrimitiveIndex)>();
 
 		var vertexStopwatch = Stopwatch.StartNew();
 
@@ -51,7 +51,7 @@ public class RenderPipeline(Dictionary<ShaderStage, IShaderExecutor> shaderStage
 
 						var binding = vertexBufferBindings[attribute.Binding];
 
-						int bindingOffset = binding.InputRate switch
+						int bindingOffset = buffer.Offset + binding.InputRate switch
 						{
 							InputRate.PerInstance => instanceIndex * binding.Stride,
 							InputRate.PerVertex => (primitiveIndex * vertexPerPrimitive + vertexIndex) * binding.Stride,
@@ -98,7 +98,7 @@ public class RenderPipeline(Dictionary<ShaderStage, IShaderExecutor> shaderStage
 
 				for (int y = fromY; y < toY + 1; y++)
 				{
-					float yNormalised = deltaY == 0f ? 0f : (float)(y - fromY) / deltaY;
+					double yNormalised = deltaY == 0f ? 0f : (double)(y - fromY) / deltaY;
 
 					for (int x = fromX; x < toX + 1; x++)
 					{
@@ -112,7 +112,7 @@ public class RenderPipeline(Dictionary<ShaderStage, IShaderExecutor> shaderStage
 							continue;
 						}
 
-						float xNormalised = deltaX == 0f ? 0f : (float)(x - fromX) / deltaX;
+						double xNormalised = deltaX == 0f ? 0f : (double)(x - fromX) / deltaX;
 
 						fragments.Add((x, y, xNormalised, yNormalised, instanceIndex, primitiveIndex));
 					}

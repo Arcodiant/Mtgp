@@ -8,8 +8,8 @@
 
 struct Output
 {
-    [PositionX] float positionX;
-    [PositionY] float positionY;
+    [PositionX] int positionX;
+    [PositionY] int positionY;
     [Location=0] int character;
     [Location=1] int starPositionX;
     [Location=2] int tailCharacter;

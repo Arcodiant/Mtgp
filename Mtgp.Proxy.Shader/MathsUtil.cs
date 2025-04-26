@@ -22,13 +22,13 @@ internal static class MathsUtil
 	public static bool IsWithin((int X, int Y) point, (int X, int Y) topLeft, (int X, int Y) bottomRight)
 		=> point.X >= topLeft.X && point.X <= bottomRight.X && point.Y >= topLeft.Y && point.Y <= bottomRight.Y;
 
-	public static float DotProduct((float X, float Y) a, (float X, float Y) b)
+	public static double DotProduct((double X, double Y) a, (double X, double Y) b)
 		=> a.X * b.X + a.Y * b.Y;
 
-	public static float DotProduct((float X, float Y, float Z) a, (float X, float Y, float Z) b)
+	public static double DotProduct((double X, double Y, double Z) a, (double X, double Y, double Z) b)
 		=> a.X * b.X + a.Y * b.Y + a.Z * b.Z;
 
-	public static void Lerp(Span<byte> fromValue, Span<byte> toValue, Span<byte> output, float t, ShaderType type)
+	public static void Lerp(Span<byte> fromValue, Span<byte> toValue, Span<byte> output, double t, ShaderType type)
 	{
 		if (type.IsInt())
 		{
@@ -41,7 +41,7 @@ internal static class MathsUtil
 		{
 			float from = BitConverter.ToSingle(fromValue);
 			float to = BitConverter.ToSingle(toValue);
-			float result = from + (to - from) * t;
+			float result = (float)(from + (to - from) * t);
 			BitConverter.GetBytes(result).CopyTo(output);
 		}
 		else if (type.IsVector())

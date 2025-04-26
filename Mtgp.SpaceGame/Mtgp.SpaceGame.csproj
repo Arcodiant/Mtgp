@@ -23,12 +23,20 @@
     <ProjectReference Include="..\Mtgp.Comms\Mtgp.Comms.csproj" />
     <ProjectReference Include="..\Mtgp.Server\Mtgp.Server.csproj" />
     <ProjectReference Include="..\Mtgp.Shader.Tsl\Mtgp.Shader.Tsl.csproj" />
-    <ProjectReference Include="..\Mtgp.Shader\Mtgp.Shader.csproj" />
     <ProjectReference Include="..\Mtgp.Util\Mtgp.Util.csproj" />
     <ProjectReference Include="..\Mtgp\Mtgp.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="Images\Title.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Shaders\TitleImage.frag">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Shaders\TitleImage.vert">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Update="Shaders\Particle.frag">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

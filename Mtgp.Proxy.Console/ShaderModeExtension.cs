@@ -62,7 +62,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 	private readonly Dictionary<DefaultPipe, (int PipeId, Dictionary<ChannelType, ImageFormat> ChannelSet)> defaultPipeBindings = [];
 	private readonly Dictionary<int, DefaultPipe> defaultPipeLookup = [];
 
-	private PresentOptimiser presentOptimiser;
+	private PresentOptimiser? presentOptimiser;
 
 	public void RegisterMessageHandlers(ProxyController proxy)
 	{
@@ -196,7 +196,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 	{
 		var actionList = this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions;
 
-		actionList.Add(new PresentAction(this.resourceStore.Get<ImageState>(0), this.resourceStore.Get<ImageState>(1), this.resourceStore.Get<ImageState>(2), this.presentOptimiser));
+		actionList.Add(new PresentAction(this.resourceStore.Get<ImageState>(0), this.resourceStore.Get<ImageState>(1), this.resourceStore.Get<ImageState>(2), this.presentOptimiser!));
 
 		return new MtgpResponse(0, "ok");
 	}

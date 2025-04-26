@@ -81,7 +81,7 @@ public class UIManager(IShaderManager shaderManager, MtgpClient client)
 
 		await EnsureMainPipe();
 
-		this.createMainActions.Add((1, async mainActionList =>
+		this.createMainActions.Add((2, async mainActionList =>
 		{
 			await client.AddBindVertexBuffers(mainActionList, 0, [(sharedBuffer, 0)]);
 			await client.AddDrawAction(mainActionList, renderPipeline, [], [], presentImage, 1, 2);
@@ -163,7 +163,7 @@ public class UIManager(IShaderManager shaderManager, MtgpClient client)
 		await client.AddRunPipelineAction(outputPipeActionList, splitStringPipeline);
 		await client.AddTriggerActionListAction(outputPipeActionList, mainPipe!.Value.ActionList);
 
-		this.createMainActions.Add((2, async mainActionList =>
+		this.createMainActions.Add((1, async mainActionList =>
 		{
 			await client.AddBindVertexBuffers(mainActionList, 0, [(sharedBuffer, 0)]);
 			await client.AddIndirectDrawAction(mainActionList, stringSplitRenderPipeline, [lineImage], [], presentImage, indirectCommandBufferView, 0);
@@ -198,7 +198,7 @@ public class UIManager(IShaderManager shaderManager, MtgpClient client)
 		var (mainPipeId, mainActionListId) = this.mainPipe!.Value;
 
 		await client.ResetActionList(mainActionListId);
-		foreach (var (priority, action) in createMainActions.OrderBy(x => x.Priority))
+		foreach (var (priority, action) in createMainActions.OrderByDescending(x => x.Priority))
 		{
 			await action(mainActionListId);
 		}
