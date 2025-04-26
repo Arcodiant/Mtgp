@@ -586,5 +586,179 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			outputValue.Should().Be(expected);
 		}
+
+		[TestMethod]
+		[DataRow(5, 5, 1, 2)]
+		[DataRow(1, 5, 1, 2)]
+		[DataRow(5, 1, 1, 2)]
+		[DataRow(-10, -10, 1, 2)]
+		[DataRow(-10, 5, 1, 2)]
+		public void ShouldAssessConditionalForEquals(int left, int right, int trueValue, int falseValue)
+		{
+			var shader = new byte[1024];
+
+			new ShaderWriter(shader)
+				.EntryPoint([5, 6, 7, 8, 9])
+				.DecorateLocation(5, 0)
+				.DecorateLocation(6, 1)
+				.DecorateLocation(7, 2)
+				.DecorateLocation(8, 3)
+				.DecorateLocation(9, 0)
+				.TypeInt(1, 4)
+				.TypeBool(2)
+				.TypePointer(3, ShaderStorageClass.Input, 1)
+				.TypePointer(4, ShaderStorageClass.Output, 1)
+				.Variable(5, ShaderStorageClass.Input, 3)
+				.Variable(6, ShaderStorageClass.Input, 3)
+				.Variable(7, ShaderStorageClass.Input, 3)
+				.Variable(8, ShaderStorageClass.Input, 3)
+				.Variable(9, ShaderStorageClass.Output, 4)
+				.Load(10, 1, 5)
+				.Load(11, 1, 6)
+				.Load(12, 1, 7)
+				.Load(13, 1, 8)
+				.Equals(14, 2, 10, 11)
+				.Conditional(15, 1, 14, 12, 13)
+				.Store(9, 15)
+				.Return();
+
+			var inputMappings = new ShaderIoMappings(new() { [0] = 0, [1] = 4, [2] = 8, [3] = 12 }, [], 16);
+
+			var outputMappings = new ShaderIoMappings(new() { [0] = 0 }, [], 4);
+
+			var target = buildExecutor(inputMappings, outputMappings, shader);
+
+			Span<byte> inputData = stackalloc byte[inputMappings.Size];
+
+			new BitWriter(inputMappings.GetLocation(inputData, 0))
+				.Write(left)
+				.Write(right)
+				.Write(trueValue)
+				.Write(falseValue);
+
+			Span<byte> outputData = stackalloc byte[outputMappings.Size];
+
+			target.Execute([], [], inputData, outputData);
+
+			new BitReader(outputMappings.GetLocation(outputData, 0)).Read(out int outputValue);
+
+			outputValue.Should().Be(left == right ? trueValue : falseValue);
+		}
+
+		[TestMethod]
+		[DataRow(5, 5, 1, 2)]
+		[DataRow(1, 5, 1, 2)]
+		[DataRow(5, 1, 1, 2)]
+		[DataRow(-10, -10, 1, 2)]
+		[DataRow(-10, 5, 1, 2)]
+		public void ShouldAssessConditionalForGreaterThan(int left, int right, int trueValue, int falseValue)
+		{
+			var shader = new byte[1024];
+
+			new ShaderWriter(shader)
+				.EntryPoint([5, 6, 7, 8, 9])
+				.DecorateLocation(5, 0)
+				.DecorateLocation(6, 1)
+				.DecorateLocation(7, 2)
+				.DecorateLocation(8, 3)
+				.DecorateLocation(9, 0)
+				.TypeInt(1, 4)
+				.TypeBool(2)
+				.TypePointer(3, ShaderStorageClass.Input, 1)
+				.TypePointer(4, ShaderStorageClass.Output, 1)
+				.Variable(5, ShaderStorageClass.Input, 3)
+				.Variable(6, ShaderStorageClass.Input, 3)
+				.Variable(7, ShaderStorageClass.Input, 3)
+				.Variable(8, ShaderStorageClass.Input, 3)
+				.Variable(9, ShaderStorageClass.Output, 4)
+				.Load(10, 1, 5)
+				.Load(11, 1, 6)
+				.Load(12, 1, 7)
+				.Load(13, 1, 8)
+				.GreaterThan(14, 2, 10, 11)
+				.Conditional(15, 1, 14, 12, 13)
+				.Store(9, 15)
+				.Return();
+
+			var inputMappings = new ShaderIoMappings(new() { [0] = 0, [1] = 4, [2] = 8, [3] = 12 }, [], 16);
+
+			var outputMappings = new ShaderIoMappings(new() { [0] = 0 }, [], 4);
+
+			var target = buildExecutor(inputMappings, outputMappings, shader);
+
+			Span<byte> inputData = stackalloc byte[inputMappings.Size];
+
+			new BitWriter(inputMappings.GetLocation(inputData, 0))
+				.Write(left)
+				.Write(right)
+				.Write(trueValue)
+				.Write(falseValue);
+
+			Span<byte> outputData = stackalloc byte[outputMappings.Size];
+
+			target.Execute([], [], inputData, outputData);
+
+			new BitReader(outputMappings.GetLocation(outputData, 0)).Read(out int outputValue);
+
+			outputValue.Should().Be(left > right ? trueValue : falseValue);
+		}
+
+		[TestMethod]
+		[DataRow(5, 5, 1, 2)]
+		[DataRow(1, 5, 1, 2)]
+		[DataRow(5, 1, 1, 2)]
+		[DataRow(-10, -10, 1, 2)]
+		[DataRow(-10, 5, 1, 2)]
+		public void ShouldAssessConditionalForLessThan(int left, int right, int trueValue, int falseValue)
+		{
+			var shader = new byte[1024];
+
+			new ShaderWriter(shader)
+				.EntryPoint([5, 6, 7, 8, 9])
+				.DecorateLocation(5, 0)
+				.DecorateLocation(6, 1)
+				.DecorateLocation(7, 2)
+				.DecorateLocation(8, 3)
+				.DecorateLocation(9, 0)
+				.TypeInt(1, 4)
+				.TypeBool(2)
+				.TypePointer(3, ShaderStorageClass.Input, 1)
+				.TypePointer(4, ShaderStorageClass.Output, 1)
+				.Variable(5, ShaderStorageClass.Input, 3)
+				.Variable(6, ShaderStorageClass.Input, 3)
+				.Variable(7, ShaderStorageClass.Input, 3)
+				.Variable(8, ShaderStorageClass.Input, 3)
+				.Variable(9, ShaderStorageClass.Output, 4)
+				.Load(10, 1, 5)
+				.Load(11, 1, 6)
+				.Load(12, 1, 7)
+				.Load(13, 1, 8)
+				.LessThan(14, 2, 10, 11)
+				.Conditional(15, 1, 14, 12, 13)
+				.Store(9, 15)
+				.Return();
+
+			var inputMappings = new ShaderIoMappings(new() { [0] = 0, [1] = 4, [2] = 8, [3] = 12 }, [], 16);
+
+			var outputMappings = new ShaderIoMappings(new() { [0] = 0 }, [], 4);
+
+			var target = buildExecutor(inputMappings, outputMappings, shader);
+
+			Span<byte> inputData = stackalloc byte[inputMappings.Size];
+
+			new BitWriter(inputMappings.GetLocation(inputData, 0))
+				.Write(left)
+				.Write(right)
+				.Write(trueValue)
+				.Write(falseValue);
+
+			Span<byte> outputData = stackalloc byte[outputMappings.Size];
+
+			target.Execute([], [], inputData, outputData);
+
+			new BitReader(outputMappings.GetLocation(outputData, 0)).Read(out int outputValue);
+
+			outputValue.Should().Be(left < right ? trueValue : falseValue);
+		}
 	}
 }

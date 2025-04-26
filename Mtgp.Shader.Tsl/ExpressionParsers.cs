@@ -26,6 +26,12 @@ internal static class ExpressionParsers
 	private static readonly TokenListParser<PartType, string> Equality =
 		Token.EqualTo(PartType.Equals).Value("==");
 
+	private static readonly TokenListParser<PartType, string> GreaterThan =
+		Token.EqualTo(PartType.RArrow).Value(">");
+
+	private static readonly TokenListParser<PartType, string> LessThan =
+		Token.EqualTo(PartType.LArrow).Value("<");
+
 	private static readonly TokenListParser<PartType, string> And =
 		Token.EqualTo(PartType.And).Value("&&");
 
@@ -65,7 +71,7 @@ internal static class ExpressionParsers
 	private readonly static TokenListParser<PartType, Expression> sum = Parse.Chain(Add.Or(Subtract), term, (op, left, right) => new BinaryExpression(left, right, op));
 
 	private readonly static TokenListParser<PartType, Expression> comparison = (from left in sum
-																				from op in Equality
+																				from op in Equality.Or(GreaterThan).Or(LessThan)
 																				from right in sum
 																				select (Expression)new BinaryExpression(left, right, op)).Try()
 																				.Or(sum);

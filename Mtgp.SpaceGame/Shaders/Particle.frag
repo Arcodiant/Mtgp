@@ -2,6 +2,9 @@
 {
     [PositionX] int positionX;
     [PositionY] int positionY;
+	[Location=0] int character;
+    [Location=1] int starPositionX;
+    [Location=2] int tailCharacter;
 }
 
 struct Output
@@ -13,7 +16,7 @@ struct Output
 
 func Output Main(Input input)
 {
-    result.character = 42;
+    result.character = input.positionX == input.starPositionX ? input.character : input.tailCharacter;
     result.foreground = Vec(1.0, 1.0, 1.0);
     result.background = Vec(0.0, 0.0, 0.0);
 }

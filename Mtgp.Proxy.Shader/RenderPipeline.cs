@@ -126,11 +126,27 @@ public class RenderPipeline(Dictionary<ShaderStage, IShaderExecutor> shaderStage
 
 		var fragmentStopwatch = Stopwatch.StartNew();
 
-		Parallel.ForEach(fragments, frag =>
+		int maxX = int.MaxValue;
+		int maxY = int.MaxValue;
+
+		foreach(var frameAttachment in frameBuffer.Attachments)
+		{
+			if (frameAttachment.Size.Width < maxX)
+			{
+				maxX = frameAttachment.Size.Width;
+			}
+
+			if (frameAttachment.Size.Height < maxY)
+			{
+				maxY = frameAttachment.Size.Height;
+			}
+		}
+
+		Parallel.ForEach(fragments.Where(frag => frag.X >= 0 || frag.Y < 0 || frag.X >= maxX || frag.Y >= maxY), frag =>
 		{
 			var (x, y, xNormalised, yNormalised, instanceIndex, primitiveIndex) = frag;
 
-			var primitiveOutput = GetPrimitiveSpan(instanceIndex, primitiveIndex);
+            var primitiveOutput = GetPrimitiveSpan(instanceIndex, primitiveIndex);
 
 			Span<byte> fragmentInput = stackalloc byte[fragment.InputMappings.Size];
 
@@ -193,7 +209,7 @@ public class RenderPipeline(Dictionary<ShaderStage, IShaderExecutor> shaderStage
 
 				var format = attachment.Format;
 				int size = format.GetSize();
-
+				
 				var target = attachment.Data.Span[(index * size)..][..size];
 
 				fragment.OutputMappings.GetLocation(output, frameAttachmentIndex)[..size].CopyTo(target);

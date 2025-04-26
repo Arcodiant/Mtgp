@@ -83,6 +83,13 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 		ThrowIfError(result);
 	}
 
+	public async Task SetTimerTrigger(int actionList, int milliseconds)
+	{
+		var result = await this.connection.SendAsync(new SetTimerTriggerRequest(Interlocked.Increment(ref this.requestId), actionList, milliseconds));
+
+		ThrowIfError(result);
+	}
+
 	public async Task OpenUrl(string url)
 	{
 		var result = await this.connection.SendAsync(new OpenUrlRequest(Interlocked.Increment(ref this.requestId), url));

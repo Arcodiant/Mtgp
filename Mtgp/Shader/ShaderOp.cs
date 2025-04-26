@@ -22,6 +22,8 @@ public enum ShaderOp
 	Gather,
 	Conditional,
 	Equals,
+	GreaterThan,
+	LessThan,
 	Subtract,
 	Mod,
 	CompositeConstruct,

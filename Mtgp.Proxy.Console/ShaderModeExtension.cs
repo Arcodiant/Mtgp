@@ -62,6 +62,8 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 	private readonly Dictionary<DefaultPipe, (int PipeId, Dictionary<ChannelType, ImageFormat> ChannelSet)> defaultPipeBindings = [];
 	private readonly Dictionary<int, DefaultPipe> defaultPipeLookup = [];
 
+	private PresentOptimiser presentOptimiser;
+
 	public void RegisterMessageHandlers(ProxyController proxy)
 	{
 		telnetClient.SendCommand(TelnetCommand.WILL, TelnetOption.Echo);
@@ -71,11 +73,16 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 
 		telnetClient.HideCursor();
 
-		//telnetClient.SetWindowSize(36, 120);
+		int width = 120;
+		int height = 36;
 
-		this.resourceStore.Add(new ImageState((80, 24, 1), ImageFormat.T32_SInt));
-		this.resourceStore.Add(new ImageState((80, 24, 1), ImageFormat.R32G32B32_SFloat));
-		this.resourceStore.Add(new ImageState((80, 24, 1), ImageFormat.R32G32B32_SFloat));
+		telnetClient.SetWindowSize(height, width);
+
+		this.presentOptimiser = new(telnetClient, new Extent2D(width, height));
+
+		this.resourceStore.Add(new ImageState((width, height, 1), ImageFormat.T32_SInt));
+		this.resourceStore.Add(new ImageState((width, height, 1), ImageFormat.R32G32B32_SFloat));
+		this.resourceStore.Add(new ImageState((width, height, 1), ImageFormat.R32G32B32_SFloat));
 
 		MemoryMarshal.Cast<byte, float>(this.resourceStore.Get<ImageState>(1).Data.Span).Fill(1.0f);
 
@@ -84,6 +91,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 		proxy.RegisterMessageHandler<CreateResourceRequest>(CreateResource);
 		proxy.RegisterMessageHandler<GetPresentImageRequest>(GetPresentImage);
 		proxy.RegisterMessageHandler<SetBufferDataRequest>(SetBufferData);
+		proxy.RegisterMessageHandler<SetTimerTriggerRequest>(SetTimerTrigger);
 		proxy.RegisterMessageHandler<ResetActionListRequest>(ResetActionList);
 		proxy.RegisterMessageHandler<ClearStringSplitPipelineRequest>(ClearStringSplitPipeline);
 		proxy.RegisterMessageHandler<AddCopyBufferToImageActionRequest>(AddCopyBufferToImageAction);
@@ -104,6 +112,27 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 				await proxy.SendOutgoingRequestAsync(new SendRequest(0, pipeInfo.PipeId, Encoding.UTF32.GetBytes(message)));
 			}
 		};
+	}
+
+	private MtgpResponse SetTimerTrigger(SetTimerTriggerRequest request)
+	{
+		int actionList = request.ActionList;
+
+		_ = Task.Run(async () =>
+		{
+			await Task.Delay(request.Milliseconds);
+
+			while (true)
+			{
+				var delay = Task.Delay(request.Milliseconds);
+
+				this.RunActionList(actionList, []);
+
+				await delay;
+			}
+		});
+
+		return new MtgpResponse(0, "ok");
 	}
 
 	private MtgpResponse ClearStringSplitPipeline(ClearStringSplitPipelineRequest request)
@@ -167,7 +196,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 	{
 		var actionList = this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions;
 
-		actionList.Add(new PresentAction(this.resourceStore.Get<ImageState>(0), this.resourceStore.Get<ImageState>(1), this.resourceStore.Get<ImageState>(2), telnetClient));
+		actionList.Add(new PresentAction(this.resourceStore.Get<ImageState>(0), this.resourceStore.Get<ImageState>(1), this.resourceStore.Get<ImageState>(2), this.presentOptimiser));
 
 		return new MtgpResponse(0, "ok");
 	}

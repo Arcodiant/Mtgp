@@ -3,12 +3,15 @@
     [WorkgroupId] int workgroupId;
 }
 
-[Binding=0] uniform vec<int,2> currentParticles;
-[Binding=1] uniform vec<int,2> newParticles;
+[Binding=0] uniform vec<int,4> currentParticles;
+[Binding=1] uniform vec<int,4> newParticles;
 
 func void Main(Input input)
 {
-    var vec<int,2> particle;
+    var vec<int,4> particle;
     particle = currentParticles[input.workgroupId];
-    newParticles[input.workgroupId] = Vec(particle.x + 1, particle.y);
+    var int newX;
+    newX = particle.x + particle.w;
+    newX = newX > 130 ? particle.z : newX;
+    newParticles[input.workgroupId] = Vec(newX, particle.y, particle.z, particle.w);
 }

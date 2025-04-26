@@ -4,7 +4,7 @@ using Mtgp.Shader;
 
 namespace Mtgp;
 
-public class PresentAction(ImageState characterImage, ImageState foregroundImage, ImageState backgroundImage, TelnetClient client)
+public class PresentAction(ImageState characterImage, ImageState foregroundImage, ImageState backgroundImage, IPresentReceiver receiver)
 	: IAction
 {
 	public void Execute(ILogger logger, ActionExecutionState state)
@@ -33,6 +33,6 @@ public class PresentAction(ImageState characterImage, ImageState foregroundImage
 			}
 		}
 
-		client.Draw(deltas);
+		receiver.Draw(deltas);
 	}
 }

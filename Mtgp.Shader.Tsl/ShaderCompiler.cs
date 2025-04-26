@@ -717,6 +717,8 @@ public class ShaderCompiler
 		{
 			"." => WriteDotExpression(state, expression, out id, out type),
 			"==" => WriteEqualityExpression(state, expression, out id, out type),
+			">" => WriteGreaterThanExpression(state, expression, out id, out type),
+			"<" => WriteLessThanExpression(state, expression, out id, out type),
 			"+" => WriteAddExpression(state, expression, out id, out type),
 			"-" => WriteSubtractExpression(state, expression, out id, out type),
 			"*" => WriteMultiplyExpression(state, expression, out id, out type),
@@ -818,6 +820,40 @@ public class ShaderCompiler
 			int typeId = GetTypeId(ref typesWriter, ShaderType.Bool);
 
 			return new(typesWriter, state.CodeWriter.Equals(id, typeId, leftId, rightId));
+		}
+		ShaderState WriteGreaterThanExpression(ShaderState state, BinaryExpression expression, out int id, out ShaderType type)
+		{
+			state = WriteExpression(state, expression.Left, out int leftId, out var leftType);
+			state = WriteExpression(state, expression.Right, out int rightId, out var rightType);
+			if (leftType != rightType)
+			{
+				throw new Exception($"Equality operands must have the same type, got {leftType} and {rightType}");
+			}
+
+			type = ShaderType.Bool;
+			id = GetNextId(type);
+
+			var typesWriter = state.TypesWriter;
+			int typeId = GetTypeId(ref typesWriter, ShaderType.Bool);
+
+			return new(typesWriter, state.CodeWriter.GreaterThan(id, typeId, leftId, rightId));
+		}
+		ShaderState WriteLessThanExpression(ShaderState state, BinaryExpression expression, out int id, out ShaderType type)
+		{
+			state = WriteExpression(state, expression.Left, out int leftId, out var leftType);
+			state = WriteExpression(state, expression.Right, out int rightId, out var rightType);
+			if (leftType != rightType)
+			{
+				throw new Exception($"Equality operands must have the same type, got {leftType} and {rightType}");
+			}
+
+			type = ShaderType.Bool;
+			id = GetNextId(type);
+
+			var typesWriter = state.TypesWriter;
+			int typeId = GetTypeId(ref typesWriter, ShaderType.Bool);
+
+			return new(typesWriter, state.CodeWriter.LessThan(id, typeId, leftId, rightId));
 		}
 		ShaderState WriteIntToFloat(ShaderState state, int value, out int id, out ShaderType type)
 		{

@@ -1,10 +1,7 @@
-﻿using Arch.Core.Extensions;
-using Mtgp.Server;
+﻿using Mtgp.Server;
 using Mtgp.Shader;
-using Mtgp.SpaceGame.Components;
 using Mtgp.SpaceGame.Services;
-using System.Text;
-using System.Threading.Channels;
+using System;
 
 namespace Mtgp.SpaceGame
 {
@@ -23,22 +20,31 @@ namespace Mtgp.SpaceGame
 			var particleVertexShader = await shaderManager.CreateShaderFromFileAsync("Shaders/Particle.vert");
 			var particleFragmentShader = await shaderManager.CreateShaderFromFileAsync("Shaders/Particle.frag");
 
+			int particleCount = 36;
+			int particleSize = 16;
+			int particleBufferSize = particleCount * particleSize;
+
 			await client.GetResourceBuilder()
 					.ActionList(out var actionListTask, "ActionList")
 					.Pipe(out var pipeTask, "ActionList")
-					.Buffer(out var bufferTask, 128, "Particles")
-					.BufferView(out var bufferView1Task, "Particles", 0, 64)
-					.BufferView(out var bufferView2Task, "Particles", 64, 64)
+					.Buffer(out var bufferTask, particleBufferSize * 2, "Particles")
+					.BufferView(out var bufferView1Task, "Particles", 0, particleBufferSize)
+					.BufferView(out var bufferView2Task, "Particles", particleBufferSize, particleBufferSize)
 					.ComputePipeline(out var pipelineTask, new(particleShader, "Main"))
 					.RenderPipeline(out var renderPipelineTask,
 										[new(ShaderStage.Vertex, particleVertexShader, "Main"), new(ShaderStage.Fragment, particleFragmentShader, "Main")],
-										new([new(0, 8, InputRate.PerInstance)],
+										new([new(0, particleSize, InputRate.PerInstance)],
 											[
 												new(0, 0, ShaderType.Int(4), 0),
-												new(1, 0, ShaderType.Int(4), 4)
+												new(1, 0, ShaderType.Int(4), 4),
+												new(2, 0, ShaderType.Int(4), 12)
 											]),
-										[],
-										new(new(0, 0, 0), new(80, 24, 1)),
+										[
+											new(0, ShaderType.Int(4), (1, 0, 0)),
+											new(1, ShaderType.Int(4), (1, 0, 0)),
+											new(2, ShaderType.Int(4), (1, 0, 0))
+										],
+										new(new(0, 0, 0), new(120, 36, 1)),
 										[],
 										false,
 										PolygonMode.Fill)
@@ -53,27 +59,27 @@ namespace Mtgp.SpaceGame
 
 			var presentImage = await client.GetPresentImage();
 
-			var particleBuffer = new byte[8];
+			var particleBuffer = new byte[particleSize];
 
-			int particleCount = 5;
+			int SpeedBand(int value) => (int)(5 - Math.Truncate(Math.Log2(value)));
 
 			for (int index = 0; index < particleCount; index++)
 			{
 				new BitWriter(particleBuffer)
-					.Write(10 + Random.Shared.Next(15))
-					.Write(10 + (index * 2));
+					.Write(Random.Shared.Next(120))
+					.Write(index)
+					.Write(-Random.Shared.Next(20))
+					.Write(SpeedBand(1 + Random.Shared.Next(30)));
 
-				await client.SetBufferData(buffer, 8 * index, particleBuffer);
+				await client.SetBufferData(buffer, particleSize * index, particleBuffer);
 			}
 
 			await client.AddDispatchAction(actionList, buffer, (particleCount, 1, 1), [bufferView1, bufferView2]);
-			await client.AddCopyBufferAction(actionList, buffer, buffer, 64, 0, 64);
+			await client.AddCopyBufferAction(actionList, buffer, buffer, particleBufferSize, 0, particleBufferSize);
 			await client.AddClearBufferAction(actionList, presentImage.Foreground);
 			await client.AddBindVertexBuffers(actionList, 0, [(bufferView1, 0)]);
 			await client.AddDrawAction(actionList, renderPipeline, [], [], presentImage, particleCount, 2);
 			await client.AddPresentAction(actionList);
-
-			await client.Send(pipe, []);
 
 			var waitHandle = new TaskCompletionSource();
 
@@ -86,12 +92,9 @@ namespace Mtgp.SpaceGame
 
 			await client.SetDefaultPipe(DefaultPipe.Input, -1, [], false);
 
-			while (!waitHandle.Task.IsCompleted)
-			{
-				await Task.Delay(200, cancellationToken);
+			await client.SetTimerTrigger(actionList, 1000);
 
-				await client.Send(pipe, []);
-			}
+			await waitHandle.Task;
 		}
 	}
 }

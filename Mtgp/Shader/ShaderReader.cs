@@ -313,6 +313,24 @@ public readonly ref struct ShaderReader(BitReader reader)
 		return new(reader);
 	}
 
+	public readonly ShaderReader GreaterThan(out int result, out int type, out int left, out int right)
+	{
+		var reader = this.ReadShaderOp(ShaderOp.GreaterThan, ShaderOpConstants.BinaryWordCount);
+
+		reader = reader.Read(out result).Read(out type).Read(out left).Read(out right);
+
+		return new(reader);
+	}
+
+	public readonly ShaderReader LessThan(out int result, out int type, out int left, out int right)
+	{
+		var reader = this.ReadShaderOp(ShaderOp.LessThan, ShaderOpConstants.BinaryWordCount);
+
+		reader = reader.Read(out result).Read(out type).Read(out left).Read(out right);
+
+		return new(reader);
+	}
+
 	public readonly ShaderReader Conditional(out int result, out int type, out int condition, out int trueValue, out int falseValue)
 	{
 		var reader = this.ReadShaderOp(ShaderOp.Conditional, ShaderOpConstants.ConditionalWordCount);

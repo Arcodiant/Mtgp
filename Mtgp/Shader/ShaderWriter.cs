@@ -150,6 +150,20 @@ public readonly ref struct ShaderWriter(BitWriter writer)
 							.Write(left)
 							.Write(right));
 
+	public readonly ShaderWriter GreaterThan(int result, int type, int left, int right)
+		=> new(this.Write(ShaderOp.GreaterThan, ShaderOpConstants.BinaryWordCount)
+							.Write(result)
+							.Write(type)
+							.Write(left)
+							.Write(right));
+
+	public readonly ShaderWriter LessThan(int result, int type, int left, int right)
+		=> new(this.Write(ShaderOp.LessThan, ShaderOpConstants.BinaryWordCount)
+							.Write(result)
+							.Write(type)
+							.Write(left)
+							.Write(right));
+
 	public readonly ShaderWriter Conditional(int result, int type, int condition, int trueValue, int falseValue)
 		=> new(this.Write(ShaderOp.Conditional, ShaderOpConstants.ConditionalWordCount)
 							.Write(result)

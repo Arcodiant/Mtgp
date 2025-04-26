@@ -513,6 +513,44 @@ public class ShaderInterpreter
 						types[result] = types[type];
 						break;
 					}
+				case ShaderOp.GreaterThan:
+					{
+						shaderReader = shaderReader.GreaterThan(out result, out int type, out int a, out int b);
+
+						if (types[a] != types[b])
+						{
+							throw new InvalidOperationException($"Equals operands must have the same type");
+						}
+
+						if (types[type] != ShaderType.Bool)
+						{
+							throw new InvalidOperationException($"Equals result must be bool");
+						}
+
+						ApplyOperator(types[a], GetSpan(a, workingSet), GetSpan(b, workingSet), GetTarget(result, type, workingSet), (a, b) => a > b ? 0 : 1, (a, b) => a > b ? 0 : 1);
+
+						types[result] = types[type];
+						break;
+					}
+				case ShaderOp.LessThan:
+					{
+						shaderReader = shaderReader.LessThan(out result, out int type, out int a, out int b);
+
+						if (types[a] != types[b])
+						{
+							throw new InvalidOperationException($"Equals operands must have the same type");
+						}
+
+						if (types[type] != ShaderType.Bool)
+						{
+							throw new InvalidOperationException($"Equals result must be bool");
+						}
+
+						ApplyOperator(types[a], GetSpan(a, workingSet), GetSpan(b, workingSet), GetTarget(result, type, workingSet), (a, b) => a < b ? 0 : 1, (a, b) => a < b ? 0 : 1);
+
+						types[result] = types[type];
+						break;
+					}
 				case ShaderOp.Conditional:
 					{
 						shaderReader = shaderReader.Conditional(out result, out int type, out int condition, out int trueValue, out int falseValue);

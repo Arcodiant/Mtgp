@@ -7,7 +7,7 @@ using System.Threading.Channels;
 namespace Mtgp;
 
 public class TelnetClient
-	: IDisposable
+	: IDisposable, IPresentReceiver
 {
 	private readonly TcpClient client;
 	private readonly NetworkStream stream;

@@ -566,6 +566,42 @@ public class ShaderJitter
 
 						break;
 					}
+				case ShaderOp.GreaterThan:
+					{
+						reader.GreaterThan(out int resultId, out int type, out int a, out int b);
+
+						if (types[a] != types[b])
+						{
+							throw new InvalidOperationException($"Equals operands must have the same type");
+						}
+
+						if (types[type] != ShaderType.Bool)
+						{
+							throw new InvalidOperationException($"Equals result must be bool");
+						}
+
+						SetValue(resultId, ShaderType.Bool, emitter => EmitValues(emitter, a, b).CompareGreaterThan());
+
+						break;
+					}
+				case ShaderOp.LessThan:
+					{
+						reader.LessThan(out int resultId, out int type, out int a, out int b);
+
+						if (types[a] != types[b])
+						{
+							throw new InvalidOperationException($"Equals operands must have the same type");
+						}
+
+						if (types[type] != ShaderType.Bool)
+						{
+							throw new InvalidOperationException($"Equals result must be bool");
+						}
+
+						SetValue(resultId, ShaderType.Bool, emitter => EmitValues(emitter, a, b).CompareLessThan());
+
+						break;
+					}
 				case ShaderOp.Conditional:
 					{
 						reader.Conditional(out int resultId, out int type, out int condition, out int trueValue, out int falseValue);
