@@ -6,8 +6,6 @@ namespace System;
 
 public static class StreamExtensions
 {
-	private readonly static SemaphoreSlim writeSemaphore = new(1);
-
 	public static async Task<byte[]> ReadBlockAsync(this Stream stream, ILogger logger)
 	{
 		byte[] header = new byte[4];
@@ -20,20 +18,20 @@ public static class StreamExtensions
 
 		await stream.ReadExactlyAsync(block);
 
-		logger.LogTrace("Read {BlockSize} bytes {Data}", blockSize, block);
+		logger.LogReadBlock(blockSize, block);
 
 		return block;
 	}
 
 	public static async Task WriteMessageAsync<T>(this Stream stream, T message, ILogger logger)
 	{
-		logger.LogTrace("Writing message {@Message}", message);
+		logger.LogWriteMessage(message);
 
 		byte[] messageBytes = JsonSerializer.SerializeToUtf8Bytes(message, Shared.JsonSerializerOptions);
 
 		byte[] header = BitConverter.GetBytes(messageBytes.Length);
 
-		logger.LogTrace("Writing {MessageBytes} bytes {Data}", messageBytes.Length, messageBytes);
+		logger.LogWritingBytes(messageBytes.Length, messageBytes);
 
 		byte[] payload = [.. header, .. messageBytes];
 
@@ -42,13 +40,13 @@ public static class StreamExtensions
 
 	public static async Task WriteMessageAsync(this Stream stream, object message, Type messageType, ILogger logger)
 	{
-		logger.LogTrace("Writing message {@Message}", message);
+		logger.LogWriteMessage(message);
 
 		byte[] messageBytes = JsonSerializer.SerializeToUtf8Bytes(message, messageType, Shared.JsonSerializerOptions);
 
 		byte[] header = BitConverter.GetBytes(messageBytes.Length);
 
-		logger.LogTrace("Writing {MessageBytes} bytes {Data}", messageBytes.Length, messageBytes);
+		logger.LogWritingBytes(messageBytes.Length, messageBytes);
 
 		byte[] payload = [.. header, .. messageBytes];
 

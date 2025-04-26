@@ -52,7 +52,7 @@ public class MtgpConnection(ILogger<MtgpConnection> logger, Stream stream)
 		}
 	}
 
-	public event Func<(MtgpRequest Message, byte[] Data), Task> Receive;
+	public event Func<(MtgpRequest Message, byte[] Data), Task>? Receive;
 
 	public async Task SendResponseAsync(int id, string result)
 		=> await this.stream.WriteMessageAsync(new MtgpResponse(id, result), logger);
