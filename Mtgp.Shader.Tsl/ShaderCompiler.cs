@@ -4,6 +4,7 @@ using Superpower.Parsers;
 using Superpower.Tokenizers;
 using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
+using System.Text;
 
 namespace Mtgp.Shader.Tsl;
 
@@ -40,10 +41,14 @@ internal enum PartType
 	Divide,
 	And,
 	Or,
-	Percent
+	Percent,
+	CharacterLiteral
 }
 
 internal record Expression();
+
+internal record CharacterLiteralExpression(char Value)
+	: Expression;
 
 internal record IntegerLiteralExpression(int Value)
 	: Expression;
@@ -76,6 +81,8 @@ public class ShaderCompiler
 														 from second in Numerics.Integer
 														 select new TextSpan(first.Source!, first.Position, first.Length + second.Length + 1);
 
+	public static TextParser<char> CharacterLiteral { get; } = QuotedString.SqlStyle.Where(x => x.Length == 1).Select(x => x[0]);
+
 	private readonly static Tokenizer<PartType> token = new TokenizerBuilder<PartType>()
 														.Ignore(Span.WhiteSpace)
 														.Match(Character.EqualTo('{'), PartType.LBlockParen)
@@ -106,6 +113,7 @@ public class ShaderCompiler
 														.Match(Span.EqualTo("var"), PartType.Var)
 														.Match(Float, PartType.DecimalLiteral)
 														.Match(Numerics.Integer, PartType.IntegerLiteral)
+														.Match(CharacterLiteral, PartType.CharacterLiteral)
 														.Match(Identifier.CStyle, PartType.Identifier)
 														.Build();
 
@@ -544,10 +552,11 @@ public class ShaderCompiler
 				{
 					TokenExpression tokenExpression => WriteTokenExpression(state, tokenExpression, out id, out type),
 					IntegerLiteralExpression integerLiteralExpression => WriteIntegerLiteralExpression(state, integerLiteralExpression, out id, out type),
+					FloatLiteralExpression floatLiteralExpression => WriteFloatLiteralExpression(state, floatLiteralExpression, out id, out type),
+					CharacterLiteralExpression characterLiteralExpression => WriteCharacterLiteralExpression(state, characterLiteralExpression, out id, out type),
 					BinaryExpression binaryExpression => WriteBinaryExpression(state, binaryExpression, out id, out type),
 					FunctionExpression functionExpression => WriteFunctionExpression(state, functionExpression, out id, out type),
 					TernaryExpression ternaryExpression => WriteTernaryExpression(state, ternaryExpression, out id, out type),
-					FloatLiteralExpression floatLiteralExpression => WriteFloatLiteralExpression(state, floatLiteralExpression, out id, out type),
 					ArrayAccessExpression arrayAccessExpression => WriteArrayAccessExpression(state, arrayAccessExpression, out id, out type),
 					NegateExpression negateExpression => WriteNegateExpression(state, negateExpression, out id, out type),
 					_ => throw new Exception($"Unknown expression type: {expression}")
@@ -734,6 +743,17 @@ public class ShaderCompiler
 			var typesWriter = state.TypesWriter;
 
 			return state.WithTypesWriter(typesWriter.Constant(id, GetTypeId(ref typesWriter, type), expression.Value));
+		}
+		ShaderState WriteCharacterLiteralExpression(ShaderState state, CharacterLiteralExpression expression, out int id, out ShaderType type)
+		{
+			type = ShaderType.Int(4);
+			id = GetNextId(type);
+
+			var typesWriter = state.TypesWriter;
+
+			int value = BitConverter.ToInt32(Encoding.UTF32.GetBytes([expression.Value]));
+
+			return state.WithTypesWriter(typesWriter.Constant(id, GetTypeId(ref typesWriter, type), value));
 		}
 		ShaderState WriteFloatLiteralExpression(ShaderState state, FloatLiteralExpression expression, out int id, out ShaderType type)
 		{

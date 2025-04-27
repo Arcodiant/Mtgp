@@ -24,6 +24,6 @@ func Output Main(Input input)
 	result.starPositionX = input.x;
     result.positionX = input.vertexIndex == 0 ? (input.x - length) : input.x;
     result.positionY = input.y;
-    result.character = input.speed == 1 ? 46 : (input.speed == 2 ? 43 : (input.speed == 3 ? 42 : 48));
-    result.tailCharacter = input.speed > 3 ? 61 : 45;
+    result.character = input.speed == 1 ? '.' : (input.speed == 2 ? '+' : (input.speed == 3 ? '*' : 'O'));
+    result.tailCharacter = input.speed > 3 ? '=' : '-';
 }

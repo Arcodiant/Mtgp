@@ -1,5 +1,6 @@
-using Mtgp.Proxy.Shader;
+﻿using Mtgp.Proxy.Shader;
 using FluentAssertions;
+using System.Text;
 
 namespace Mtgp.Shader.Tsl.Tests
 {
@@ -97,6 +98,44 @@ func Output Main()
 			value1.Should().Be(left == right ? 1 : 0);
 			value2.Should().Be(left > right ? 1 : 0);
 			value3.Should().Be(left < right ? 1 : 0);
+		}
+
+		[TestMethod]
+		[DataRow('a')]
+		[DataRow('b')]
+		[DataRow(' ')]
+		[DataRow('1')]
+		[DataRow('!')]
+		[DataRow('づ')]
+		[DataRow('™')]
+		public void ShouldCompileCharacterLiterals(char character)
+		{
+			var shader = $@"
+struct Output
+{{
+	[Location=0] int value1;
+}}
+
+func Output Main()
+{{
+	result.value1 = '{character}';
+}}
+			";
+
+			var target = new ShaderCompiler();
+			var result = target.Compile(shader);
+
+			Console.WriteLine(ShaderDisassembler.Disassemble(result));
+
+			var executor = ShaderJitter.Create(result);
+
+			Span<byte> outputSpan = stackalloc byte[executor.OutputMappings.Size];
+
+			executor.Execute([], [], [], outputSpan);
+
+			var value1 = Encoding.UTF32.GetString(executor.OutputMappings.GetLocation(outputSpan, 0))[0];
+
+			value1.Should().Be(character);
 		}
 	}
 }
