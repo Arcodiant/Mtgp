@@ -20,7 +20,7 @@ internal class LocalStorageDataScheme : IDataScheme
 		}
 		else if (File.Exists(dataFilePath))
 		{
-			this.data = JsonSerializer.Deserialize<Dictionary<string, Data>> (File.ReadAllText(dataFilePath))!;
+			this.data = JsonSerializer.Deserialize<Dictionary<string, Data>>(File.ReadAllText(dataFilePath))!;
 		}
 	}
 

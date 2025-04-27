@@ -1,4 +1,5 @@
 ﻿using Mtgp.Messages;
+using Mtgp.Proxy.Telnet;
 using Mtgp.Shader;
 using System.Text;
 

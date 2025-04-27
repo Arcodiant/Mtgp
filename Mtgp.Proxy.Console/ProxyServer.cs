@@ -9,9 +9,6 @@ namespace Mtgp.Proxy.Console;
 internal class ProxyServer(IFactory<ProxySession, TcpClient> sessionFactory, ILogger<ProxyServer> logger, IHostApplicationLifetime applicationLifetime)
 	: IHostedService
 {
-	private readonly ILogger<ProxyServer> logger = logger;
-	private readonly IHostApplicationLifetime applicationLifetime = applicationLifetime;
-
 	private readonly TcpListener listener = new(IPAddress.Any, 12345);
 	private readonly CancellationTokenSource runCancellationSource = new();
 
@@ -29,17 +26,17 @@ internal class ProxyServer(IFactory<ProxySession, TcpClient> sessionFactory, ILo
 		}
 		catch (Exception ex)
 		{
-			this.logger.LogError(ex, "Error running session");
+			logger.LogError(ex, "Error running session");
 		}
 		finally
 		{
-			this.applicationLifetime.StopApplication();
+			applicationLifetime.StopApplication();
 		}
 	}
 
 	public Task StartAsync(CancellationToken cancellationToken)
 	{
-		this.logger.LogInformation("Starting...");
+		logger.LogInformation("Starting...");
 
 		this.listener.Start();
 
@@ -50,7 +47,7 @@ internal class ProxyServer(IFactory<ProxySession, TcpClient> sessionFactory, ILo
 
 	public Task StopAsync(CancellationToken cancellationToken)
 	{
-		this.logger.LogInformation("Stopping...");
+		logger.LogInformation("Stopping...");
 
 		this.listener.Stop();
 

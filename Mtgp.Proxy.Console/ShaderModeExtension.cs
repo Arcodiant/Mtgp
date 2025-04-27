@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using Mtgp.Messages;
 using Mtgp.Messages.Resources;
+using Mtgp.Proxy.Telnet;
 using Mtgp.Proxy.Shader;
 using Mtgp.Shader;
 using System.Diagnostics;
@@ -61,7 +62,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 
 	private readonly Dictionary<DefaultPipe, (int PipeId, Dictionary<ChannelType, ImageFormat> ChannelSet)> defaultPipeBindings = [];
 	private readonly Dictionary<int, DefaultPipe> defaultPipeLookup = [];
-
+	private TelnetPresentReceiver? presentReceiver;
 	private PresentOptimiser? presentOptimiser;
 
 	public void RegisterMessageHandlers(ProxyController proxy)
@@ -78,7 +79,8 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 
 		telnetClient.SetWindowSize(height, width);
 
-		this.presentOptimiser = new(telnetClient, new Extent2D(width, height));
+		this.presentReceiver = new(telnetClient);
+		this.presentOptimiser = new(this.presentReceiver, new Extent2D(width, height));
 
 		this.resourceStore.Add(new ImageState((width, height, 1), ImageFormat.T32_SInt));
 		this.resourceStore.Add(new ImageState((width, height, 1), ImageFormat.R32G32B32_SFloat));

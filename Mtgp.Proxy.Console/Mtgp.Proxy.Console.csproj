@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Mtgp.Comms\Mtgp.Comms.csproj" />
     <ProjectReference Include="..\Mtgp.Proxy.Shader\Mtgp.Proxy.Shader.csproj" />
+    <ProjectReference Include="..\Mtgp.Proxy.Telnet\Mtgp.Proxy.Telnet.csproj" />
   </ItemGroup>
 
 </Project>

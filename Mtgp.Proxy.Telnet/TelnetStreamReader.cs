@@ -1,9 +1,9 @@
-﻿using Serilog;
+﻿using Microsoft.Extensions.Logging;
 using System.Text;
 
-namespace Mtgp;
+namespace Mtgp.Proxy.Telnet;
 
-public class TelnetStreamReader(Stream stream)
+public class TelnetStreamReader(Stream stream, ILogger<TelnetStreamReader> logger)
 {
 	private readonly Stream stream = stream;
 	private ReceiveState receiveState = ReceiveState.Character;
@@ -53,7 +53,7 @@ public class TelnetStreamReader(Stream stream)
 
 			byte datum = this.buffer[offset];
 
-			Log.Verbose("Handle byte {Datum}", datum);
+			logger.LogTrace("Handle byte {Datum}", datum);
 
 			offset++;
 
@@ -118,7 +118,7 @@ public class TelnetStreamReader(Stream stream)
 				case ReceiveState.SbEscaped:
 					if ((TelnetCommand)datum == TelnetCommand.IAC)
 					{
-						this.data.Add((byte)0xff);
+						this.data.Add(0xff);
 						this.receiveState = ReceiveState.SbData;
 					}
 					else

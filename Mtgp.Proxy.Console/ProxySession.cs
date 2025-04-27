@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using Mtgp.Comms;
 using Mtgp.Messages;
+using Mtgp.Proxy.Telnet;
 using Mtgp.Shader;
 using System.Diagnostics;
 using System.Net.Sockets;
@@ -12,7 +13,7 @@ namespace Mtgp.Proxy.Console
 	{
 		public async Task RunAsync()
 		{
-			using var telnetClient = new TelnetClient(telnetTcpClient);
+			using var telnetClient = new TelnetClient(telnetTcpClient, loggerFactory.CreateLogger<TelnetClient>(), loggerFactory);
 
 			telnetClient.SendCommand(TelnetCommand.DONT, TelnetOption.Echo);
 			telnetClient.SendCommand(TelnetCommand.WILL, TelnetOption.Echo);

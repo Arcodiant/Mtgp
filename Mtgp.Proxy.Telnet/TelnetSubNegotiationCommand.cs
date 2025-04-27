@@ -1,4 +1,4 @@
-﻿namespace Mtgp;
+﻿namespace Mtgp.Proxy.Telnet;
 
 public enum TelnetSubNegotiationCommand
 {
