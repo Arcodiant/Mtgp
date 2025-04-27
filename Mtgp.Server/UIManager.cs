@@ -3,7 +3,7 @@ using System.Text;
 
 namespace Mtgp.Server;
 
-public class UIManager(IShaderManager shaderManager, MtgpClient client)
+public class UIManager(IShaderManager shaderManager, IBufferManager bufferManager, MtgpClient client)
 {
 	private readonly List<StringSplitData> stringSplitAreas = [];
 	private readonly List<PanelData> panels = [];

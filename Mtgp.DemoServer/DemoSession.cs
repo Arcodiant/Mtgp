@@ -3,39 +3,39 @@ using Microsoft.Extensions.Options;
 using Mtgp.Server;
 using Mtgp.Shader;
 using System.Net;
-using System.Net.Sockets;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Mtgp.DemoServer;
 
-internal class DemoSession(Factory factory, TcpClient tcpClient, ILogger<DemoSession> logger, IOptions<Auth0Options> options)
+internal class DemoSession(MtgpClient client, ILogger<DemoSession> logger, IOptions<Auth0Options> options)
 	: IMtgpSession
 {
-	private readonly MtgpClient client = factory.Create<MtgpClient, Stream>(tcpClient.GetStream());
-
 	public void Dispose()
 	{
-		tcpClient.Dispose();
 	}
 
 	public async Task RunAsync(CancellationToken token)
 	{
-		var runLock = new TaskCompletionSource();
+		await Login();
 
-		await client.StartAsync(true);
+		await RunMenu();
 
-		client.SendReceived += async message =>
+		var waitHandle = new TaskCompletionSource();
+
+		client.SendReceived += message =>
 		{
-			runLock.SetResult();
+			waitHandle.SetResult();
+
+			return Task.CompletedTask;
 		};
 
-		await client.SetDefaultPipe(DefaultPipe.Input, 1, new() { [ChannelType.Character] = ImageFormat.T32_SInt }, true);
+		await client.SetDefaultPipe(DefaultPipe.Input, -1, [], false);
 
-		await runLock.Task;
+		await waitHandle.Task;
 	}
 
-	private async Task Login(ILogger<DemoSession> logger, IOptions<Auth0Options> options)
+	private async Task Login()
 	{
 		try
 		{
@@ -146,17 +146,19 @@ internal class DemoSession(Factory factory, TcpClient tcpClient, ILogger<DemoSes
 		await client.SetBufferData(vertexBuffer, 0, [.. menuItemsInstances]);
 		await client.SetBufferData(uniformBuffer, 0, [0, 0, 0, 0]);
 
-		int menuItemSelected = 0;
+		int menuItemSelected = 1;
 
 		await client.GetResourceBuilder()
 					.BufferView(out var uniformBufferViewTask, uniformBuffer, 0, 4)
 					.BuildAsync();
 
+		await client.SetBufferData(uniformBuffer, 0, BitConverter.GetBytes(menuItemSelected));
+
 		int uniformBufferView = await uniformBufferViewTask;
 
 		await client.GetResourceBuilder()
 					.RenderPipeline(out var renderPipelineTask,
-						 [new(ShaderStage.Vertex, menuVertexShader, ""), new(ShaderStage.Fragment, menuFragmentShader, "")],
+						 [new(ShaderStage.Vertex, menuVertexShader, "Main"), new(ShaderStage.Fragment, menuFragmentShader, "Main")],
 						 new(
 							 [new(0, 16, InputRate.PerInstance)],
 							 [

@@ -19,7 +19,7 @@ try
 	var builder = Host.CreateApplicationBuilder(args);
 	builder.Services.AddTransient<Factory>();
 	builder.Services.AddDefaultFactories();
-	builder.Services.AddImplementingFactory<IMtgpSession, DemoSession, TcpClient>();
+	builder.Services.AddImplementingFactory<IMtgpSession, DemoSession, MtgpClient>();
 	builder.Services.AddHostedService<MtgpServer>();
 	builder.Services.AddSerilog();
 	builder.Services.Configure<Auth0Options>(options =>

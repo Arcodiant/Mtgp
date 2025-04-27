@@ -165,8 +165,6 @@ internal class FlightSession(MtgpClient client, IWorldManager world)
 
 		await client.SetTimerTrigger(actionList, 10);
 
-		//await client.Send(pipe, []);
-
 		await waitHandle.Task;
 	}
 }

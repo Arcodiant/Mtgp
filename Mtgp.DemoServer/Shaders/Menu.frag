@@ -19,7 +19,7 @@ struct Input
 
 func Output Main(Input input)
 {
-    result.colour = input.index == menuIndex ? Vec(1.0, 0.0, 1.0) : Vec(1.0, 1.0, 1.0);
+    result.colour = input.index == menuIndex[0] ? Vec(1.0, 0.0, 1.0) : Vec(1.0, 1.0, 1.0);
     result.background = Vec(0.0, 0.0, 0.0);
     result.character = Gather(text, Vec(input.u, input.v));
 }
