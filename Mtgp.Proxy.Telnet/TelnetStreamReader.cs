@@ -1,20 +1,13 @@
-﻿using Microsoft.Extensions.Logging;
-using System.Text;
+﻿using System.Text;
 
 namespace Mtgp.Proxy.Telnet;
 
-public class TelnetStreamReader(Stream stream, ILogger<TelnetStreamReader> logger)
+public class TelnetStreamReader
 {
-	private readonly Stream stream = stream;
 	private ReceiveState receiveState = ReceiveState.Character;
+	private AnsiCodeState ansiCodeState = AnsiCodeState.Character;
 	private TelnetCommand receivedCommand;
 	private TelnetOption sbOption;
-
-	private readonly byte[] buffer = new byte[1024];
-	private int offset = 0;
-	private int count = 0;
-
-	private readonly List<byte> data = [];
 
 	private enum ReceiveState
 	{
@@ -26,34 +19,21 @@ public class TelnetStreamReader(Stream stream, ILogger<TelnetStreamReader> logge
 		SbEscaped
 	}
 
-	public async Task<TelnetEvent> ReadNextAsync()
+	private enum AnsiCodeState
 	{
-		while (true)
+		Character,
+		Escaped,
+		Csi
+	}
+
+	public void GetEvents(ReadOnlySpan<byte> data, Queue<TelnetEvent> events)
+	{
+		var buffer = new List<byte>();
+		int offset = 0;
+
+		while (offset < data.Length)
 		{
-			if (offset >= count)
-			{
-				if (this.receiveState == ReceiveState.Character && this.data.Count > 0)
-				{
-					var dataBuffer = this.data.ToArray();
-
-					this.data.Clear();
-
-					return new TelnetStringEvent(Encoding.UTF8.GetString(dataBuffer));
-				}
-
-				count = await this.stream.ReadAsync(buffer);
-
-				if (count == 0)
-				{
-					return new TelnetCloseEvent();
-				}
-
-				offset = 0;
-			}
-
-			byte datum = this.buffer[offset];
-
-			logger.LogTrace("Handle byte {Datum}", datum);
+			byte datum = data[offset];
 
 			offset++;
 
@@ -63,10 +43,60 @@ public class TelnetStreamReader(Stream stream, ILogger<TelnetStreamReader> logge
 					if ((TelnetCommand)datum == TelnetCommand.IAC)
 					{
 						this.receiveState = ReceiveState.Escaped;
+
+						if (buffer.Count > 0)
+						{
+							events.Enqueue(new TelnetStringEvent([.. buffer]));
+							buffer.Clear();
+						}
 					}
 					else
 					{
-						this.data.Add(datum);
+						switch(this.ansiCodeState)
+						{
+							case AnsiCodeState.Character:
+								if (datum == 0x1b)
+								{
+									this.ansiCodeState = AnsiCodeState.Escaped;
+								}
+								else if (datum == 0x9b)
+								{
+									this.ansiCodeState = AnsiCodeState.Csi;
+								}
+								else
+								{
+									buffer.Add(datum);
+								}
+								break;
+							case AnsiCodeState.Escaped:
+								if (datum == '[')
+								{
+									this.ansiCodeState = AnsiCodeState.Csi;
+								}
+								else
+								{
+									this.ansiCodeState = AnsiCodeState.Character;
+									buffer.Add(0x1b);
+
+									if (datum != 0x1b)
+									{
+										buffer.Add(datum);
+									}
+								}
+								break;
+							case AnsiCodeState.Csi:
+								if(char.IsLetter((char)datum))
+								{
+									this.ansiCodeState = AnsiCodeState.Character;
+									events.Enqueue(new TelnetCsiEvent([.. buffer], (char)datum));
+									buffer.Clear();
+								}
+								else
+								{
+									buffer.Add(datum);
+								}
+								break;
+						}
 					}
 					break;
 				case ReceiveState.Escaped:
@@ -83,7 +113,7 @@ public class TelnetStreamReader(Stream stream, ILogger<TelnetStreamReader> logge
 							break;
 						case TelnetCommand.IAC:
 							this.receiveState = ReceiveState.Character;
-							this.data.Add(0xff);
+							buffer.Add(0xff);
 							break;
 						case TelnetCommand.SB:
 							this.receiveState = ReceiveState.SbInitial;
@@ -97,10 +127,8 @@ public class TelnetStreamReader(Stream stream, ILogger<TelnetStreamReader> logge
 				case ReceiveState.Negotiation:
 					this.receiveState = ReceiveState.Character;
 
-					return new TelnetCommandEvent(this.receivedCommand)
-					{
-						Option = (TelnetOption)datum
-					};
+					events.Enqueue(new TelnetCommandEvent(this.receivedCommand, (TelnetOption)datum));
+					break;
 				case ReceiveState.SbInitial:
 					this.receiveState = ReceiveState.SbData;
 					this.sbOption = (TelnetOption)datum;
@@ -112,53 +140,58 @@ public class TelnetStreamReader(Stream stream, ILogger<TelnetStreamReader> logge
 					}
 					else
 					{
-						this.data.Add(datum);
+						buffer.Add(datum);
 					}
 					break;
 				case ReceiveState.SbEscaped:
 					if ((TelnetCommand)datum == TelnetCommand.IAC)
 					{
-						this.data.Add(0xff);
+						buffer.Add(0xff);
 						this.receiveState = ReceiveState.SbData;
 					}
 					else
 					{
 						this.receiveState = ReceiveState.Character;
-						var dataBuffer = this.data.ToArray();
-
-						this.data.Clear();
-
-						return new TelnetCommandEvent(TelnetCommand.SB)
-						{
-							Option = this.sbOption,
-							Data = dataBuffer
-						};
+						events.Enqueue(new TelnetSubNegotiationEvent(this.sbOption, [.. buffer]));
+						buffer.Clear();
 					}
 					break;
 			}
 		}
+
+		if (buffer.Count > 0)
+		{
+			events.Enqueue(new TelnetStringEvent(Encoding.UTF8.GetString([.. buffer])));
+			buffer.Clear();
+		}
 	}
 }
 
-public abstract class TelnetEvent
-{
-}
+public abstract record TelnetEvent;
 
-public class TelnetCloseEvent
+public record TelnetCommandEvent(TelnetCommand Command, TelnetOption Option)
+	: TelnetEvent;
+
+public record TelnetSubNegotiationEvent(TelnetOption Option, byte[] Data)
+	: TelnetEvent;
+
+public record TelnetStringEvent(string Value)
 	: TelnetEvent
 {
+	public TelnetStringEvent(ReadOnlySpan<byte> data)
+		: this(Encoding.UTF8.GetString(data))
+	{
+	}
 }
 
-public class TelnetCommandEvent(TelnetCommand command)
+public record TelnetCloseEvent
+	: TelnetEvent;
+
+public record TelnetCsiEvent(string Value, char Suffix)
 	: TelnetEvent
 {
-	public TelnetCommand Command { get; } = command;
-	public TelnetOption? Option { get; init; }
-	public byte[]? Data { get; init; }
-}
-
-public class TelnetStringEvent(string value)
-		: TelnetEvent
-{
-	public string Value { get; } = value;
+	public TelnetCsiEvent(ReadOnlySpan<byte> data, char suffix)
+		: this(Encoding.UTF8.GetString(data), suffix)
+	{
+	}
 }

@@ -9,10 +9,12 @@ internal class DataExtension(IEnumerable<IDataScheme> dataSchemes)
 
 	private static string GetPath(Uri uri) => $"/{uri.Host}{uri.AbsolutePath}";
 
-	public void RegisterMessageHandlers(ProxyController controller)
+	public Task RegisterMessageHandlersAsync(ProxyController controller)
 	{
 		controller.RegisterMessageHandler<GetDataRequest>(this.HandleGetDataRequest);
 		controller.RegisterMessageHandler<SetDataRequest>(this.HandleSetDataRequest);
+
+		return Task.CompletedTask;
 	}
 
 	private MtgpResponse HandleGetDataRequest(GetDataRequest request)

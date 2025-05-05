@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <UserSecretsId>de4ae4b0-f60d-42e5-81ac-d8e6b18edd9f</UserSecretsId>
+    <RootNamespace>Mtgp.Proxy</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,58 +1,123 @@
 ﻿using Microsoft.Extensions.Logging;
 using Mtgp.Comms;
 using Mtgp.Messages;
+using Mtgp.Proxy.Profiles;
 using Mtgp.Proxy.Telnet;
 using Mtgp.Shader;
+using Mtgp.Util;
+using Serilog;
 using System.Diagnostics;
 using System.Net.Sockets;
 using System.Text.Json;
 
 namespace Mtgp.Proxy.Console
 {
-	internal class ProxySession(TcpClient telnetTcpClient, ILogger<ProxySession> logger, ILoggerFactory loggerFactory)
+	internal class ProxySession(TcpClient telnetTcpClient, IFactory<TelnetConnection, TelnetClient> connectionFactory, IFactory<ShaderModeExtension, TelnetClient> shaderModeFactory, ILogger<ProxySession> logger)
 	{
+		static ClientProfile IdentifyProfile(IEnumerable<string> terminalTypes)
+		{
+			foreach (var (terminalType, profile) in ClientProfile.ByTerminalType)
+			{
+				if (terminalTypes.Contains(terminalType))
+				{
+					return profile;
+				}
+			}
+
+			var mttsCaps = MttsCaps.None;
+
+			if (terminalTypes.Any(type => type.StartsWith("mtts")))
+			{
+				mttsCaps = (MttsCaps)int.Parse(terminalTypes.Single(type => type.StartsWith("mtts")).AsSpan(4));
+
+				var colourSpace = ClientColourSpace.ANSI;
+
+				if (mttsCaps.HasFlag(MttsCaps.TrueColour))
+				{
+					colourSpace = ClientColourSpace.True;
+				}
+				else if (mttsCaps.HasFlag(MttsCaps._256Colours))
+				{
+					colourSpace = ClientColourSpace._256;
+				}
+
+				var clientCaps = ClientCap.None;
+
+				if (mttsCaps.HasFlag(MttsCaps.VT100))
+				{
+					clientCaps |= ClientCap.SetCursor;
+				}
+
+				return new ClientProfile("MTTS", colourSpace, clientCaps);
+			}
+
+			if (terminalTypes.Contains("xterm"))
+			{
+				return new ClientProfile("XTerm", ClientColourSpace.True, ClientCap.SetCursor | ClientCap.GetWindowSize | ClientCap.SetWindowSize | ClientCap.SetTitle);
+			}
+
+			return new ClientProfile("Basic", ClientColourSpace.ANSI, ClientCap.None);
+		}
+
 		public async Task RunAsync()
 		{
-			using var telnetClient = new TelnetClient(telnetTcpClient, loggerFactory.CreateLogger<TelnetClient>(), loggerFactory);
+			using var telnetClient = new TelnetClient(telnetTcpClient);
 
-			telnetClient.SendCommand(TelnetCommand.DONT, TelnetOption.Echo);
-			telnetClient.SendCommand(TelnetCommand.WILL, TelnetOption.Echo);
+			var connection = connectionFactory.Create(telnetClient);
 
-			telnetClient.SendCommand(TelnetCommand.DO, TelnetOption.TerminalType);
+			connection.Start();
 
-			var terminalType = (await telnetClient.GetTerminalType()).ToLower();
+			await connection.RequestOptionAndWaitAsync(TelnetCommand.DO, TelnetOption.TerminalType);
+			await connection.RequestOptionAndWaitAsync(TelnetCommand.DO, TelnetOption.NewEnvironmentOption, force: true);
 
+			var terminalType = (await connection.GetTerminalTypeAsync()).ToLower();
 			var terminalTypes = new List<string>();
 
-			do
+			while (!terminalTypes.Contains(terminalType))
 			{
+				Log.Information("Terminal Type: {TerminalType}", terminalType);
+
 				terminalTypes.Add(terminalType);
 
-				terminalType = (await telnetClient.GetTerminalType()).ToLower();
+				terminalType = (await connection.GetTerminalTypeAsync()).ToLower();
 			}
-			while (terminalType != terminalTypes.First());
 
-			logger.LogInformation("Terminal types: {TerminalTypes}", terminalTypes);
+			bool willNaws = await connection.RequestOptionAndWaitAsync(TelnetCommand.DO, TelnetOption.NegotiateAboutWindowSize) == TelnetCommand.WILL;
+
+			var profile = IdentifyProfile(terminalTypes);
+
+			Log.Information("Identified client profile: {Profile}", profile);
+
+			if (profile.Quirks.HasFlag(ClientQuirk.MustResetTerminalTypeOption))
+			{
+				await connection.RequestOptionAndWaitAsync(TelnetCommand.DONT, TelnetOption.TerminalType);
+				await connection.RequestOptionAndWaitAsync(TelnetCommand.DO, TelnetOption.TerminalType);
+
+				await connection.GetTerminalTypeAsync();
+			}
 
 			Func<MtgpRequest, Task<MtgpResponse>> sendRequest = request => Task.FromResult(new MtgpResponse(request.Id, "error"));
 
 			var proxy = new ProxyController(async request => await sendRequest(request), logger);
 
-			if (terminalTypes.Contains("xterm"))
+			if (profile.SupportsShaderMode())
 			{
+				await connection.RequestOptionAndWaitAsync(TelnetCommand.DONT, TelnetOption.Echo);
+				await connection.RequestOptionAndWaitAsync(TelnetCommand.WILL, TelnetOption.Echo);
+
 				logger.LogInformation("Using shader mode");
-				proxy.AddExtension(new ShaderModeExtension(loggerFactory.CreateLogger<ShaderModeExtension>(), telnetClient));
+				await proxy.AddExtensionAsync(shaderModeFactory.Create(telnetClient));
 			}
 			else
 			{
 				logger.LogInformation("Using line mode");
-				proxy.AddExtension(new LineModeExtension(telnetClient));
+				await proxy.AddExtensionAsync(new LineModeExtension(telnetClient));
 			}
-			proxy.AddExtension(new DataExtension([new LocalStorageDataScheme()]));
+			await proxy.AddExtensionAsync(new DataExtension([new LocalStorageDataScheme()]));
 
 			_ = Task.Run(async () =>
 			{
-				await foreach (var line in telnetClient.IncomingMessages.ReadAllAsync())
+				await foreach (var line in connection.LineReader.ReadAllAsync())
 				{
 					await proxy.SendOnDefaultPipe(DefaultPipe.Input, line);
 				}
@@ -104,7 +169,7 @@ namespace Mtgp.Proxy.Console
 
 						var stopwatch = Stopwatch.StartNew();
 
-						var response = proxy.HandleMessage(request);
+						var response = await proxy.HandleMessageAsync(request);
 
 						await mtgpStream.WriteMessageAsync(response, response.GetType(), logger);
 
@@ -119,6 +184,8 @@ namespace Mtgp.Proxy.Console
 			}
 
 			mtgpClient.Close();
+
+			connection.Stop();
 		}
 	}
 }

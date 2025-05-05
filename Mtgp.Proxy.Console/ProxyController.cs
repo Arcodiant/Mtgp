@@ -6,7 +6,7 @@ namespace Mtgp.Proxy.Console;
 
 internal class ProxyController(Func<MtgpRequest, Task<MtgpResponse>> sendRequest, ILogger logger)
 {
-	private readonly Dictionary<Type, Func<MtgpRequest, MtgpResponse>> messageHandlers = [];
+	private readonly Dictionary<Type, Func<MtgpRequest, Task<MtgpResponse>>> messageHandlers = [];
 
 	private int requestId = 0;
 
@@ -15,21 +15,27 @@ internal class ProxyController(Func<MtgpRequest, Task<MtgpResponse>> sendRequest
 	public void RegisterMessageHandler<T>(Func<T, MtgpResponse> handler)
 		where T : MtgpRequest
 	{
-		this.messageHandlers[typeof(T)] = obj => handler((T)obj);
+		this.messageHandlers[typeof(T)] = async obj => await Task.Run(() => handler((T)obj));
 	}
 
-	public void AddExtension(IProxyExtension extension)
+	public void RegisterMessageHandler<T>(Func<T, Task<MtgpResponse>> handler)
+		where T : MtgpRequest
 	{
-		extension.RegisterMessageHandlers(this);
+		this.messageHandlers[typeof(T)] = async obj => await handler((T)obj);
 	}
 
-	public MtgpResponse HandleMessage(MtgpRequest message)
+	public async Task AddExtensionAsync(IProxyExtension extension)
+	{
+		await extension.RegisterMessageHandlersAsync(this);
+	}
+
+	public async Task<MtgpResponse> HandleMessageAsync(MtgpRequest message)
 	{
 		try
 		{
 			if (this.messageHandlers.TryGetValue(message.GetType(), out var handler))
 			{
-				return handler(message) with { Id = message.Id };
+				return await handler(message) with { Id = message.Id };
 			}
 			else
 			{

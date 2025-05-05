@@ -11,10 +11,10 @@ internal class LineModeExtension(TelnetClient telnetClient)
 	private readonly Dictionary<DefaultPipe, int> defaultPipeBindings = [];
 	private readonly Dictionary<int, DefaultPipe> defaultPipeLookup = [];
 
-	public void RegisterMessageHandlers(ProxyController proxy)
+	public Task RegisterMessageHandlersAsync(ProxyController proxy)
 	{
 		proxy.RegisterMessageHandler<SetDefaultPipeRequest>(SetDefaultPipe);
-		proxy.RegisterMessageHandler<SendRequest>(Send);
+		proxy.RegisterMessageHandler<SendRequest>(SendAsync);
 
 		proxy.OnDefaultPipeSend += async (pipe, message) =>
 		{
@@ -23,6 +23,8 @@ internal class LineModeExtension(TelnetClient telnetClient)
 				await proxy.SendOutgoingRequestAsync(new SendRequest(0, pipeId, Encoding.UTF32.GetBytes(message.TrimEnd('\r', '\n'))));
 			}
 		};
+
+		return Task.CompletedTask;
 	}
 
 	private MtgpResponse SetDefaultPipe(SetDefaultPipeRequest request)
@@ -33,13 +35,13 @@ internal class LineModeExtension(TelnetClient telnetClient)
 		return new MtgpResponse(0, "ok");
 	}
 
-	private MtgpResponse Send(SendRequest request)
+	private async Task<MtgpResponse> SendAsync(SendRequest request)
 	{
 		if (this.defaultPipeLookup.TryGetValue(request.Pipe, out var pipe))
 		{
 			if (pipe == DefaultPipe.Output)
 			{
-				telnetClient.SetColour(Colour.White, Colour.Black);
+				await telnetClient.SetColourAsync(Colour.White, Colour.Black);
 
 				var foreground = Colour.White;
 				var background = Colour.Black;
@@ -66,11 +68,11 @@ internal class LineModeExtension(TelnetClient telnetClient)
 					{
 						if (messageBuilder.Length > 0)
 						{
-							telnetClient.Send(messageBuilder.ToString());
+							await telnetClient.WriteAsync(messageBuilder.ToString());
 							messageBuilder.Clear();
 						}
 
-						telnetClient.SetColour(newForeground, newBackground);
+						await telnetClient.SetColourAsync(newForeground, newBackground);
 
 						foreground = newForeground;
 						background = newBackground;
@@ -80,7 +82,7 @@ internal class LineModeExtension(TelnetClient telnetClient)
 				}
 
 				messageBuilder.Append("\r\n");
-				telnetClient.Send(messageBuilder.ToString());
+				await telnetClient.WriteAsync(messageBuilder.ToString());
 
 				return new MtgpResponse(0, "ok");
 			}

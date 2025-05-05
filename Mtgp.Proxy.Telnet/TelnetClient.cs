@@ -1,241 +1,123 @@
-using Microsoft.Extensions.Logging;
-using Mtgp.Shader;
-using System.Net.Sockets;
-using System.Text;
-using System.Threading.Channels;
+﻿using System.Net.Sockets;
 
 namespace Mtgp.Proxy.Telnet;
 
-public class TelnetClient
+public class TelnetClient(TcpClient client)
 	: IDisposable
 {
-	private readonly TcpClient client;
-	private readonly ILogger<TelnetClient> logger;
-	private readonly ILoggerFactory loggerFactory;
-	private readonly NetworkStream stream;
-	private readonly StreamWriter writer;
-
-	private readonly Channel<string> incomingBuffer = Channel.CreateUnbounded<string>();
-
-	private readonly Dictionary<TelnetOption, TaskCompletionSource<byte[]>> waitingSubnegotiations = [];
-
-	public TelnetClient(TcpClient client, ILogger<TelnetClient> logger, ILoggerFactory loggerFactory)
+	private readonly Stream telnetStream = client.GetStream();
+	private readonly StreamWriter writer = new(client.GetStream())
 	{
-		this.client = client;
-		this.logger = logger;
-		this.loggerFactory = loggerFactory;
-		this.stream = client.GetStream();
+		AutoFlush = true
+	};
 
-		this.writer = new StreamWriter(this.stream) { AutoFlush = true };
+	private readonly byte[] buffer = new byte[4096];
 
-		_ = Task.Run(this.ReadLoop);
-	}
+	private readonly Queue<TelnetEvent> eventQueue = [];
+	private readonly TelnetStreamReader streamReader = new();
+	private bool disposedValue;
 
-	private async Task ReadLoop()
+	private ValueTask WriteAsync(byte[] data) => this.telnetStream.WriteAsync(data.AsMemory());
+
+	public ValueTask SendCommandAsync(TelnetCommand command, TelnetOption option)
+		=> this.WriteAsync([(byte)TelnetCommand.IAC, (byte)command, (byte)option]);
+
+	public ValueTask SendSubnegotiationAsync(TelnetOption option, ReadOnlySpan<byte> data)
+		=> this.WriteAsync([(byte)TelnetCommand.IAC, (byte)TelnetCommand.SB, (byte)option, .. data, (byte)TelnetCommand.IAC, (byte)TelnetCommand.SE]);
+
+	public Task SetForegroundColourAsync(float r, float g, float b) => this.writer.WriteAsync($"\x1B[38;2;{(int)(r * 255)};{(int)(g * 255)};{(int)(b * 255)}m");
+
+	public Task SetBackgroundColourAsync(float r, float g, float b) => this.writer.WriteAsync($"\x1B[48;2;{(int)(r * 255)};{(int)(g * 255)};{(int)(b * 255)}m");
+
+	public Task HideCursorAsync() => this.writer.WriteAsync("\x1B[?25l");
+
+	public Task SetWindowSizeAsync(int rows, int columns) => this.writer.WriteAsync($"\x1B[8;{rows};{columns}t");
+
+	public Task MoveCursorAsync(int x, int y) => this.writer.WriteAsync($"\x1B[{y};{x}H");
+
+	public Task WriteAsync(string value) => this.writer.WriteAsync(value);
+
+	public Task WriteAsync(char[] value) => this.writer.WriteAsync(value);
+
+	private readonly SemaphoreSlim queuelock = new(1);
+
+	private async Task PopulateQueue(CancellationToken token)
 	{
-		var reader = new TelnetStreamReader(this.stream, loggerFactory.CreateLogger<TelnetStreamReader>());
-
-		while (true)
+		if (eventQueue.Count == 0)
 		{
-			var @event = await reader.ReadNextAsync();
-
-			switch (@event)
+			if (!client.Connected)
 			{
-				case TelnetCommandEvent commandEvent:
-					if (commandEvent.Command.IsNegotiation())
-					{
-						this.logger.LogDebug("Received command: {Command} {Option}", commandEvent.Command, commandEvent.Option);
-					}
-					else if (commandEvent.Command == TelnetCommand.SB)
-					{
-						switch (commandEvent.Option)
-						{
-							case TelnetOption.TerminalType:
-								this.logger.LogDebug("Received subnegotiation: {Command} {Option} {SubCommand} {Value}", commandEvent.Command, commandEvent.Option, (TelnetSubNegotiationCommand)commandEvent.Data![0], Encoding.UTF8.GetString(commandEvent.Data![1..]));
-								break;
-							case TelnetOption.NegotiateAboutWindowSize:
-								{
-									int x = commandEvent.Data![0] << 8 | commandEvent.Data![1];
-									int y = commandEvent.Data![2] << 8 | commandEvent.Data![3];
-
-									this.logger.LogDebug("Received subnegotiation: {Command} {Option} {X} {Y}", commandEvent.Command, commandEvent.Option, x, y);
-									break;
-								}
-
-							default:
-								this.logger.LogDebug("Received subnegotiation: {Command} {Option} {Data}", commandEvent.Command, commandEvent.Option, commandEvent.Data);
-								break;
-						}
-
-						if (commandEvent.Option.HasValue && this.waitingSubnegotiations.TryGetValue(commandEvent.Option.Value, out var tcs))
-						{
-							this.waitingSubnegotiations.Remove(commandEvent.Option.Value);
-							tcs.SetResult(commandEvent.Data!);
-						}
-					}
-					else if (commandEvent.Data is not null)
-					{
-						this.logger.LogDebug("Received command: {Command} {Option} {Data}", commandEvent.Command, commandEvent.Option, commandEvent.Data);
-					}
-					else
-					{
-						this.logger.LogDebug("Received command: {Command}", commandEvent.Command);
-					}
-					break;
-				case TelnetStringEvent stringEvent:
-					var cleanedLine = stringEvent.Value.Aggregate(new StringBuilder(), (builder, character) =>
-					{
-						var replacement = character switch
-						{
-							'\x1B' => "\\x1B",
-							'\n' => "\\n",
-							'\r' => "\\r",
-							'\t' => "\\t",
-							'\0' => "\\0",
-							'\a' => "\\a",
-							'\v' => "\\v",
-							_ => character.ToString()
-						};
-
-						builder.Append(replacement);
-
-						return builder;
-					}).ToString();
-
-					this.logger.LogDebug("Received: {value}", cleanedLine);
-
-					var lines = stringEvent.Value.Split('\n');
-
-					foreach (var line in lines[..^1])
-					{
-						await this.incomingBuffer.Writer.WriteAsync(line + '\n');
-					}
-
-					if (!string.IsNullOrEmpty(lines[^1]))
-					{
-						await this.incomingBuffer.Writer.WriteAsync(lines[^1]);
-					}
-
-					break;
-				case TelnetCloseEvent _:
-					this.incomingBuffer.Writer.Complete();
-					this.logger.LogDebug("Connection closed.");
-					return;
+				eventQueue.Enqueue(new TelnetCloseEvent());
 			}
+
+			int count;
+
+			try
+			{
+				count = await telnetStream.ReadAsync(buffer.AsMemory(0, this.buffer.Length), token);
+			}
+			catch
+			{
+				count = 0;
+			}
+
+			if (count == 0)
+			{
+				eventQueue.Enqueue(new TelnetCloseEvent());
+			}
+
+			streamReader.GetEvents(buffer.AsSpan(0, count), eventQueue);
 		}
 	}
 
-	private void SetColour(AnsiColour foreground, AnsiColour background)
+	public async Task<TelnetEvent> PeekAsync(CancellationToken token = default)
 	{
-		static (float, float, float) Extract(AnsiColour colour)
-		=> colour switch
+		await queuelock.WaitAsync(token);
+
+		try
 		{
-			AnsiColour.Black => (0, 0, 0),
-			AnsiColour.Red => (1, 0, 0),
-			AnsiColour.Green => (0, 1, 0),
-			AnsiColour.Yellow => (1, 1, 0),
-			AnsiColour.Blue => (0, 0, 1),
-			AnsiColour.Magenta => (1, 0, 1),
-			AnsiColour.Cyan => (0, 1, 1),
-			AnsiColour.White => (1, 1, 1),
-			_ => (0, 0, 0)
-		};
+			await PopulateQueue(token);
 
-		this.SetColour(Extract(foreground), Extract(background));
-	}
-
-	public void SetColour(Colour foreground, Colour background)
-	{
-		this.writer.Write($"\x1B[38;2;{(int)(foreground.R * 255)};{(int)(foreground.G * 255)};{(int)(foreground.B * 255)}m");
-		this.writer.Write($"\x1B[48;2;{(int)(background.R * 255)};{(int)(background.G * 255)};{(int)(background.B * 255)}m");
-	}
-
-	public void SendCommand(TelnetCommand command, TelnetOption option)
-	{
-		this.logger.LogDebug("Sending command: {Command} {Option}", command, option);
-		this.stream.Write([(byte)TelnetCommand.IAC, (byte)command, (byte)option]);
-	}
-
-	public void SendSubnegotiation(TelnetOption option, ReadOnlySpan<byte> data)
-	{
-		this.logger.LogDebug("Sending subnegotiation: {Option} {Data}", option, data.ToArray());
-		this.stream.Write([(byte)TelnetCommand.IAC, (byte)TelnetCommand.SB, (byte)option, .. data, (byte)TelnetCommand.IAC, (byte)TelnetCommand.SE]);
-	}
-
-	public async Task<byte[]> SendSubnegotiationAndWait(TelnetOption option, TelnetSubNegotiationCommand subCommand, byte[] data)
-	{
-		var tcs = new TaskCompletionSource<byte[]>();
-
-		this.waitingSubnegotiations[option] = tcs;
-
-		this.logger.LogDebug("Sending subnegotiation: {Option} {SubCommand} {Data}", option, subCommand, data);
-		this.stream.Write([(byte)TelnetCommand.IAC, (byte)TelnetCommand.SB, (byte)option, (byte)subCommand, .. data, (byte)TelnetCommand.IAC, (byte)TelnetCommand.SE]);
-
-		return await tcs.Task;
-	}
-
-	public async Task<string> GetTerminalType()
-	{
-		var data = await this.SendSubnegotiationAndWait(TelnetOption.TerminalType, TelnetSubNegotiationCommand.Send, []);
-
-		return Encoding.UTF8.GetString(data[1..]);
-	}
-
-	public void SendSubnegotiation(TelnetOption option, TelnetSubNegotiationCommand subCommand, ReadOnlySpan<byte> data)
-	{
-		this.logger.LogDebug("Sending subnegotiation: {Option} {SubCommand} {Data}", option, subCommand, data.ToArray());
-		this.stream.Write([(byte)TelnetCommand.IAC, (byte)TelnetCommand.SB, (byte)option, (byte)subCommand, .. data, (byte)TelnetCommand.IAC, (byte)TelnetCommand.SE]);
-	}
-
-	public void HideCursor()
-	{
-		this.writer.Write("\x1B[?25l");
-	}
-
-	public void MoveCursor(int x, int y)
-	{
-		this.writer.Write($"\x1B[{y + 1};{x + 1}H");
-	}
-
-	public void SetWindowSize(int rows, int columns)
-	{
-		this.writer.Write($"\x1B[8;{rows};{columns}t");
-	}
-
-	public void Clear(AnsiColour foreground = AnsiColour.White, AnsiColour background = AnsiColour.Black)
-	{
-		this.writer.Write("\x1B[H");
-		this.SetColour(foreground, background);
-
-		for (int y = 0; y < 24; y++)
-		{
-			this.writer.Write("\x1B[2K");
-
-			if (y < 23)
-			{
-				this.writer.Write("\x1B[B");
-			}
+			return eventQueue.Peek();
 		}
-		this.writer.Write("\x1B[H");
+		finally
+		{
+			queuelock.Release();
+		}
 	}
 
-	public ChannelReader<string> IncomingMessages => this.incomingBuffer.Reader;
+	public async Task<TelnetEvent> ReadAsync(CancellationToken token = default)
+	{
+		await queuelock.WaitAsync(token);
+
+		try
+		{
+			await PopulateQueue(token);
+
+			return eventQueue.Dequeue();
+		}
+		finally
+		{
+			queuelock.Release();
+		}
+	}
+
+	protected virtual void Dispose(bool disposing)
+	{
+		if (!disposedValue)
+		{
+			if (disposing)
+			{
+				writer.Dispose();
+			}
+
+			disposedValue = true;
+		}
+	}
 
 	public void Dispose()
 	{
-		this.client.Close();
-		this.client.Dispose();
-
+		Dispose(disposing: true);
 		GC.SuppressFinalize(this);
-	}
-
-	public void Send(char[] message)
-	{
-		this.writer.Write(message);
-	}
-
-	public void Send(string message)
-	{
-		this.writer.Write(message);
 	}
 }

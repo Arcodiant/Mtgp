@@ -2,6 +2,6 @@
 {
 	internal interface IProxyExtension
 	{
-		void RegisterMessageHandlers(ProxyController proxy);
+		Task RegisterMessageHandlersAsync(ProxyController proxy);
 	}
 }

@@ -99,7 +99,7 @@ internal class TelnetPresentReceiver
 					}
 					else
 					{
-						this.client.Send(buffer[..count]);
+						await this.client.WriteAsync(buffer[..count]);
 						count = 0;
 					}
 				}
@@ -112,8 +112,8 @@ internal class TelnetPresentReceiver
 					foreground = newForeground;
 					background = newBackground;
 
-					this.client.MoveCursor(x, y);
-					this.client.SetColour(foreground, background);
+					await this.client.MoveCursorAsync(x, y);
+					await this.client.SetColourAsync(foreground, background);
 					buffer[count] = character;
 
 					count++;
@@ -122,7 +122,7 @@ internal class TelnetPresentReceiver
 
 			if (count > 0)
 			{
-				this.client.Send(buffer[..count]);
+				await this.client.WriteAsync(buffer[..count]);
 			}
 		}
 	}

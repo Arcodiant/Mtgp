@@ -88,6 +88,13 @@ public static class TelnetCommandExtensions
 		        _ => false,
 	        };
 
+    public static bool IsInformative(this TelnetCommand command)
+		=> command switch
+		{
+			TelnetCommand.WILL or TelnetCommand.WONT => true,
+			_ => false,
+		};
+
 	public static bool IsPositive(this TelnetCommand command)
         => command switch
 	        {
@@ -96,7 +103,7 @@ public static class TelnetCommandExtensions
 	        };
 
 	public static TelnetCommand AsPositive(this TelnetCommand command)
-        => !command.IsNegotiation() || command.IsPositive()
+        => command.IsPositive()
             ? command
             : command.Negate();
 

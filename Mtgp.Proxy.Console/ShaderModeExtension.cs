@@ -65,19 +65,19 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 	private TelnetPresentReceiver? presentReceiver;
 	private PresentOptimiser? presentOptimiser;
 
-	public void RegisterMessageHandlers(ProxyController proxy)
+	public async Task RegisterMessageHandlersAsync(ProxyController proxy)
 	{
-		telnetClient.SendCommand(TelnetCommand.WILL, TelnetOption.Echo);
-		telnetClient.SendCommand(TelnetCommand.DO, TelnetOption.SuppressGoAhead);
-		telnetClient.SendCommand(TelnetCommand.WILL, TelnetOption.SuppressGoAhead);
-		telnetClient.SendCommand(TelnetCommand.DO, TelnetOption.NegotiateAboutWindowSize);
+		await telnetClient.SendCommandAsync(TelnetCommand.WILL, TelnetOption.Echo);
+		await telnetClient.SendCommandAsync(TelnetCommand.DO, TelnetOption.SuppressGoAhead);
+		await telnetClient.SendCommandAsync(TelnetCommand.WILL, TelnetOption.SuppressGoAhead);
+		await telnetClient.SendCommandAsync(TelnetCommand.DO, TelnetOption.NegotiateAboutWindowSize);
 
-		telnetClient.HideCursor();
+		await telnetClient.HideCursorAsync();
 
 		int width = 120;
 		int height = 36;
 
-		telnetClient.SetWindowSize(height, width);
+		await telnetClient.SetWindowSizeAsync(height, width);
 
 		this.presentReceiver = new(telnetClient);
 		this.presentOptimiser = new(this.presentReceiver, new Extent2D(width, height));
