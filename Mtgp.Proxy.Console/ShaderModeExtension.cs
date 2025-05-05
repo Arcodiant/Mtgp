@@ -7,8 +7,9 @@ using Mtgp.Shader;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using Mtgp.Proxy.Profiles;
 
-namespace Mtgp.Proxy.Console;
+namespace Mtgp.Proxy;
 
 internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetClient telnetClient)
 	: IProxyExtension
@@ -65,8 +66,13 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 	private TelnetPresentReceiver? presentReceiver;
 	private PresentOptimiser? presentOptimiser;
 
-	public async Task RegisterMessageHandlersAsync(ProxyController proxy)
+	private const int width = 120;
+	private const int height = 36;
+
+	public async Task SetupAsync(ClientProfile profile)
 	{
+		await telnetClient.SendCommandAsync(TelnetCommand.DONT, TelnetOption.Echo);
+		await telnetClient.SendCommandAsync(TelnetCommand.WILL, TelnetOption.Echo);
 		await telnetClient.SendCommandAsync(TelnetCommand.WILL, TelnetOption.Echo);
 		await telnetClient.SendCommandAsync(TelnetCommand.DO, TelnetOption.SuppressGoAhead);
 		await telnetClient.SendCommandAsync(TelnetCommand.WILL, TelnetOption.SuppressGoAhead);
@@ -74,11 +80,11 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 
 		await telnetClient.HideCursorAsync();
 
-		int width = 120;
-		int height = 36;
-
 		await telnetClient.SetWindowSizeAsync(height, width);
+	}
 
+	public void RegisterMessageHandlers(ProxyController proxy)
+	{
 		this.presentReceiver = new(telnetClient);
 		this.presentOptimiser = new(this.presentReceiver, new Extent2D(width, height));
 
@@ -329,7 +335,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 						=> idOrRef.Id.HasValue || createdIds.ContainsKey(idOrRef.Reference!);
 
 					bool IsIdValid(IdOrRef idOrRef)
-						=> idOrRef.Id.HasValue || (createdIds.ContainsKey(idOrRef.Reference!) && createdIds[idOrRef.Reference!].Result == ResourceCreateResultType.Success);
+						=> idOrRef.Id.HasValue || createdIds.ContainsKey(idOrRef.Reference!) && createdIds[idOrRef.Reference!].Result == ResourceCreateResultType.Success;
 
 					IdOrRef[] Dependencies = resource.Info switch
 					{

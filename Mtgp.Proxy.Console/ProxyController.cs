@@ -2,7 +2,7 @@
 using Mtgp.Messages;
 using Mtgp.Shader;
 
-namespace Mtgp.Proxy.Console;
+namespace Mtgp.Proxy;
 
 internal class ProxyController(Func<MtgpRequest, Task<MtgpResponse>> sendRequest, ILogger logger)
 {
@@ -24,9 +24,9 @@ internal class ProxyController(Func<MtgpRequest, Task<MtgpResponse>> sendRequest
 		this.messageHandlers[typeof(T)] = async obj => await handler((T)obj);
 	}
 
-	public async Task AddExtensionAsync(IProxyExtension extension)
+	public void AddExtension(IProxyExtension extension)
 	{
-		await extension.RegisterMessageHandlersAsync(this);
+		extension.RegisterMessageHandlers(this);
 	}
 
 	public async Task<MtgpResponse> HandleMessageAsync(MtgpRequest message)

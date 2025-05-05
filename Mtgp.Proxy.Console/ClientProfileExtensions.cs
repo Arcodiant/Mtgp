@@ -1,6 +1,6 @@
 ﻿using Mtgp.Proxy.Profiles;
 
-namespace Mtgp.Proxy.Console;
+namespace Mtgp.Proxy;
 
 internal static class ClientProfileExtensions
 {

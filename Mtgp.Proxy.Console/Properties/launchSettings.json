@@ -1,6 +1,6 @@
 {
   "profiles": {
-    "Mtgp.Proxy.Console": {
+    "Mtgp.Proxy": {
       "commandName": "Project",
       "environmentVariables": {
         "DOTNET_ENVIRONMENT": "Development"

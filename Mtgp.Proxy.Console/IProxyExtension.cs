@@ -1,7 +1,7 @@
-﻿namespace Mtgp.Proxy.Console
+﻿namespace Mtgp.Proxy
 {
 	internal interface IProxyExtension
 	{
-		Task RegisterMessageHandlersAsync(ProxyController proxy);
+		void RegisterMessageHandlers(ProxyController proxy);
 	}
 }

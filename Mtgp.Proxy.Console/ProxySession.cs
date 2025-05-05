@@ -10,7 +10,7 @@ using System.Diagnostics;
 using System.Net.Sockets;
 using System.Text.Json;
 
-namespace Mtgp.Proxy.Console
+namespace Mtgp.Proxy
 {
 	internal class ProxySession(TcpClient telnetTcpClient, IFactory<TelnetConnection, TelnetClient> connectionFactory, IFactory<ShaderModeExtension, TelnetClient> shaderModeFactory, ILogger<ProxySession> logger)
 	{
@@ -102,18 +102,20 @@ namespace Mtgp.Proxy.Console
 
 			if (profile.SupportsShaderMode())
 			{
-				await connection.RequestOptionAndWaitAsync(TelnetCommand.DONT, TelnetOption.Echo);
-				await connection.RequestOptionAndWaitAsync(TelnetCommand.WILL, TelnetOption.Echo);
-
 				logger.LogInformation("Using shader mode");
-				await proxy.AddExtensionAsync(shaderModeFactory.Create(telnetClient));
+
+				var shaderExtension = shaderModeFactory.Create(telnetClient);
+
+				await shaderExtension.SetupAsync(profile);
+
+				proxy.AddExtension(shaderExtension);
 			}
 			else
 			{
 				logger.LogInformation("Using line mode");
-				await proxy.AddExtensionAsync(new LineModeExtension(telnetClient));
+				proxy.AddExtension(new LineModeExtension(telnetClient));
 			}
-			await proxy.AddExtensionAsync(new DataExtension([new LocalStorageDataScheme()]));
+			proxy.AddExtension(new DataExtension([new LocalStorageDataScheme()]));
 
 			_ = Task.Run(async () =>
 			{

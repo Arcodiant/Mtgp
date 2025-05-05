@@ -3,7 +3,7 @@ using Mtgp.Shader;
 using System.Text;
 using System.Threading.Channels;
 
-namespace Mtgp.Proxy.Console;
+namespace Mtgp.Proxy;
 
 internal class TelnetPresentReceiver
 	: IPresentReceiver

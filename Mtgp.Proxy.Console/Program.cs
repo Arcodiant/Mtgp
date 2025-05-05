@@ -1,6 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Mtgp.Proxy.Console;
+using Mtgp.Proxy;
 using Serilog;
 using System.Diagnostics;
 

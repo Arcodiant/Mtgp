@@ -1,4 +1,4 @@
-﻿namespace Mtgp.Proxy.Console;
+﻿namespace Mtgp.Proxy;
 
 internal interface IDataScheme
 {

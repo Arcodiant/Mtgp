@@ -1,6 +1,6 @@
 ﻿using Mtgp.Messages;
 
-namespace Mtgp.Proxy.Console;
+namespace Mtgp.Proxy;
 
 internal class DataExtension(IEnumerable<IDataScheme> dataSchemes)
 	: IProxyExtension
@@ -9,12 +9,10 @@ internal class DataExtension(IEnumerable<IDataScheme> dataSchemes)
 
 	private static string GetPath(Uri uri) => $"/{uri.Host}{uri.AbsolutePath}";
 
-	public Task RegisterMessageHandlersAsync(ProxyController controller)
+	public void RegisterMessageHandlers(ProxyController proxy)
 	{
-		controller.RegisterMessageHandler<GetDataRequest>(this.HandleGetDataRequest);
-		controller.RegisterMessageHandler<SetDataRequest>(this.HandleSetDataRequest);
-
-		return Task.CompletedTask;
+		proxy.RegisterMessageHandler<GetDataRequest>(this.HandleGetDataRequest);
+		proxy.RegisterMessageHandler<SetDataRequest>(this.HandleSetDataRequest);
 	}
 
 	private MtgpResponse HandleGetDataRequest(GetDataRequest request)

@@ -4,7 +4,7 @@ using Mtgp.Util;
 using System.Net;
 using System.Net.Sockets;
 
-namespace Mtgp.Proxy.Console;
+namespace Mtgp.Proxy;
 
 internal class ProxyServer(IFactory<ProxySession, TcpClient> sessionFactory, ILogger<ProxyServer> logger, IHostApplicationLifetime applicationLifetime)
 	: IHostedService

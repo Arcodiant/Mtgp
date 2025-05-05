@@ -1,6 +1,6 @@
 ﻿using System.Text.Json;
 
-namespace Mtgp.Proxy.Console;
+namespace Mtgp.Proxy;
 
 internal class LocalStorageDataScheme : IDataScheme
 {
