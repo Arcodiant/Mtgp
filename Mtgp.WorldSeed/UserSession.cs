@@ -28,10 +28,10 @@ internal class UserSession(IFactory<MtgpClient, Stream> mtgpClientFactory, TcpCl
 
 		var currentLocationName = world.StartingArea;
 
-		byte[] EncodeOutput(string text, Colour foreground, Colour background)
+		byte[] EncodeOutput(string text, TrueColour foreground, TrueColour background)
 			=> EncodeOutputGradient(text, foreground, foreground, background);
 
-		byte[] EncodeOutputGradient(string text, Colour foregroundFrom, Colour foregroundTo, Colour background)
+		byte[] EncodeOutputGradient(string text, TrueColour foregroundFrom, TrueColour foregroundTo, TrueColour background)
 		{
 			var result = new byte[text.Length * 28];
 
@@ -56,17 +56,17 @@ internal class UserSession(IFactory<MtgpClient, Stream> mtgpClientFactory, TcpCl
 			return result;
 		}
 
-		async Task Send(string message, Colour? foreground = null, Colour? background = null)
-			=> await client.Send(outputPipe, EncodeOutput(message, foreground ?? Colour.White, background ?? Colour.Black));
+		async Task Send(string message, TrueColour? foreground = null, TrueColour? background = null)
+			=> await client.Send(outputPipe, EncodeOutput(message, foreground ?? TrueColour.White, background ?? TrueColour.Black));
 
-		async Task SendParts(params (string text, Colour foreground)[] parts)
+		async Task SendParts(params (string text, TrueColour foreground)[] parts)
 		{
 			var result = new byte[parts.Sum(x => x.text.Length) * 28];
 			int offset = 0;
 
 			foreach (var (text, foreground) in parts)
 			{
-				var encoded = EncodeOutput(text, foreground, Colour.Black);
+				var encoded = EncodeOutput(text, foreground, TrueColour.Black);
 				encoded.CopyTo(result.AsSpan(offset));
 				offset += encoded.Length;
 			}
@@ -82,7 +82,7 @@ internal class UserSession(IFactory<MtgpClient, Stream> mtgpClientFactory, TcpCl
 			var location = world.Locations[currentLocationName];
 			await Send("");
 			await Send(location.Title, (1, 0.84f, 0));
-			await client.Send(outputPipe, EncodeOutputGradient(new string('=', location.Title.Length), (1, 1, 0), (0, 1, 1), Colour.Black));
+			await client.Send(outputPipe, EncodeOutputGradient(new string('=', location.Title.Length), (1, 1, 0), (0, 1, 1), TrueColour.Black));
 			await Send(location.Description);
 			await Send("");
 			await Send("Exits:");
@@ -90,7 +90,7 @@ internal class UserSession(IFactory<MtgpClient, Stream> mtgpClientFactory, TcpCl
 			{
 				var linkLocation = world.Locations[link.To];
 
-				await SendParts(($"- {link.Name} to ", Colour.White), (linkLocation.Title, (1, 0.84f, 0)));
+				await SendParts(($"- {link.Name} to ", TrueColour.White), (linkLocation.Title, (1, 0.84f, 0)));
 			}
 		}
 

@@ -6,7 +6,7 @@ namespace Mtgp.Proxy.Shader;
 
 public static class TextelUtil
 {
-	public static (Rune, Colour, Colour) Get(Span<byte> characterBuffer,
+	public static (Rune, TrueColour, TrueColour) Get(Span<byte> characterBuffer,
 										  Span<byte> foregroundBuffer,
 										  Span<byte> backgroundBuffer,
 										  ImageFormat characterFormat,
@@ -15,8 +15,8 @@ public static class TextelUtil
 										  int index)
 	{
 		Rune character = GetCharacter(characterBuffer[(index * characterFormat.GetSize())..], characterFormat);
-		Colour foreground = GetColour(foregroundBuffer[(index * foregroundFormat.GetSize())..], foregroundFormat);
-		Colour background = GetColour(backgroundBuffer[(index * backgroundFormat.GetSize())..], backgroundFormat);
+		TrueColour foreground = GetColour(foregroundBuffer[(index * foregroundFormat.GetSize())..], foregroundFormat);
+		TrueColour background = GetColour(backgroundBuffer[(index * backgroundFormat.GetSize())..], backgroundFormat);
 		return (character, foreground, background);
 	}
 
@@ -26,7 +26,7 @@ public static class TextelUtil
 		_ => throw new NotImplementedException()
 	};
 
-	public static Colour GetColour(Span<byte> data, ImageFormat format)
+	public static TrueColour GetColour(Span<byte> data, ImageFormat format)
 	{
 		switch(format)
 		{
@@ -41,7 +41,7 @@ public static class TextelUtil
 	public static void Set(Span<byte> characterBuffer,
 						  Span<byte> foregroundBuffer,
 						  Span<byte> backgroundBuffer,
-						  (Rune Character, Colour Foreground, Colour Background) textel,
+						  (Rune Character, TrueColour Foreground, TrueColour Background) textel,
 						  ImageFormat characterFormat,
 						  ImageFormat foregroundFormat,
 						  ImageFormat backgroundFormat,
@@ -56,8 +56,8 @@ public static class TextelUtil
 
 		if (alpha < 1.0f)
 		{
-			Colour background = GetColour(backgroundBuffer[(index * backgroundFormat.GetSize())..], backgroundFormat);
-			textel.Background = Colour.Lerp(background, textel.Background, alpha);
+			TrueColour background = GetColour(backgroundBuffer[(index * backgroundFormat.GetSize())..], backgroundFormat);
+			textel.Background = TrueColour.Lerp(background, textel.Background, alpha);
 		}
 
 		SetColour(backgroundBuffer[(index * backgroundFormat.GetSize())..], textel.Background, backgroundFormat);
@@ -75,7 +75,7 @@ public static class TextelUtil
 		}
 	}
 
-	public static void SetColour(Span<byte> data, Colour colour, ImageFormat format)
+	public static void SetColour(Span<byte> data, TrueColour colour, ImageFormat format)
 	{
 		switch (format)
 		{

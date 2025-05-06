@@ -11,7 +11,7 @@ using Mtgp.Proxy.Profiles;
 
 namespace Mtgp.Proxy;
 
-internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetClient telnetClient)
+internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetClient telnetClient, ClientProfile profile)
 	: IProxyExtension
 {
 	private class ResourceStore
@@ -69,10 +69,9 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 	private const int width = 120;
 	private const int height = 36;
 
-	public async Task SetupAsync(ClientProfile profile)
+	public async Task SetupAsync()
 	{
 		await telnetClient.SendCommandAsync(TelnetCommand.DONT, TelnetOption.Echo);
-		await telnetClient.SendCommandAsync(TelnetCommand.WILL, TelnetOption.Echo);
 		await telnetClient.SendCommandAsync(TelnetCommand.WILL, TelnetOption.Echo);
 		await telnetClient.SendCommandAsync(TelnetCommand.DO, TelnetOption.SuppressGoAhead);
 		await telnetClient.SendCommandAsync(TelnetCommand.WILL, TelnetOption.SuppressGoAhead);

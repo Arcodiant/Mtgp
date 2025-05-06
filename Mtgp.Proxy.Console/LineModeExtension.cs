@@ -39,10 +39,10 @@ internal class LineModeExtension(TelnetClient telnetClient)
 		{
 			if (pipe == DefaultPipe.Output)
 			{
-				await telnetClient.SetColourAsync(Colour.White, Colour.Black);
+				await telnetClient.SetColourAsync(TrueColour.White, TrueColour.Black);
 
-				var foreground = Colour.White;
-				var background = Colour.Black;
+				var foreground = TrueColour.White;
+				var background = TrueColour.Black;
 
 				int count = request.Value.Length / 28;
 
@@ -59,8 +59,8 @@ internal class LineModeExtension(TelnetClient telnetClient)
 						.Read(out float bg)
 						.Read(out float bb);
 
-					var newForeground = new Colour(r, g, b);
-					var newBackground = new Colour(br, bg, bb);
+					var newForeground = new TrueColour(r, g, b);
+					var newBackground = new TrueColour(br, bg, bb);
 
 					if (newForeground != foreground || newBackground != background)
 					{

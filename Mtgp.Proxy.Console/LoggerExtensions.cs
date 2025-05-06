@@ -1,4 +1,6 @@
 ﻿using Mtgp.Proxy.Telnet;
+using System.ComponentModel.DataAnnotations;
+using System.Runtime.InteropServices;
 
 namespace Microsoft.Extensions.Logging;
 
@@ -34,7 +36,20 @@ internal static class LoggerExtensions
 	{
 		if (logger.IsEnabled(LogLevel.Debug))
 		{
-			logger.LogDebug(receivedTelnetSubNegotiationEventId, "Received sub-negotiation for option {Option} with data length {DataLength}", subNegotiationEvent.Option, subNegotiationEvent.Data.Length);
+			switch (subNegotiationEvent.Option)
+			{
+				case TelnetOption.TerminalType:
+					logger.LogDebug(receivedTelnetSubNegotiationEventId, "Received sub-negotiation for option {Option} with data: {Data}", subNegotiationEvent.Option, System.Text.Encoding.UTF8.GetString(subNegotiationEvent.Data));
+					break;
+				case TelnetOption.NegotiateAboutWindowSize:
+					int width = subNegotiationEvent.Data[0] * 256 + subNegotiationEvent.Data[1];
+					int height = subNegotiationEvent.Data[2] * 256 + subNegotiationEvent.Data[3];
+					logger.LogDebug(receivedTelnetSubNegotiationEventId, "Received sub-negotiation for option {Option} with size: {Width}x{Height}", subNegotiationEvent.Option, width, height);
+					break;
+				default:
+					logger.LogDebug(receivedTelnetSubNegotiationEventId, "Received sub-negotiation for option {Option} with data length {DataLength}", subNegotiationEvent.Option, subNegotiationEvent.Data.Length);
+					break;
+			}
 		}
 	}
 

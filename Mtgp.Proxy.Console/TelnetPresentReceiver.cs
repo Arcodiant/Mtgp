@@ -36,8 +36,8 @@ internal class TelnetPresentReceiver
 
 			int x = 0;
 			int y = 0;
-			Colour foreground = Colour.White;
-			Colour background = Colour.Black;
+			TrueColour foreground = TrueColour.White;
+			TrueColour background = TrueColour.Black;
 			var buffer = new char[4096];
 			int count = 0;
 
@@ -46,8 +46,8 @@ internal class TelnetPresentReceiver
 				int newX, newY;
 				Rune rune;
 				char character = '\0';
-				Colour newBackground;
-				Colour newForeground;
+				ColourField newBackground;
+				ColourField newForeground;
 
 				(newX, newY, rune, newForeground, newBackground) = sortedValues[index];
 
@@ -79,16 +79,16 @@ internal class TelnetPresentReceiver
 
 					if (newX == x + 1
 							&& newY == y
-							&& newForeground == foreground
-							&& newBackground == background)
+							&& newForeground.TrueColour == foreground
+							&& newBackground.TrueColour == background)
 					{
 						buffer[count] = character;
 						count++;
 					}
 					else if (newX == 0
 							&& newY == y + 1
-							&& newForeground == foreground
-							&& newBackground == background)
+							&& newForeground.TrueColour == foreground
+							&& newBackground.TrueColour == background)
 					{
 						buffer[count] = '\r';
 						count++;
@@ -109,8 +109,8 @@ internal class TelnetPresentReceiver
 
 				if (count == 0)
 				{
-					foreground = newForeground;
-					background = newBackground;
+					foreground = newForeground.TrueColour;
+					background = newBackground.TrueColour;
 
 					await this.client.MoveCursorAsync(x, y);
 					await this.client.SetColourAsync(foreground, background);

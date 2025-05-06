@@ -1,12 +1,12 @@
 ﻿using Mtgp.Shader;
 using System.Text;
 
-namespace Mtgp;
+namespace Mtgp.Proxy;
 
 public class PresentOptimiser(IPresentReceiver wrappedReceiver, Extent2D size)
 	: IPresentReceiver
 {
-	private record struct Textel(Rune Rune, Colour Foreground, Colour Background);
+	private record struct Textel(Rune Rune, TrueColour Foreground, TrueColour Background);
 
 	private readonly Textel[,] buffer = new Textel[size.Width, size.Height];
 
@@ -21,9 +21,9 @@ public class PresentOptimiser(IPresentReceiver wrappedReceiver, Extent2D size)
 
 			var textel = buffer[delta.X, delta.Y];
 
-			if (textel.Rune != delta.Value || textel.Foreground != delta.Foreground || textel.Background != delta.Background)
+			if (textel.Rune != delta.Value || textel.Foreground != delta.Foreground.TrueColour || textel.Background != delta.Background.TrueColour)
 			{
-				buffer[delta.X, delta.Y] = new(delta.Value, delta.Foreground, delta.Background);
+				buffer[delta.X, delta.Y] = new(delta.Value, delta.Foreground.TrueColour, delta.Background.TrueColour);
 				outputDeltas.Add(delta);
 			}
 		}

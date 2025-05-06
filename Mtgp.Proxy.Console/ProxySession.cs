@@ -12,7 +12,7 @@ using System.Text.Json;
 
 namespace Mtgp.Proxy
 {
-	internal class ProxySession(TcpClient telnetTcpClient, IFactory<TelnetConnection, TelnetClient> connectionFactory, IFactory<ShaderModeExtension, TelnetClient> shaderModeFactory, ILogger<ProxySession> logger)
+	internal class ProxySession(TcpClient telnetTcpClient, IFactory<TelnetConnection, TelnetClient> connectionFactory, IFactory<ShaderModeExtension, TelnetClient, ClientProfile> shaderModeFactory, ILogger<ProxySession> logger)
 	{
 		static ClientProfile IdentifyProfile(IEnumerable<string> terminalTypes)
 		{
@@ -104,9 +104,9 @@ namespace Mtgp.Proxy
 			{
 				logger.LogInformation("Using shader mode");
 
-				var shaderExtension = shaderModeFactory.Create(telnetClient);
+				var shaderExtension = shaderModeFactory.Create(telnetClient, profile);
 
-				await shaderExtension.SetupAsync(profile);
+				await shaderExtension.SetupAsync();
 
 				proxy.AddExtension(shaderExtension);
 			}
