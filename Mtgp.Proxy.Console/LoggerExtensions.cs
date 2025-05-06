@@ -1,12 +1,10 @@
 ﻿using Mtgp.Proxy.Telnet;
-using System.ComponentModel.DataAnnotations;
-using System.Runtime.InteropServices;
+using System.Text;
 
 namespace Microsoft.Extensions.Logging;
 
 internal static class LoggerExtensions
 {
-
 	private const int eventIdBase = 20000;
 
 	private static readonly EventId receivedTelnetStringEventId = new(eventIdBase + 1, $"Received${nameof(TelnetStringEvent)}");
@@ -16,11 +14,53 @@ internal static class LoggerExtensions
 	private static readonly EventId receivedTelnetCsiEventId = new(eventIdBase + 5, $"Received${nameof(TelnetCsiEvent)}");
 	private static readonly EventId receivedUnknownTelnetEvent = new(eventIdBase + 6, "ReceivedUnknownTelnetEvent");
 
+	private static readonly LogLevel telnetReceiveLogLevel = LogLevel.Debug;
+
+	private static readonly Action<ILogger, string, Exception?> logReceivedTelnetStringEvent = LoggerMessage.Define<string>(
+		telnetReceiveLogLevel,
+		receivedTelnetStringEventId,
+		"Received string: {Value}");
+
+	private static readonly Action<ILogger, TelnetCommand, TelnetOption, Exception?> logReceivedTelnetCommandEvent = LoggerMessage.Define<TelnetCommand, TelnetOption>(
+		telnetReceiveLogLevel,
+		receivedTelnetCommandEventId,
+		"Received command: {Command} for option {Option}");
+
+	private static readonly Action<ILogger, TelnetOption, int, Exception?> logReceivedTelnetSubNegotiationEvent = LoggerMessage.Define<TelnetOption, int>(
+		telnetReceiveLogLevel,
+		receivedTelnetSubNegotiationEventId,
+		"Received sub-negotiation for option {Option} with data length {DataLength}");
+
+	private static readonly Action<ILogger, TelnetOption, int, int, Exception?> logReceivedTelnetNawsSubNegotiationEvent = LoggerMessage.Define<TelnetOption, int, int>(
+		telnetReceiveLogLevel,
+		receivedTelnetSubNegotiationEventId,
+		"Received sub-negotiation for option {Option} with size: {Width}x{Height}");
+
+	private static readonly Action<ILogger, TelnetOption, string, Exception?> logReceivedTelnetTerminalTypeSubNegotiationEvent = LoggerMessage.Define<TelnetOption, string>(
+		telnetReceiveLogLevel,
+		receivedTelnetSubNegotiationEventId,
+		"Received sub-negotiation for option {Option} with data: {Data}");
+
+	private static readonly Action<ILogger, Exception?> logReceivedTelnetCloseEvent = LoggerMessage.Define(
+		telnetReceiveLogLevel,
+		receivedTelnetCloseEventId,
+		"Connection closed by client.");
+
+	private static readonly Action<ILogger, string, char, Exception?> logReceivedTelnetCsiEvent = LoggerMessage.Define<string, char>(
+		telnetReceiveLogLevel,
+		receivedTelnetCsiEventId,
+		"Received CSI: {Value} with suffix {Suffix}");
+
+	private static readonly Action<ILogger, TelnetEvent, Exception?> logReceivedUnknownTelnetEvent = LoggerMessage.Define<TelnetEvent>(
+		LogLevel.Warning,
+		receivedUnknownTelnetEvent,
+		"Received unknown telnet event: {@Event}");
+
 	public static void LogReceivedTelnetStringEvent(this ILogger logger, TelnetStringEvent stringEvent)
 	{
 		if (logger.IsEnabled(LogLevel.Debug))
 		{
-			logger.LogDebug(receivedTelnetStringEventId, "Received string: {Value} {Bytes}", StringUtil.Clean(stringEvent.Value), System.Text.Encoding.UTF8.GetBytes(stringEvent.Value));
+			logReceivedTelnetStringEvent(logger, StringUtil.Clean(stringEvent.Value), null);
 		}
 	}
 
@@ -28,7 +68,7 @@ internal static class LoggerExtensions
 	{
 		if (logger.IsEnabled(LogLevel.Debug))
 		{
-			logger.LogDebug(receivedTelnetCommandEventId, "Received command: {Command} for option {Option}", commandEvent.Command, commandEvent.Option);
+			logReceivedTelnetCommandEvent(logger, commandEvent.Command, commandEvent.Option, null);
 		}
 	}
 
@@ -39,15 +79,15 @@ internal static class LoggerExtensions
 			switch (subNegotiationEvent.Option)
 			{
 				case TelnetOption.TerminalType:
-					logger.LogDebug(receivedTelnetSubNegotiationEventId, "Received sub-negotiation for option {Option} with data: {Data}", subNegotiationEvent.Option, System.Text.Encoding.UTF8.GetString(subNegotiationEvent.Data));
+					logReceivedTelnetTerminalTypeSubNegotiationEvent(logger, subNegotiationEvent.Option, Encoding.UTF8.GetString(subNegotiationEvent.Data), null);
 					break;
 				case TelnetOption.NegotiateAboutWindowSize:
 					int width = subNegotiationEvent.Data[0] * 256 + subNegotiationEvent.Data[1];
 					int height = subNegotiationEvent.Data[2] * 256 + subNegotiationEvent.Data[3];
-					logger.LogDebug(receivedTelnetSubNegotiationEventId, "Received sub-negotiation for option {Option} with size: {Width}x{Height}", subNegotiationEvent.Option, width, height);
+					logReceivedTelnetNawsSubNegotiationEvent(logger, subNegotiationEvent.Option, width, height, null);
 					break;
 				default:
-					logger.LogDebug(receivedTelnetSubNegotiationEventId, "Received sub-negotiation for option {Option} with data length {DataLength}", subNegotiationEvent.Option, subNegotiationEvent.Data.Length);
+					logReceivedTelnetSubNegotiationEvent(logger, subNegotiationEvent.Option, subNegotiationEvent.Data.Length, null);
 					break;
 			}
 		}
@@ -57,7 +97,7 @@ internal static class LoggerExtensions
 	{
 		if (logger.IsEnabled(LogLevel.Debug))
 		{
-			logger.LogDebug(receivedTelnetCloseEventId, "Connection closed by client.");
+			logReceivedTelnetCloseEvent(logger, null);
 		}
 	}
 
@@ -65,7 +105,7 @@ internal static class LoggerExtensions
 	{
 		if (logger.IsEnabled(LogLevel.Debug))
 		{
-			logger.LogDebug(receivedTelnetCsiEventId, "Received CSI: {Value} with suffix {Suffix}", csiEvent.Value, csiEvent.Suffix);
+			logReceivedTelnetCsiEvent(logger, csiEvent.Value, csiEvent.Suffix, null);
 		}
 	}
 
@@ -73,7 +113,7 @@ internal static class LoggerExtensions
 	{
 		if (logger.IsEnabled(LogLevel.Warning))
 		{
-			logger.LogWarning(receivedUnknownTelnetEvent, "Received unknown telnet event: {@Event}", @event);
+			logReceivedUnknownTelnetEvent(logger, @event, null);
 		}
 	}
 }
