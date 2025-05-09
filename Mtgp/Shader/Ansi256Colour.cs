@@ -7,25 +7,50 @@ public record struct Ansi256Colour(byte Value)
 	{
 	}
 
+	public Ansi256Colour(Ansi16Colour colour)
+		: this(GetValue(colour))
+	{
+	}
+
+	private static byte GetValue(Ansi16Colour colour)
+	{
+		byte value = (byte)colour.Colour;
+
+		if (colour.IsBright)
+		{
+			value += 8;
+		}
+
+		return value;
+	}
+
 	private static byte GetValue(TrueColour colour)
 	{
-		if (Math.Abs(colour.R - colour.G) < 10 && Math.Abs(colour.G - colour.B) < 10)
-		{
-			byte grayLevel = (byte)Math.Round(((colour.R - 8) / 247.0) * 24);
-			grayLevel = Math.Clamp(grayLevel, (byte)0, (byte)23);
-			return (byte)(232 + grayLevel);
-		}
-		else
-		{
-			byte rLevel = (byte)Math.Round(colour.R / 51.0);
-			byte gLevel = (byte)Math.Round(colour.G / 51.0);
-			byte bLevel = (byte)Math.Round(colour.B / 51.0);
+		var (r, g, b) = colour;
 
-			rLevel = Math.Clamp(rLevel, (byte)0, (byte)5);
-			gLevel = Math.Clamp(gLevel, (byte)0, (byte)5);
-			bLevel = Math.Clamp(bLevel, (byte)0, (byte)5);
+		r = Math.Clamp(r, 0.0f, 1.0f);
+		g = Math.Clamp(g, 0.0f, 1.0f);
+		b = Math.Clamp(b, 0.0f, 1.0f);
 
-			return (byte)(16 + (36 * rLevel) + (6 * gLevel) + bLevel);
+		int ri = (int)(r * 255.0f);
+		int gi = (int)(g * 255.0f);
+		int bi = (int)(b * 255.0f);
+
+		if (Math.Abs(ri - gi) < 10 && Math.Abs(gi - bi) < 10)
+		{
+			int gray = (int)Math.Round(((ri - 8) / 247.0) * 24);
+			gray = Math.Clamp(gray, 0, 23);
+			return (byte)(232 + gray);
 		}
+
+		int rLevel = (int)Math.Round(ri / 51.0);
+		int gLevel = (int)Math.Round(gi / 51.0);
+		int bLevel = (int)Math.Round(bi / 51.0);
+
+		rLevel = Math.Clamp(rLevel, 0, 5);
+		gLevel = Math.Clamp(gLevel, 0, 5);
+		bLevel = Math.Clamp(bLevel, 0, 5);
+
+		return (byte)(16 + (36 * rLevel) + (6 * gLevel) + bLevel);
 	}
 }

@@ -139,9 +139,9 @@ internal class FlightSession(MtgpClient client, IWorldManager world)
 			await client.SetBufferData(buffer, particleSize * index, particleBuffer);
 		}
 
-		await client.AddClearBufferAction(actionList, presentImage.Character);
-		await client.AddClearBufferAction(actionList, presentImage.Foreground);
-		await client.AddClearBufferAction(actionList, presentImage.Background);
+		await client.AddClearBufferAction(actionList, presentImage.Character, [32, 0, 0, 0]);
+		await client.AddClearBufferAction(actionList, presentImage.Foreground, TrueColour.White);
+		await client.AddClearBufferAction(actionList, presentImage.Background, TrueColour.Black);
 
 		await client.AddDispatchAction(actionList, buffer, (particleCount, 1, 1), [bufferView1, bufferView2]);
 		await client.AddCopyBufferAction(actionList, buffer, buffer, particleBufferSize, 0, particleBufferSize);

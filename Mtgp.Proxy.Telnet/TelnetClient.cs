@@ -1,4 +1,6 @@
-﻿using System.Net.Sockets;
+﻿using Mtgp.Shader;
+using System.Net.Sockets;
+using System.Text;
 
 namespace Mtgp.Proxy.Telnet;
 
@@ -25,19 +27,52 @@ public class TelnetClient(TcpClient client)
 	public ValueTask SendSubnegotiationAsync(TelnetOption option, ReadOnlySpan<byte> data)
 		=> this.WriteAsync([(byte)TelnetCommand.IAC, (byte)TelnetCommand.SB, (byte)option, .. data, (byte)TelnetCommand.IAC, (byte)TelnetCommand.SE]);
 
-	public Task SetForegroundColourAsync(float r, float g, float b) => this.writer.WriteAsync($"\x1B[38;2;{(int)(r * 255)};{(int)(g * 255)};{(int)(b * 255)}m");
+	public Task SetForegroundColourAsync(Ansi256Colour colour) => this.WriteAsync($"\x1B[38;5;{colour.Value}m");
 
-	public Task SetBackgroundColourAsync(float r, float g, float b) => this.writer.WriteAsync($"\x1B[48;2;{(int)(r * 255)};{(int)(g * 255)};{(int)(b * 255)}m");
+	public Task SetBackgroundColourAsync(Ansi256Colour colour) => this.WriteAsync($"\x1B[48;5;{colour.Value}m");
 
-	public Task HideCursorAsync() => this.writer.WriteAsync("\x1B[?25l");
+	public Task SetForegroundColourAsync(float r, float g, float b) => this.WriteAsync($"\x1B[38;2;{(int)(r * 255)};{(int)(g * 255)};{(int)(b * 255)}m");
 
-	public Task SetWindowSizeAsync(int rows, int columns) => this.writer.WriteAsync($"\x1B[8;{rows};{columns}t");
+	public Task SetBackgroundColourAsync(float r, float g, float b) => this.WriteAsync($"\x1B[48;2;{(int)(r * 255)};{(int)(g * 255)};{(int)(b * 255)}m");
 
-	public Task MoveCursorAsync(int x, int y) => this.writer.WriteAsync($"\x1B[{y};{x}H");
+	public Task HideCursorAsync() => this.WriteAsync("\x1B[?25l");
 
-	public Task WriteAsync(string value) => this.writer.WriteAsync(value);
+	public Task SetWindowSizeAsync(int rows, int columns) => this.WriteAsync($"\x1B[8;{rows};{columns}t");
 
-	public Task WriteAsync(char[] value) => this.writer.WriteAsync(value);
+	public Task MoveCursorAsync(int x, int y) => this.WriteAsync($"\x1B[{y + 1};{x + 1}H");
+
+	public async Task WriteAsync(string value)
+	{
+		Console.WriteLine(Clean(value));
+		await this.writer.WriteAsync(value);
+	}
+
+	public async Task WriteAsync(char[] value)
+	{
+		Console.WriteLine(Clean(value));
+		await this.writer.WriteAsync(value);
+	}
+
+	public static string Clean(IEnumerable<char> value) => value.Aggregate(new StringBuilder(), (builder, character) =>
+	{
+		var replacement = character switch
+		{
+			'\x1B' => "\\x1B",
+			'\n' => "\\n",
+			'\r' => "\\r",
+			'\t' => "\\t",
+			'\0' => "\\0",
+			'\a' => "\\a",
+			'\v' => "\\v",
+			'\b' => "\\b",
+			'\f' => "\\f",
+			_ => character.ToString()
+		};
+
+		builder.Append(replacement);
+
+		return builder;
+	}).ToString();
 
 	private readonly SemaphoreSlim queuelock = new(1);
 

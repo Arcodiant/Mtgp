@@ -142,7 +142,7 @@ public class RenderPipeline(Dictionary<ShaderStage, IShaderExecutor> shaderStage
 			}
 		}
 
-		Parallel.ForEach(fragments.Where(frag => frag.X >= 0 || frag.Y < 0 || frag.X >= maxX || frag.Y >= maxY), frag =>
+		Parallel.ForEach(fragments.Where(frag => frag.X >= 0 && frag.Y >= 0 || frag.X < maxX || frag.Y < maxY), frag =>
 		{
 			var (x, y, xNormalised, yNormalised, instanceIndex, primitiveIndex) = frag;
 
@@ -212,7 +212,15 @@ public class RenderPipeline(Dictionary<ShaderStage, IShaderExecutor> shaderStage
 				
 				var target = attachment.Data.Span[(index * size)..][..size];
 
-				fragment.OutputMappings.GetLocation(output, frameAttachmentIndex)[..size].CopyTo(target);
+				if (format == ImageFormat.R32G32B32_SFloat || format == ImageFormat.T32_SInt)
+				{
+					fragment.OutputMappings.GetLocation(output, frameAttachmentIndex)[..size].CopyTo(target);
+				}
+				else
+				{
+					var colour = TextelUtil.GetColour(fragment.OutputMappings.GetLocation(output, frameAttachmentIndex), ImageFormat.R32G32B32_SFloat).TrueColour;
+					TextelUtil.SetColour(target, colour, format);
+				}
 			}
 		});
 

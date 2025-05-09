@@ -3,19 +3,13 @@ using System.Threading.Channels;
 
 namespace Mtgp.Proxy.Telnet;
 
-public enum OptionRequirement
-{
-	Required,
-	Preferred,
-	Refused
-}
-
 public class TelnetConnection(TelnetClient client, ILogger<TelnetConnection> logger)
 {
 	private readonly Dictionary<TelnetOption, TaskCompletionSource<byte[]>> waitingSubnegotiations = [];
 	private readonly Dictionary<TelnetOption, TaskCompletionSource<TelnetCommand>> waitingOptionRequests = [];
 
 	private readonly Dictionary<TelnetOption, TelnetCommand> clientOptionState = [];
+	private readonly Dictionary<TelnetOption, TelnetCommand> serverOptionState = [];
 
 	private readonly Channel<string> textChannel = Channel.CreateUnbounded<string>();
 
@@ -27,7 +21,9 @@ public class TelnetConnection(TelnetClient client, ILogger<TelnetConnection> log
 
 	private bool IsRunning => !readTaskCancellation.IsCancellationRequested && readTask != null && !readTask.IsCompleted;
 
-	public async Task<TelnetCommand> RequestOptionAndWaitAsync(TelnetCommand command, TelnetOption option, bool force = false)
+	public TelnetClient Client => client;
+
+	public async Task<TelnetCommand> RequestOptionAndWaitAsync(TelnetCommand command, TelnetOption option)
 	{
 		if (!IsRunning)
 		{
@@ -46,15 +42,12 @@ public class TelnetConnection(TelnetClient client, ILogger<TelnetConnection> log
 			await existingRequest.Task;
 		}
 
-		bool shouldWait = clientOptionState.TryGetValue(option, out var existingCommand)
-								&& command.IsImperative()
-								&& existingCommand.Reciprocal() == command;
+		bool receivedState = command.IsImperative()
+								? clientOptionState.TryGetValue(option, out var existingCommand)
+								: serverOptionState.TryGetValue(option, out existingCommand);
 
-		if (shouldWait && !force)
-		{
-			logger.LogDebug("Remote client has already agreed to {Command} {Option}, skipping request.", command, option);
-			return existingCommand;
-		}
+
+		bool shouldWait = !(receivedState && existingCommand.Reciprocal() == command);
 
 		if (shouldWait)
 		{
@@ -114,6 +107,10 @@ public class TelnetConnection(TelnetClient client, ILogger<TelnetConnection> log
 							if (commandEvent.Command.IsInformative())
 							{
 								this.clientOptionState[commandEvent.Option] = commandEvent.Command;
+							}
+							else if (commandEvent.Command.IsImperative())
+							{
+								this.serverOptionState[commandEvent.Option] = commandEvent.Command;
 							}
 
 							if (waitingOptionRequests.TryGetValue(commandEvent.Option, out var tcs))

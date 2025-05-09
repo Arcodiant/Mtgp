@@ -11,7 +11,7 @@ using Mtgp.Proxy.Profiles;
 
 namespace Mtgp.Proxy;
 
-internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetClient telnetClient, ClientProfile profile)
+internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetConnection connection, ClientProfile profile)
 	: IProxyExtension
 {
 	private class ResourceStore
@@ -66,32 +66,34 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 	private TelnetPresentReceiver? presentReceiver;
 	private PresentOptimiser? presentOptimiser;
 
-	private const int width = 120;
-	private const int height = 36;
+	private Extent2D size = new(80, 25);
 
 	public async Task SetupAsync()
 	{
-		await telnetClient.SendCommandAsync(TelnetCommand.DONT, TelnetOption.Echo);
-		await telnetClient.SendCommandAsync(TelnetCommand.WILL, TelnetOption.Echo);
-		await telnetClient.SendCommandAsync(TelnetCommand.DO, TelnetOption.SuppressGoAhead);
-		await telnetClient.SendCommandAsync(TelnetCommand.WILL, TelnetOption.SuppressGoAhead);
-		await telnetClient.SendCommandAsync(TelnetCommand.DO, TelnetOption.NegotiateAboutWindowSize);
+		await connection.RequestOptionAndWaitAsync(TelnetCommand.WILL, TelnetOption.Echo);
+		await connection.RequestOptionAndWaitAsync(TelnetCommand.DO, TelnetOption.SuppressGoAhead);
+		await connection.RequestOptionAndWaitAsync(TelnetCommand.WILL, TelnetOption.SuppressGoAhead);
+		await connection.RequestOptionAndWaitAsync(TelnetCommand.DO, TelnetOption.NegotiateAboutWindowSize);
 
-		await telnetClient.HideCursorAsync();
+		await connection.Client.HideCursorAsync();
 
-		await telnetClient.SetWindowSizeAsync(height, width);
+		this.size = await connection.GetWindowSizeAsync();
 	}
 
 	public void RegisterMessageHandlers(ProxyController proxy)
 	{
-		this.presentReceiver = new(telnetClient);
-		this.presentOptimiser = new(this.presentReceiver, new Extent2D(width, height));
+		this.presentReceiver = new(connection.Client);
+		this.presentOptimiser = new(this.presentReceiver, size);
 
-		this.resourceStore.Add(new ImageState((width, height, 1), ImageFormat.T32_SInt));
-		this.resourceStore.Add(new ImageState((width, height, 1), ImageFormat.R32G32B32_SFloat));
-		this.resourceStore.Add(new ImageState((width, height, 1), ImageFormat.R32G32B32_SFloat));
+		this.resourceStore.Add(new ImageState((size.Width, size.Height, 1), ImageFormat.T32_SInt));
+		this.resourceStore.Add(new ImageState((size.Width, size.Height, 1), ImageFormat.Ansi256));
+		this.resourceStore.Add(new ImageState((size.Width, size.Height, 1), ImageFormat.Ansi256));
 
-		MemoryMarshal.Cast<byte, float>(this.resourceStore.Get<ImageState>(1).Data.Span).Fill(1.0f);
+		MemoryMarshal.Cast<byte, int>(this.resourceStore.Get<ImageState>(0).Data.Span).Fill((byte)' ');
+		this.resourceStore.Get<ImageState>(1).Data.Span.Fill(15);
+		this.resourceStore.Get<ImageState>(2).Data.Span.Fill(0);
+
+		//MemoryMarshal.Cast<byte, float>(this.resourceStore.Get<ImageState>(1).Data.Span).Fill(1.0f);
 
 		proxy.RegisterMessageHandler<SetDefaultPipeRequest>(SetDefaultPipe);
 		proxy.RegisterMessageHandler<SendRequest>(Send);
@@ -251,7 +253,14 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCl
 	{
 		var actionList = this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions;
 
-		actionList.Add(new ClearAction(this.resourceStore.Get<ImageState>(request.Image)));
+		ImageState imageState = this.resourceStore.Get<ImageState>(request.Image);
+
+		if (imageState.Format.GetSize() != request.Data.Length)
+		{
+			return new MtgpResponse(0, "invalidRequest");
+		}
+
+		actionList.Add(new ClearAction(imageState, request.Data));
 
 		return new MtgpResponse(0, "ok");
 	}

@@ -1,4 +1,6 @@
-﻿namespace Mtgp.Proxy.Profiles;
+﻿using Mtgp.Shader;
+
+namespace Mtgp.Proxy.Profiles;
 
 [Flags]
 public enum ClientQuirk
@@ -16,14 +18,6 @@ public enum ClientCap
 	SetTitle		= 1 << 1,
 	GetWindowSize	= 1 << 2,
 	SetWindowSize	= 1 << 3,
-}
-
-public enum ClientColourSpace
-{
-	Monochrome,
-	ANSI,
-	_256,
-	True,
 }
 
 [Flags]
@@ -47,16 +41,16 @@ public enum MttsCaps
 public record ClientProfile
 	(
 		string Name,
-		ClientColourSpace ColourSpace,
+		ColourFormat ColourFormat,
 		ClientCap Capabilities,
 		ClientQuirk Quirks = ClientQuirk.None
 	)
 {
-	public static readonly ClientProfile TinTin = new("TinTin", ClientColourSpace.True, ClientCap.SetCursor | ClientCap.GetWindowSize | ClientCap.SetWindowSize, ClientQuirk.SetServerSideEchoOnly);
-	public static readonly ClientProfile MUDlet = new("MUDlet", ClientColourSpace.True, ClientCap.GetWindowSize);
-	public static readonly ClientProfile WindowsTelnet = new("Windows Telnet", ClientColourSpace.ANSI, ClientCap.GetWindowSize | ClientCap.SetCursor, ClientQuirk.MustResetTerminalTypeOption);
-	public static readonly ClientProfile PuTTY = new("PuTTY", ClientColourSpace.True, ClientCap.SetCursor | ClientCap.SetTitle | ClientCap.GetWindowSize | ClientCap.SetWindowSize);
-	public static readonly ClientProfile Mushclient = new("MUSHclient", ClientColourSpace._256, ClientCap.None);
+	public static readonly ClientProfile TinTin = new("TinTin", ColourFormat.TrueColour, ClientCap.SetCursor | ClientCap.GetWindowSize | ClientCap.SetWindowSize, ClientQuirk.SetServerSideEchoOnly);
+	public static readonly ClientProfile MUDlet = new("MUDlet", ColourFormat.TrueColour, ClientCap.GetWindowSize);
+	public static readonly ClientProfile WindowsTelnet = new("Windows Telnet", ColourFormat.Ansi16, ClientCap.GetWindowSize | ClientCap.SetCursor, ClientQuirk.MustResetTerminalTypeOption);
+	public static readonly ClientProfile PuTTY = new("PuTTY", ColourFormat.TrueColour, ClientCap.SetCursor | ClientCap.SetTitle | ClientCap.GetWindowSize | ClientCap.SetWindowSize);
+	public static readonly ClientProfile Mushclient = new("MUSHclient", ColourFormat.Ansi256, ClientCap.None);
 
 	public static readonly Dictionary<string, ClientProfile> ByTerminalType = new()
 	{

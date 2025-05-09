@@ -1,19 +1,19 @@
-﻿struct Output
+﻿struct Input
 {
-    [Location=0] int character;
-    [Location=1] vec<float, 3> colour;
-    [Location=2] vec<float, 3> background;
+    [Location=0] float u;
+    [Location=1] float v;
 }
 
-struct Input
+struct Output
 {
-    [PositionX] int x;
-    [PositionY] int y;
+	[Location=0] int character;
+	[Location=1] vec<float,3> foreground;
+    [Location=2] vec<float,3> background;
 }
 
 func Output Main(Input input)
 {
-    result.colour = Vec(1.0, 1.0, 1.0);
+    result.character = 'X';
+    result.foreground = Vec(input.u, input.v, 1.0);
     result.background = Vec(0.0, 0.0, 0.0);
-    result.character = 42;
 }

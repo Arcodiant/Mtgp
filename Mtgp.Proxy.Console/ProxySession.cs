@@ -12,7 +12,7 @@ using System.Text.Json;
 
 namespace Mtgp.Proxy
 {
-	internal class ProxySession(TcpClient telnetTcpClient, IFactory<TelnetConnection, TelnetClient> connectionFactory, IFactory<ShaderModeExtension, TelnetClient, ClientProfile> shaderModeFactory, ILogger<ProxySession> logger)
+	internal class ProxySession(TcpClient telnetTcpClient, IFactory<TelnetConnection, TelnetClient> connectionFactory, IFactory<ShaderModeExtension, TelnetConnection, ClientProfile> shaderModeFactory, ILogger<ProxySession> logger)
 	{
 		static ClientProfile IdentifyProfile(IEnumerable<string> terminalTypes)
 		{
@@ -30,15 +30,15 @@ namespace Mtgp.Proxy
 			{
 				mttsCaps = (MttsCaps)int.Parse(terminalTypes.Single(type => type.StartsWith("mtts")).AsSpan(4));
 
-				var colourSpace = ClientColourSpace.ANSI;
+				var colourFormat = ColourFormat.Ansi16;
 
 				if (mttsCaps.HasFlag(MttsCaps.TrueColour))
 				{
-					colourSpace = ClientColourSpace.True;
+					colourFormat = ColourFormat.TrueColour;
 				}
 				else if (mttsCaps.HasFlag(MttsCaps._256Colours))
 				{
-					colourSpace = ClientColourSpace._256;
+					colourFormat = ColourFormat.Ansi256;
 				}
 
 				var clientCaps = ClientCap.None;
@@ -48,15 +48,15 @@ namespace Mtgp.Proxy
 					clientCaps |= ClientCap.SetCursor;
 				}
 
-				return new ClientProfile("MTTS", colourSpace, clientCaps);
+				return new ClientProfile("MTTS", colourFormat, clientCaps);
 			}
 
 			if (terminalTypes.Contains("xterm"))
 			{
-				return new ClientProfile("XTerm", ClientColourSpace.True, ClientCap.SetCursor | ClientCap.GetWindowSize | ClientCap.SetWindowSize | ClientCap.SetTitle);
+				return new ClientProfile("XTerm", ColourFormat.TrueColour, ClientCap.SetCursor | ClientCap.GetWindowSize | ClientCap.SetWindowSize | ClientCap.SetTitle);
 			}
 
-			return new ClientProfile("Basic", ClientColourSpace.ANSI, ClientCap.None);
+			return new ClientProfile("Basic", ColourFormat.Ansi16, ClientCap.None);
 		}
 
 		public async Task RunAsync()
@@ -68,7 +68,7 @@ namespace Mtgp.Proxy
 			connection.Start();
 
 			await connection.RequestOptionAndWaitAsync(TelnetCommand.DO, TelnetOption.TerminalType);
-			await connection.RequestOptionAndWaitAsync(TelnetCommand.DO, TelnetOption.NewEnvironmentOption, force: true);
+			await connection.RequestOptionAndWaitAsync(TelnetCommand.DO, TelnetOption.NewEnvironmentOption);
 
 			var terminalType = (await connection.GetTerminalTypeAsync()).ToLower();
 			var terminalTypes = new List<string>();
@@ -104,7 +104,7 @@ namespace Mtgp.Proxy
 			{
 				logger.LogInformation("Using shader mode");
 
-				var shaderExtension = shaderModeFactory.Create(telnetClient, profile);
+				var shaderExtension = shaderModeFactory.Create(connection, profile);
 
 				await shaderExtension.SetupAsync();
 

@@ -106,9 +106,9 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 		return (result.CharacterImageId, result.ForegroundImageId, result.BackgroundImageId);
 	}
 
-	public async Task AddClearBufferAction(int actionListId, int image)
+	public async Task AddClearBufferAction(int actionListId, int image, byte[] data)
 	{
-		var result = await this.connection.SendAsync(new AddClearBufferActionRequest(Interlocked.Increment(ref this.requestId), actionListId, image));
+		var result = await this.connection.SendAsync(new AddClearBufferActionRequest(Interlocked.Increment(ref this.requestId), actionListId, image, data));
 
 		ThrowIfError(result);
 	}
