@@ -43,13 +43,11 @@ public class TelnetClient(TcpClient client)
 
 	public async Task WriteAsync(string value)
 	{
-		Console.WriteLine(Clean(value));
 		await this.writer.WriteAsync(value);
 	}
 
 	public async Task WriteAsync(char[] value)
 	{
-		Console.WriteLine(Clean(value));
 		await this.writer.WriteAsync(value);
 	}
 

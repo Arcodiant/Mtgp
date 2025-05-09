@@ -1,4 +1,7 @@
 ﻿namespace Mtgp.Messages;
 
 public record AddTriggerActionListActionRequest(int Id, int ActionList, int TriggeredActionList)
-	: MtgpRequest(Id, "core.shader.addTriggerActionListAction");
+	: MtgpRequest(Id), IMtgpRequestType
+{
+	public static string Command => "core.shader.addTriggerActionListAction";
+}

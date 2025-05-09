@@ -4,7 +4,7 @@ namespace Mtgp.Messages;
 
 public record MtgpMessage(int Id, MtgpMessageType Type);
 
-public record MtgpRequest(int Id, [property:JsonIgnore]string Command)
+public abstract record MtgpRequest(int Id)
 	: MtgpMessage(Id, MtgpMessageType.Request);
 
 public record MtgpResponse(int Id, string Result)
@@ -14,4 +14,9 @@ public enum MtgpMessageType
 {
 	Request,
 	Response
+}
+
+public interface IMtgpRequestType
+{
+	static abstract string Command { get; }
 }

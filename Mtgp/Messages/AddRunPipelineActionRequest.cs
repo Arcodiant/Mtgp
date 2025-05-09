@@ -1,4 +1,7 @@
 ﻿namespace Mtgp.Messages;
 
 public record AddRunPipelineActionRequest(int Id, int ActionList, int Pipeline)
-	: MtgpRequest(Id, "core.shader.addRunPipelineAction");
+	: MtgpRequest(Id), IMtgpRequestType
+{
+	public static string Command => "core.shader.addRunPipelineAction";
+}
