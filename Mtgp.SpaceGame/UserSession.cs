@@ -23,7 +23,7 @@ namespace Mtgp.SpaceGame
 
 			var bufferManager = new BufferManager(client);
 
-			var uiManager = new UIManager(shaderManager, bufferManager, client);
+			var uiManager = await UIManager.CreateAsync(shaderManager, bufferManager, client);
 
 			int outputArea = await uiManager.CreateStringSplitArea(new Rect2D((1, 1), (78, 18)), true);
 

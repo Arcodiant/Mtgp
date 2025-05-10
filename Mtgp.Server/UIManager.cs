@@ -3,14 +3,18 @@ using System.Text;
 
 namespace Mtgp.Server;
 
-public class UIManager(IShaderManager shaderManager, IBufferManager bufferManager, MtgpClient client)
+public class UIManager
 {
 	private readonly List<StringSplitData> stringSplitAreas = [];
 	private readonly List<PanelData> panels = [];
 	private readonly Dictionary<string, int> shaderCache = [];
 	private readonly List<int> shaderBuffers = [];
 	private readonly List<(int Priority, Func<int, Task> Create)> createMainActions = [];
-
+	private readonly IShaderManager shaderManager;
+	private readonly IBufferManager bufferManager;
+	private readonly MtgpClient client;
+	private readonly int presentSet;
+	private readonly ImageFormat imageFormat;
 	private int lastBufferOffset = 0;
 
 	private (int Pipe, int ActionList)? mainPipe;
@@ -18,6 +22,36 @@ public class UIManager(IShaderManager shaderManager, IBufferManager bufferManage
 
 	private record StringSplitData(int PipeId, int PipelineId);
 	private record PanelData();
+
+	public async static Task<UIManager> CreateAsync(IShaderManager shaderManager, IBufferManager bufferManager, MtgpClient client)
+	{
+		var clientShaderCaps = await client.GetClientShaderCapabilities();
+
+		var imageFormat = clientShaderCaps.PresentFormats.Last();
+
+		await client.GetResourceBuilder()
+					.PresentSet(out var presentSetTask,
+					new()
+					{
+						[PresentImagePurpose.Character] = ImageFormat.T32_SInt,
+						[PresentImagePurpose.Foreground] = imageFormat,
+						[PresentImagePurpose.Background] = imageFormat
+					})
+					.BuildAsync();
+
+		var presentSet = await presentSetTask;
+
+		return new UIManager(shaderManager, bufferManager, client, presentSet, imageFormat);
+	}
+
+	private UIManager(IShaderManager shaderManager, IBufferManager bufferManager, MtgpClient client, int presentSet, ImageFormat imageFormat)
+	{
+		this.shaderManager = shaderManager;
+		this.bufferManager = bufferManager;
+		this.client = client;
+		this.presentSet = presentSet;
+		this.imageFormat = imageFormat;
+	}
 
 	private async Task<int> GetShaderAsync(string filePath)
 	{
@@ -35,13 +69,13 @@ public class UIManager(IShaderManager shaderManager, IBufferManager bufferManage
 		int vertexShader = await GetShaderAsync("./Shaders/UI/Simple.vert");
 		int fragmentShader = await GetShaderAsync("./Shaders/UI/Simple.frag");
 
-		var presentImage = await client.GetPresentImage();
-
 		await client.GetResourceBuilder()
 					.Buffer(out var sharedBufferTask, 16)
 					.BuildAsync();
 
 		var sharedBuffer = await sharedBufferTask;
+
+		var presentImage = await client.GetPresentImage(presentSet);
 
 		var vertexData = new byte[16];
 
@@ -81,10 +115,12 @@ public class UIManager(IShaderManager shaderManager, IBufferManager bufferManage
 
 		await EnsureMainPipe();
 
+		var frameBuffer = (presentImage[PresentImagePurpose.Character], presentImage[PresentImagePurpose.Foreground], presentImage[PresentImagePurpose.Background]);
+
 		this.createMainActions.Add((2, async mainActionList =>
 		{
 			await client.AddBindVertexBuffers(mainActionList, 0, [(sharedBuffer, 0)]);
-			await client.AddDrawAction(mainActionList, renderPipeline, [], [], presentImage, 1, 2);
+			await client.AddDrawAction(mainActionList, renderPipeline, [], [], frameBuffer, 1, 2);
 		}
 		));
 
@@ -102,7 +138,7 @@ public class UIManager(IShaderManager shaderManager, IBufferManager bufferManage
 		int vertexShader = await GetShaderAsync("./Shaders/UI/StringSplit.vert");
 		int fragmentShader = await GetShaderAsync("./Shaders/UI/StringSplit.frag");
 
-		var presentImage = await client.GetPresentImage();
+		var presentImage = await client.GetPresentImage(this.presentSet);
 
 		await client.GetResourceBuilder()
 					.ActionList(out var outputPipeActionListTask, "actionList")
@@ -163,10 +199,12 @@ public class UIManager(IShaderManager shaderManager, IBufferManager bufferManage
 		await client.AddRunPipelineAction(outputPipeActionList, splitStringPipeline);
 		await client.AddTriggerActionListAction(outputPipeActionList, mainPipe!.Value.ActionList);
 
+		var frameBuffer = (presentImage[PresentImagePurpose.Character], presentImage[PresentImagePurpose.Foreground], presentImage[PresentImagePurpose.Background]);
+
 		this.createMainActions.Add((1, async mainActionList =>
 		{
 			await client.AddBindVertexBuffers(mainActionList, 0, [(sharedBuffer, 0)]);
-			await client.AddIndirectDrawAction(mainActionList, stringSplitRenderPipeline, [lineImage], [], presentImage, indirectCommandBufferView, 0);
+			await client.AddIndirectDrawAction(mainActionList, stringSplitRenderPipeline, [lineImage], [], frameBuffer, indirectCommandBufferView, 0);
 		}
 		));
 
@@ -202,7 +240,7 @@ public class UIManager(IShaderManager shaderManager, IBufferManager bufferManage
 		{
 			await action(mainActionListId);
 		}
-		await client.AddPresentAction(mainActionListId);
+		await client.AddPresentAction(mainActionListId, presentSet);
 	}
 
 	public async Task StringSplitSend(int stringSplitArea, string text)

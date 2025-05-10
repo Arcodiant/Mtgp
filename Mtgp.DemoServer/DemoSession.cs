@@ -18,9 +18,20 @@ internal class DemoSession(MtgpClient client, ILogger<DemoSession> logger)
 		var vertexShader = await shaderManager.CreateShaderFromFileAsync("./Shaders/Simple.vert");
 		var fragmentShader = await shaderManager.CreateShaderFromFileAsync("./Shaders/Simple.frag");
 
+		var clientShaderCaps = await client.GetClientShaderCapabilities();
+
+		var imageFormat = clientShaderCaps.PresentFormats.Last();
+
 		await client.GetResourceBuilder()
 					.ActionList(out var actionListTask, "ActionList")
 					.Pipe(out var pipeTask, "ActionList")
+					.PresentSet(out var presentSetTask,
+						new()
+						{
+							[PresentImagePurpose.Character] = ImageFormat.T32_SInt,
+							[PresentImagePurpose.Foreground] = imageFormat,
+							[PresentImagePurpose.Background] = imageFormat
+						})
 					.RenderPipeline(out var renderPipelineTask,
 						[
 							new(ShaderStage.Vertex, vertexShader, "Main"),
@@ -35,15 +46,19 @@ internal class DemoSession(MtgpClient client, ILogger<DemoSession> logger)
 						[], false, PolygonMode.Fill)
 					.BuildAsync();
 
-		var (actionList, pipe, renderPipeline) = (await actionListTask, await pipeTask, await renderPipelineTask);
+		var (actionList, pipe, presentSet, renderPipeline) = (await actionListTask, await pipeTask, await presentSetTask, await renderPipelineTask);
 
-		var (character, foreground, background) = await client.GetPresentImage();
+		var presentImage = await client.GetPresentImage(presentSet);
+
+		int character = presentImage[PresentImagePurpose.Character];
+		int foreground = presentImage[PresentImagePurpose.Foreground];
+		int background = presentImage[PresentImagePurpose.Background];
 
 		await client.AddClearBufferAction(actionList, character, ' ');
-		await client.AddClearBufferAction(actionList, foreground, new Ansi256Colour(TrueColour.White));
-		await client.AddClearBufferAction(actionList, background, new Ansi256Colour(TrueColour.Black));
+		await client.AddClearBufferAction(actionList, foreground, TrueColour.White);
+		await client.AddClearBufferAction(actionList, background, TrueColour.Black);
 		await client.AddDrawAction(actionList, renderPipeline, [], [], (character, foreground, background), 1, 2);
-		await client.AddPresentAction(actionList);
+		await client.AddPresentAction(actionList, presentSet);
 
 		await client.Send(actionList, []);
 

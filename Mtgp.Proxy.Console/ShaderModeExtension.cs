@@ -8,6 +8,8 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using Mtgp.Proxy.Profiles;
+using static System.Net.Mime.MediaTypeNames;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Mtgp.Proxy;
 
@@ -85,16 +87,6 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 		this.presentReceiver = new(connection.Client);
 		this.presentOptimiser = new(this.presentReceiver, size);
 
-		this.resourceStore.Add(new ImageState((size.Width, size.Height, 1), ImageFormat.T32_SInt));
-		this.resourceStore.Add(new ImageState((size.Width, size.Height, 1), ImageFormat.Ansi256));
-		this.resourceStore.Add(new ImageState((size.Width, size.Height, 1), ImageFormat.Ansi256));
-
-		MemoryMarshal.Cast<byte, int>(this.resourceStore.Get<ImageState>(0).Data.Span).Fill((byte)' ');
-		this.resourceStore.Get<ImageState>(1).Data.Span.Fill(15);
-		this.resourceStore.Get<ImageState>(2).Data.Span.Fill(0);
-
-		//MemoryMarshal.Cast<byte, float>(this.resourceStore.Get<ImageState>(1).Data.Span).Fill(1.0f);
-
 		proxy.RegisterMessageHandler<SetDefaultPipeRequest>(SetDefaultPipe);
 		proxy.RegisterMessageHandler<SendRequest>(Send);
 		proxy.RegisterMessageHandler<CreateResourceRequest>(CreateResource);
@@ -113,6 +105,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 		proxy.RegisterMessageHandler<AddPresentActionRequest>(AddPresentAction);
 		proxy.RegisterMessageHandler<AddRunPipelineActionRequest>(AddRunPipelineAction);
 		proxy.RegisterMessageHandler<AddTriggerActionListActionRequest>(AddTriggerActionListAction);
+		proxy.RegisterMessageHandler<GetClientShaderCapabilitiesRequest>(GetClientShaderCapabilities);
 
 		proxy.OnDefaultPipeSend += async (pipe, message) =>
 		{
@@ -122,6 +115,14 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 			}
 		};
 	}
+
+	private MtgpResponse GetClientShaderCapabilities(GetClientShaderCapabilitiesRequest request)
+		=> new GetClientShaderCapabilitiesResponse(0, new(profile.ColourFormat switch
+		{
+			ColourFormat.Ansi16 => [ImageFormat.Ansi16],
+			ColourFormat.Ansi256 => [ImageFormat.Ansi16, ImageFormat.Ansi256],
+			ColourFormat.TrueColour => [ImageFormat.Ansi16, ImageFormat.Ansi256, ImageFormat.R32G32B32_SFloat],
+		}));
 
 	private MtgpResponse SetTimerTrigger(SetTimerTriggerRequest request)
 	{
@@ -205,12 +206,17 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 	{
 		var actionList = this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions;
 
-		actionList.Add(new PresentAction(this.resourceStore.Get<ImageState>(0), this.resourceStore.Get<ImageState>(1), this.resourceStore.Get<ImageState>(2), this.presentOptimiser!));
+		var presentSet = this.resourceStore.Get<PresentSet>(request.PresentSet);
+		var character = this.resourceStore.Get<ImageState>(presentSet.Images[PresentImagePurpose.Character]);
+		var foreground = this.resourceStore.Get<ImageState>(presentSet.Images[PresentImagePurpose.Foreground]);
+		var background = this.resourceStore.Get<ImageState>(presentSet.Images[PresentImagePurpose.Background]);
+
+		actionList.Add(new PresentAction(character, foreground, background, this.presentOptimiser!));
 
 		return new MtgpResponse(0, "ok");
 	}
 
-	private FrameBuffer GetFrameBuffer(int character = 0, int foreground = 1, int background = 2)
+	private FrameBuffer GetFrameBuffer(int character, int foreground, int background)
 		=> new([
 				this.resourceStore.Get<ImageState>(character),
 				this.resourceStore.Get<ImageState>(foreground),
@@ -305,7 +311,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 
 	private MtgpResponse GetPresentImage(GetPresentImageRequest request)
 	{
-		return new GetPresentImageResponse(request.Id, 0, 1, 2);
+		return new GetPresentImageResponse(0, this.resourceStore.Get<PresentSet>(request.PresentSet).Images);
 	}
 
 	private MtgpResponse CreateResource(CreateResourceRequest request)
@@ -320,6 +326,26 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 								 bool enableAlpha,
 								 PolygonMode polygonMode)
 			=> new(shaderStages.ToDictionary(x => x.Key, x => this.resourceStore.Get<IShaderExecutor>(x.Value)), vertexBufferBindings, vertexAttributes, fragmentAttributes, viewport, scissors, enableAlpha, polygonMode);
+
+		PresentSet CreatePresentSet(Dictionary<PresentImagePurpose, ImageFormat> formats)
+		{
+			if (!formats.ContainsKey(PresentImagePurpose.Character) || !formats.ContainsKey(PresentImagePurpose.Foreground) || !formats.ContainsKey(PresentImagePurpose.Background))
+			{
+				throw new Exception("Missing required image purposes");
+			}
+
+			var images = new Dictionary<PresentImagePurpose, int>();
+
+			Span<byte> trueColourWhite = stackalloc byte[12];
+			Span<byte> trueColourBlack = stackalloc byte[12];
+
+			foreach (var (purpose, format) in formats)
+			{
+				images[purpose] = this.resourceStore.Add(new ImageState((this.size.Width, this.size.Height, 1), format));
+			}
+
+			return new PresentSet(images);
+		}
 
 
 		var remainingResources = request.Resources.Select((x, y) => (Info: x, Index: y)).ToList();
@@ -401,6 +427,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 																													renderPipelineInfo.EnableAlpha,
 																													renderPipelineInfo.PolygonMode)),
 								CreateComputePipelineInfo computePipelineInfo => Create(new ComputePipeline(this.resourceStore.Get<IShaderExecutor>(GetId(computePipelineInfo.ComputeShader.Shader)))),
+								CreatePresentSetInfo presentSetInfo => Create(CreatePresentSet(presentSetInfo.Images)),
 								_ => ResourceCreateResult.InvalidRequest
 							};
 						}

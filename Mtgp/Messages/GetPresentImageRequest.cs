@@ -1,10 +1,12 @@
-﻿namespace Mtgp.Messages;
+﻿using Mtgp.Shader;
 
-public record GetPresentImageRequest(int Id)
+namespace Mtgp.Messages;
+
+public record GetPresentImageRequest(int Id, int PresentSet)
 	: MtgpRequest(Id), IMtgpRequestType
 {
 	public static string Command => "core.shader.getPresentImage";
 }
 
-public record GetPresentImageResponse(int Id, int CharacterImageId, int ForegroundImageId, int BackgroundImageId)
+public record GetPresentImageResponse(int Id, Dictionary<PresentImagePurpose, int> Images)
 	: MtgpResponse(Id, "ok");

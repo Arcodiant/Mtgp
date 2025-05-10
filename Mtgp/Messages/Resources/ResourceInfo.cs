@@ -12,6 +12,7 @@ namespace Mtgp.Messages.Resources;
 [JsonDerivedType(typeof(CreateActionListInfo), CreateActionListInfo.ResourceType)]
 [JsonDerivedType(typeof(CreatePipeInfo), CreatePipeInfo.ResourceType)]
 [JsonDerivedType(typeof(CreateStringSplitPipelineInfo), CreateStringSplitPipelineInfo.ResourceType)]
+[JsonDerivedType(typeof(CreatePresentSetInfo), CreatePresentSetInfo.ResourceType)]
 public record ResourceInfo(string? Reference = null);
 
 public record ResourceCreateResult(int ResourceId, ResourceCreateResultType Result)

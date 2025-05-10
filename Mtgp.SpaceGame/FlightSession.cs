@@ -45,6 +45,10 @@ internal class FlightSession(MtgpClient client, IWorldManager world)
 		var titleImageText = File.ReadAllText("Images/Title.txt");
 		var (titleImageData, titleImageSize) = ConvertToImage(titleImageText);
 
+		var clientShaderCaps = await client.GetClientShaderCapabilities();
+
+		var imageFormat = clientShaderCaps.PresentFormats.Last();
+
 		int particleCount = 36;
 		int particleSize = 16;
 		int particleBufferSize = particleCount * particleSize;
@@ -53,6 +57,13 @@ internal class FlightSession(MtgpClient client, IWorldManager world)
 		await client.GetResourceBuilder()
 				.ActionList(out var actionListTask, "ActionList")
 				.Pipe(out var pipeTask, "ActionList")
+				.PresentSet(out var presentSetTask,
+					new()
+					{
+						[PresentImagePurpose.Character] = ImageFormat.T32_SInt,
+						[PresentImagePurpose.Foreground] = imageFormat,
+						[PresentImagePurpose.Background] = imageFormat
+					})
 				.Buffer(out var bufferTask, particleBufferSize * 2 + titleImageInstanceSize, "Particles")
 				.Buffer(out var transferBufferTask, 120 * 36 * 16, "TransferBuffer")
 				.BufferView(out var bufferView1Task, "Particles", 0, particleBufferSize)
@@ -99,6 +110,7 @@ internal class FlightSession(MtgpClient client, IWorldManager world)
 		var actionList = await actionListTask;
 		var pipe = await pipeTask;
 		var buffer = await bufferTask;
+		var presentSet = await presentSetTask;
 		var transferBuffer = await transferBufferTask;
 		var bufferView1 = await bufferView1Task;
 		var bufferView2 = await bufferView2Task;
@@ -107,7 +119,10 @@ internal class FlightSession(MtgpClient client, IWorldManager world)
 		var renderPipeline = await renderPipelineTask;
 		var titleImageRenderPipeline = await titleImageRenderPipelineTask;
 
-		var presentImage = await client.GetPresentImage();
+		var presentImage = await client.GetPresentImage(presentSet);
+		var frameBuffer = (Character: presentImage[PresentImagePurpose.Character],
+							Foreground: presentImage[PresentImagePurpose.Foreground],
+							Background: presentImage[PresentImagePurpose.Background]);
 
 		await client.SetBufferData(transferBuffer, 0, titleImageData);
 		await client.AddCopyBufferToImageAction(actionList, transferBuffer, ImageFormat.T32_SInt, titleImage, [new(0, titleImageSize.Width, titleImageSize.Height, 0, 0, titleImageSize.Width, titleImageSize.Height)]);
@@ -139,18 +154,18 @@ internal class FlightSession(MtgpClient client, IWorldManager world)
 			await client.SetBufferData(buffer, particleSize * index, particleBuffer);
 		}
 
-		await client.AddClearBufferAction(actionList, presentImage.Character, [32, 0, 0, 0]);
-		await client.AddClearBufferAction(actionList, presentImage.Foreground, TrueColour.White);
-		await client.AddClearBufferAction(actionList, presentImage.Background, TrueColour.Black);
+		await client.AddClearBufferAction(actionList, frameBuffer.Character, [32, 0, 0, 0]);
+		await client.AddClearBufferAction(actionList, frameBuffer.Foreground, TrueColour.White);
+		await client.AddClearBufferAction(actionList, frameBuffer.Background, TrueColour.Black);
 
 		await client.AddDispatchAction(actionList, buffer, (particleCount, 1, 1), [bufferView1, bufferView2]);
 		await client.AddCopyBufferAction(actionList, buffer, buffer, particleBufferSize, 0, particleBufferSize);
 		await client.AddBindVertexBuffers(actionList, 0, [(buffer, 0)]);
-		await client.AddDrawAction(actionList, renderPipeline, [], [], presentImage, particleCount, 2);
+		await client.AddDrawAction(actionList, renderPipeline, [], [], frameBuffer, particleCount, 2);
 
 		await client.AddBindVertexBuffers(actionList, 0, [(buffer, particleBufferSize * 2)]);
-		await client.AddDrawAction(actionList, titleImageRenderPipeline, [titleImage], [], presentImage, 1, 2);
-		await client.AddPresentAction(actionList);
+		await client.AddDrawAction(actionList, titleImageRenderPipeline, [titleImage], [], frameBuffer, 1, 2);
+		await client.AddPresentAction(actionList, presentSet);
 
 		var waitHandle = new TaskCompletionSource();
 

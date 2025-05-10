@@ -97,13 +97,13 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 		ThrowIfError(result);
 	}
 
-	public async Task<(int Character, int Foreground, int Background)> GetPresentImage()
+	public async Task<Dictionary<PresentImagePurpose, int>> GetPresentImage(int presentSetId)
 	{
-		var result = await this.connection.SendAsync<GetPresentImageResponse>(new GetPresentImageRequest(Interlocked.Increment(ref this.requestId)));
+		var result = await this.connection.SendAsync<GetPresentImageResponse>(new GetPresentImageRequest(Interlocked.Increment(ref this.requestId), presentSetId));
 
 		ThrowIfError(result);
 
-		return (result.CharacterImageId, result.ForegroundImageId, result.BackgroundImageId);
+		return result.Images;
 	}
 
 	public async Task AddClearBufferAction(int actionListId, int image, byte[] data)
@@ -141,9 +141,9 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 		ThrowIfError(result);
 	}
 
-	public async Task AddPresentAction(int actionListId)
+	public async Task AddPresentAction(int actionListId, int presentSet)
 	{
-		var result = await this.connection.SendAsync(new AddPresentActionRequest(Interlocked.Increment(ref this.requestId), actionListId));
+		var result = await this.connection.SendAsync(new AddPresentActionRequest(Interlocked.Increment(ref this.requestId), actionListId, presentSet));
 
 		ThrowIfError(result);
 	}
@@ -218,6 +218,13 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 		var result = await this.connection.SendAsync(new ClearStringSplitPipelineRequest(Interlocked.Increment(ref this.requestId), pipeline));
 
 		ThrowIfError(result);
+	}
+
+	public async Task<ShaderCapabilities> GetClientShaderCapabilities()
+	{
+		var result = await this.connection.SendAsync<GetClientShaderCapabilitiesResponse>(new GetClientShaderCapabilitiesRequest(Interlocked.Increment(ref this.requestId)));
+		ThrowIfError(result);
+		return result.Capabilities;
 	}
 
 	public async Task<Task<int>[]> CreateResourcesAsync(params ResourceInfo[] resources)
@@ -300,6 +307,9 @@ public class ResourceBuilder(MtgpClient client)
 
 	public ResourceBuilder SplitStringPipeline(out Task<int> task, int Width, int Height, IdOrRef LineImage, IdOrRef InstanceBufferView, IdOrRef IndirectCommandBufferView, string? Reference = null)
 		=> this.Add(new CreateStringSplitPipelineInfo(Width, Height, LineImage, InstanceBufferView, IndirectCommandBufferView, Reference), out task);
+
+	public ResourceBuilder PresentSet(out Task<int> task, Dictionary<PresentImagePurpose, ImageFormat> images, string? reference = null)
+		=> this.Add(new CreatePresentSetInfo(images, reference), out task);
 
 	public async Task BuildAsync()
 	{

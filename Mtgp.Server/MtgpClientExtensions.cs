@@ -19,7 +19,7 @@ public static class MtgpClientExtensions
 				await client.AddClearBufferAction(actionList, image, [value.Ansi256Colour.Value]);
 				break;
 			case ColourFormat.TrueColour:
-				var data = new byte[3];
+				var data = new byte[12];
 
 				new BitWriter(data)
 					.Write(value.TrueColour.R)
