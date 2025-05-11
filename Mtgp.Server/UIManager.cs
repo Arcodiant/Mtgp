@@ -1,4 +1,5 @@
-﻿using Mtgp.Shader;
+﻿using Mtgp.Server.Shader;
+using Mtgp.Shader;
 using System.Text;
 
 namespace Mtgp.Server;
@@ -7,20 +8,20 @@ public class UIManager
 {
 	private readonly List<StringSplitData> stringSplitAreas = [];
 	private readonly List<PanelData> panels = [];
-	private readonly Dictionary<string, int> shaderCache = [];
-	private readonly List<int> shaderBuffers = [];
-	private readonly List<(int Priority, Func<int, Task> Create)> createMainActions = [];
+	private readonly Dictionary<string, ShaderHandle> shaderCache = [];
+	private readonly List<BufferHandle> shaderBuffers = [];
+	private readonly List<(int Priority, Func<ActionListHandle, Task> Create)> createMainActions = [];
 	private readonly IShaderManager shaderManager;
 	private readonly IBufferManager bufferManager;
 	private readonly MtgpClient client;
-	private readonly int presentSet;
+	private readonly PresentSetHandle presentSet;
 	private readonly ImageFormat imageFormat;
 	private int lastBufferOffset = 0;
 
-	private (int Pipe, int ActionList)? mainPipe;
+	private (PipeHandle Pipe, ActionListHandle ActionList)? mainPipe;
 
 
-	private record StringSplitData(int PipeId, int PipelineId);
+	private record StringSplitData(PipeHandle PipeId, StringSplitPipelineHandle PipelineId);
 	private record PanelData();
 
 	public async static Task<UIManager> CreateAsync(IShaderManager shaderManager, IBufferManager bufferManager, MtgpClient client)
@@ -44,7 +45,7 @@ public class UIManager
 		return new UIManager(shaderManager, bufferManager, client, presentSet, imageFormat);
 	}
 
-	private UIManager(IShaderManager shaderManager, IBufferManager bufferManager, MtgpClient client, int presentSet, ImageFormat imageFormat)
+	private UIManager(IShaderManager shaderManager, IBufferManager bufferManager, MtgpClient client, PresentSetHandle presentSet, ImageFormat imageFormat)
 	{
 		this.shaderManager = shaderManager;
 		this.bufferManager = bufferManager;
@@ -53,9 +54,9 @@ public class UIManager
 		this.imageFormat = imageFormat;
 	}
 
-	private async Task<int> GetShaderAsync(string filePath)
+	private async Task<ShaderHandle> GetShaderAsync(string filePath)
 	{
-		if (!this.shaderCache.TryGetValue(filePath, out int shader))
+		if (!this.shaderCache.TryGetValue(filePath, out var shader))
 		{
 			shader = await shaderManager.CreateShaderFromFileAsync(filePath);
 			this.shaderCache.Add(filePath, shader);
@@ -66,8 +67,8 @@ public class UIManager
 
 	public async Task<int> CreatePanel(Rect2D area)
 	{
-		int vertexShader = await GetShaderAsync("./Shaders/UI/Simple.vert");
-		int fragmentShader = await GetShaderAsync("./Shaders/UI/Simple.frag");
+		ShaderHandle vertexShader = await GetShaderAsync("./Shaders/UI/Simple.vert");
+		ShaderHandle fragmentShader = await GetShaderAsync("./Shaders/UI/Simple.frag");
 
 		await client.GetResourceBuilder()
 					.Buffer(out var sharedBufferTask, 16)
@@ -90,8 +91,8 @@ public class UIManager
 		await client.GetResourceBuilder()
 					.RenderPipeline(out var renderPipelineTask,
 										[
-											new(ShaderStage.Vertex, vertexShader, "Main"),
-											new(ShaderStage.Fragment, fragmentShader, "Main")
+											new(ShaderStage.Vertex, vertexShader.Id, "Main"),
+											new(ShaderStage.Fragment, fragmentShader.Id, "Main")
 										],
 										new(
 											[
@@ -135,8 +136,8 @@ public class UIManager
 
 	public async Task<int> CreateStringSplitArea(Rect2D area, bool transparentBackground = false)
 	{
-		int vertexShader = await GetShaderAsync("./Shaders/UI/StringSplit.vert");
-		int fragmentShader = await GetShaderAsync("./Shaders/UI/StringSplit.frag");
+		var vertexShader = await GetShaderAsync("./Shaders/UI/StringSplit.vert");
+		var fragmentShader = await GetShaderAsync("./Shaders/UI/StringSplit.frag");
 
 		var presentImage = await client.GetPresentImage(this.presentSet);
 
@@ -153,15 +154,15 @@ public class UIManager
 		var outputPipeActionList = await outputPipeActionListTask;
 
 		await client.GetResourceBuilder()
-					.BufferView(out var instanceBufferViewTask, sharedBuffer, 0, 512)
-					.BufferView(out var indirectCommandBufferViewTask, sharedBuffer, 512, 64)
+					.BufferView(out var instanceBufferViewTask, sharedBuffer.Id, 0, 512)
+					.BufferView(out var indirectCommandBufferViewTask, sharedBuffer.Id, 512, 64)
 					.BuildAsync();
 
 		var instanceBufferView = await instanceBufferViewTask;
 		var indirectCommandBufferView = await indirectCommandBufferViewTask;
 
 		await client.GetResourceBuilder()
-					.SplitStringPipeline(out var splitStringPipelineTask, area.Extent.Width, area.Extent.Height, lineImage, instanceBufferView, indirectCommandBufferView)
+					.StringSplitPipeline(out var splitStringPipelineTask, area.Extent.Width, area.Extent.Height, lineImage.Id, instanceBufferView.Id, indirectCommandBufferView.Id)
 					.BuildAsync();
 
 		var splitStringPipeline = await splitStringPipelineTask;
@@ -169,8 +170,8 @@ public class UIManager
 		await client.GetResourceBuilder()
 					.RenderPipeline(out var stringSplitRenderPipelineTask,
 										[
-											new(ShaderStage.Vertex, vertexShader, "Main"),
-											new(ShaderStage.Fragment, fragmentShader, "Main")
+											new(ShaderStage.Vertex, vertexShader.Id, "Main"),
+											new(ShaderStage.Fragment, fragmentShader.Id, "Main")
 										],
 										new(
 											[
@@ -199,7 +200,7 @@ public class UIManager
 		await client.AddRunPipelineAction(outputPipeActionList, splitStringPipeline);
 		await client.AddTriggerActionListAction(outputPipeActionList, mainPipe!.Value.ActionList);
 
-		var frameBuffer = (presentImage[PresentImagePurpose.Character], presentImage[PresentImagePurpose.Foreground], presentImage[PresentImagePurpose.Background]);
+		var frameBuffer = (presentImage[PresentImagePurpose.Character].Id, presentImage[PresentImagePurpose.Foreground].Id, presentImage[PresentImagePurpose.Background].Id);
 
 		this.createMainActions.Add((1, async mainActionList =>
 		{
@@ -224,7 +225,7 @@ public class UIManager
 						.Pipe(out var mainPipeTask, "mainActionList")
 						.BuildAsync();
 
-			int pipeId = await mainPipeTask;
+			var pipeId = await mainPipeTask;
 			var mainPipeActionList = await mainPipeActionListTask;
 
 			mainPipe = (pipeId, mainPipeActionList);

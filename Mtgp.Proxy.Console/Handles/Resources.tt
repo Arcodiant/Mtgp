@@ -1,0 +1,30 @@
+﻿<#@ template debug="false" hostspecific="false" language="C#" #>
+<#@ assembly name="System.Core" #>
+<#@ assembly name="System.Runtime" #>
+<#@ assembly name="System.Memory" #>
+<#@ assembly name="System.Text.Json" #>
+<#@ import namespace="System.Text.Json" #>
+<#@ import namespace="System.IO" #>
+<#@ import namespace="System" #>
+<#@ output extension=".cs" #>
+namespace Mtgp.Proxy.Handles;
+
+<#
+var doc = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllText("./API.json"));
+
+var resources = doc.RootElement
+	.GetProperty("shaderResources")
+	.EnumerateObject();
+
+foreach (var resource in resources)
+{
+	var resourceName = resource.Name;
+	char firstLetter = char.ToUpper(resourceName[0]);
+	
+	resourceName = firstLetter + resourceName.Substring(1);
+#>
+public record <#=resourceName#>Handle(int Id)
+	: ResourceHandle(Id);
+<#
+}
+#>

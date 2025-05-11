@@ -1,14 +1,15 @@
-﻿using Mtgp.Shader;
+﻿using Mtgp.Server.Shader;
+using Mtgp.Shader;
 using System.Text;
 
 namespace Mtgp.Server;
 
 public static class MtgpClientExtensions
 {
-	public static async Task AddClearBufferAction(this MtgpClient client, int actionList, int image, char value)
+	public static async Task AddClearBufferAction(this MtgpClient client, ActionListHandle actionList, ImageHandle image, char value)
 		=> await client.AddClearBufferAction(actionList, image, Encoding.UTF32.GetBytes([value]));
 
-	public static async Task AddClearBufferAction(this MtgpClient client, int actionList, int image, ColourField value)
+	public static async Task AddClearBufferAction(this MtgpClient client, ActionListHandle actionList, ImageHandle image, ColourField value)
 	{
 		switch(value.ColourFormat)
 		{

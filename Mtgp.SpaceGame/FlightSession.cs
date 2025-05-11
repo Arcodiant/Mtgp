@@ -70,9 +70,9 @@ internal class FlightSession(MtgpClient client, IWorldManager world)
 				.BufferView(out var bufferView2Task, "Particles", particleBufferSize, particleBufferSize)
 				.BufferView(out var titleImageInstanceBufferViewTask, "Particles", particleBufferSize * 2, titleImageInstanceSize)
 				.Image(out var titleImageTask, titleImageSize, ImageFormat.T32_SInt)
-				.ComputePipeline(out var pipelineTask, new(particleShader, "Main"))
+				.ComputePipeline(out var computePipelineTask, new(particleShader.Id, "Main"))
 				.RenderPipeline(out var renderPipelineTask,
-									[new(ShaderStage.Vertex, particleVertexShader, "Main"), new(ShaderStage.Fragment, particleFragmentShader, "Main")],
+									[new(ShaderStage.Vertex, particleVertexShader.Id, "Main"), new(ShaderStage.Fragment, particleFragmentShader.Id, "Main")],
 									new([new(0, particleSize, InputRate.PerInstance)],
 										[
 											new(0, 0, ShaderType.Int(4), 0),
@@ -82,14 +82,15 @@ internal class FlightSession(MtgpClient client, IWorldManager world)
 									[
 										new(0, ShaderType.Int(4), (1, 0, 0)),
 										new(1, ShaderType.Int(4), (1, 0, 0)),
-										new(2, ShaderType.Int(4), (1, 0, 0))
+										new(2, ShaderType.Int(4), (1, 0, 0)),
+										new(3, ShaderType.Float(4), (1, 0, 0))
 									],
 									new(new(0, 0, 0), new(120, 36, 1)),
 									[],
 									false,
 									PolygonMode.Fill)
 				.RenderPipeline(out var titleImageRenderPipelineTask,
-									[new(ShaderStage.Vertex, titleImageVertexShader, "Main"), new(ShaderStage.Fragment, titleImageFragmentShader, "Main")],
+									[new(ShaderStage.Vertex, titleImageVertexShader.Id, "Main"), new(ShaderStage.Fragment, titleImageFragmentShader.Id, "Main")],
 									new([new(0, 16, InputRate.PerInstance)],
 										[
 											new(0, 0, ShaderType.Int(4), 0),
@@ -116,6 +117,7 @@ internal class FlightSession(MtgpClient client, IWorldManager world)
 		var bufferView2 = await bufferView2Task;
 		var titleImageInstanceBufferView = await titleImageInstanceBufferViewTask;
 		var titleImage = await titleImageTask;
+		var computePipeline = await computePipelineTask;
 		var renderPipeline = await renderPipelineTask;
 		var titleImageRenderPipeline = await titleImageRenderPipelineTask;
 
@@ -158,7 +160,7 @@ internal class FlightSession(MtgpClient client, IWorldManager world)
 		await client.AddClearBufferAction(actionList, frameBuffer.Foreground, TrueColour.White);
 		await client.AddClearBufferAction(actionList, frameBuffer.Background, TrueColour.Black);
 
-		await client.AddDispatchAction(actionList, buffer, (particleCount, 1, 1), [bufferView1, bufferView2]);
+		await client.AddDispatchAction(actionList, computePipeline, (particleCount, 1, 1), [bufferView1, bufferView2]);
 		await client.AddCopyBufferAction(actionList, buffer, buffer, particleBufferSize, 0, particleBufferSize);
 		await client.AddBindVertexBuffers(actionList, 0, [(buffer, 0)]);
 		await client.AddDrawAction(actionList, renderPipeline, [], [], frameBuffer, particleCount, 2);

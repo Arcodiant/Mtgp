@@ -140,7 +140,50 @@ namespace Mtgp.Proxy.Shader.Tests
 		[DataRow(123456)]
 		[DataRow(0)]
 		[DataRow(-987)]
-		public void ShouldNegatet(int value)
+		public void ShouldConvertIntTofloat(int value)
+		{
+			var shader = new byte[1024];
+
+			new ShaderWriter(shader)
+				.EntryPoint([5, 6])
+				.DecorateLocation(5, 0)
+				.DecorateLocation(6, 0)
+				.TypeInt(1, 4)
+				.TypeFloat(2, 4)
+				.TypePointer(3, ShaderStorageClass.Input, 1)
+				.TypePointer(4, ShaderStorageClass.Output, 2)
+				.Variable(5, ShaderStorageClass.Input, 3)
+				.Variable(6, ShaderStorageClass.Output, 4)
+				.Load(7, 1, 5)
+				.IntToFloat(8, 2, 7)
+				.Store(6, 8)
+				.Return();
+
+			var inputMappings = new ShaderIoMappings(new() { [0] = 0 }, [], 4);
+
+			var outputMappings = new ShaderIoMappings(new() { [0] = 0 }, [], 4);
+
+			var target = buildExecutor(inputMappings, outputMappings, shader);
+
+			Span<byte> inputData = stackalloc byte[4];
+
+			new BitWriter(inputMappings.GetLocation(inputData, 0)).Write(value);
+
+			Span<byte> outputData = stackalloc byte[4];
+
+			target.Execute([], [], inputData, outputData);
+
+			new BitReader(outputMappings.GetLocation(outputData, 0)).Read(out float outputValue);
+
+			outputValue.Should().Be(value);
+		}
+
+		[TestMethod]
+		[DataRow(789)]
+		[DataRow(123456)]
+		[DataRow(0)]
+		[DataRow(-987)]
+		public void ShouldNegate(int value)
 		{
 			var shader = new byte[1024];
 

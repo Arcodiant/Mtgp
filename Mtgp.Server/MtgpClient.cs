@@ -2,6 +2,7 @@
 using Mtgp.Comms;
 using Mtgp.Messages;
 using Mtgp.Messages.Resources;
+using Mtgp.Server.Shader;
 using Mtgp.Shader;
 using Mtgp.Util;
 
@@ -83,9 +84,9 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 		ThrowIfError(result);
 	}
 
-	public async Task SetTimerTrigger(int actionList, int milliseconds)
+	public async Task SetTimerTrigger(ActionListHandle actionList, int milliseconds)
 	{
-		var result = await this.connection.SendAsync(new SetTimerTriggerRequest(Interlocked.Increment(ref this.requestId), actionList, milliseconds));
+		var result = await this.connection.SendAsync(new SetTimerTriggerRequest(Interlocked.Increment(ref this.requestId), actionList.Id, milliseconds));
 
 		ThrowIfError(result);
 	}
@@ -97,95 +98,102 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 		ThrowIfError(result);
 	}
 
-	public async Task<Dictionary<PresentImagePurpose, int>> GetPresentImage(int presentSetId)
+	public async Task<Dictionary<PresentImagePurpose, ImageHandle>> GetPresentImage(PresentSetHandle presentSet)
 	{
-		var result = await this.connection.SendAsync<GetPresentImageResponse>(new GetPresentImageRequest(Interlocked.Increment(ref this.requestId), presentSetId));
+		var result = await this.connection.SendAsync<GetPresentImageResponse>(new GetPresentImageRequest(Interlocked.Increment(ref this.requestId), presentSet.Id));
 
 		ThrowIfError(result);
 
-		return result.Images;
+		return result.Images.ToDictionary(x => x.Key, x => new ImageHandle(x.Value));
 	}
 
-	public async Task AddClearBufferAction(int actionListId, int image, byte[] data)
+	public async Task AddClearBufferAction(ActionListHandle actionList, ImageHandle image, byte[] data)
 	{
-		var result = await this.connection.SendAsync(new AddClearBufferActionRequest(Interlocked.Increment(ref this.requestId), actionListId, image, data));
-
-		ThrowIfError(result);
-	}
-
-	public async Task AddDrawAction(int actionListId, int renderPipeline, int[] imageAttachments, int[] bufferViewAttachments, (int Character, int Foreground, int Background) frameBuffer, int instanceCount, int vertexCount)
-	{
-		var result = await this.connection.SendAsync(new AddDrawActionRequest(Interlocked.Increment(ref this.requestId), actionListId, renderPipeline, imageAttachments, bufferViewAttachments, new(frameBuffer.Character, frameBuffer.Foreground, frameBuffer.Background), instanceCount, vertexCount));
+		var result = await this.connection.SendAsync(new AddClearBufferActionRequest(Interlocked.Increment(ref this.requestId), actionList.Id, image.Id, data));
 
 		ThrowIfError(result);
 	}
 
-	public async Task AddDispatchAction(int actionListId, int computePipeline, Extent3D dimensions, int[] bufferViewAttachments)
+	public async Task AddDrawAction(ActionListHandle actionList, RenderPipelineHandle renderPipeline, ImageHandle[] imageAttachments, BufferViewHandle[] bufferViewAttachments, (ImageHandle Character, ImageHandle Foreground, ImageHandle Background) frameBuffer, int instanceCount, int vertexCount)
 	{
-		var result = await this.connection.SendAsync(new AddDispatchActionRequest(Interlocked.Increment(ref this.requestId), actionListId, computePipeline, dimensions, bufferViewAttachments));
+		var result = await this.connection.SendAsync(new AddDrawActionRequest(Interlocked.Increment(ref this.requestId),
+																				actionList.Id,
+																				renderPipeline.Id,
+																				[.. imageAttachments.Select(x => x.Id)],
+																				[.. bufferViewAttachments.Select(x => x.Id)],
+																				new(frameBuffer.Character.Id, frameBuffer.Foreground.Id, frameBuffer.Background.Id),
+																				instanceCount,
+																				vertexCount));
 
 		ThrowIfError(result);
 	}
 
-	public async Task AddIndirectDrawAction(int actionListId, int renderPipeline, int[] imageAttachments, int[] bufferViewAttachments, FrameBufferInfo framebuffer, int commandBufferView, int offset)
+	public async Task AddDispatchAction(ActionListHandle actionList, ComputePipelineHandle computePipeline, Extent3D dimensions, BufferViewHandle[] bufferViewAttachments)
 	{
-		var result = await this.connection.SendAsync(new AddIndirectDrawActionRequest(Interlocked.Increment(ref this.requestId), actionListId, renderPipeline, imageAttachments, bufferViewAttachments, framebuffer, commandBufferView, offset));
+		var result = await this.connection.SendAsync(new AddDispatchActionRequest(Interlocked.Increment(ref this.requestId), actionList.Id, computePipeline.Id, dimensions, [.. bufferViewAttachments.Select(x => x.Id)]));
 
 		ThrowIfError(result);
 	}
 
-	public async Task AddBindVertexBuffers(int actionList, int firstBufferIndex, (int Buffer, int Offset)[] buffers)
+	public async Task AddIndirectDrawAction(ActionListHandle actionList, RenderPipelineHandle renderPipeline, ImageHandle[] imageAttachments, BufferViewHandle[] bufferViewAttachments, FrameBufferInfo framebuffer, BufferViewHandle commandBufferView, int offset)
 	{
-		var result = await this.connection.SendAsync(new AddBindVertexBuffersRequest(Interlocked.Increment(ref this.requestId), actionList, firstBufferIndex, buffers.Select(x => new AddBindVertexBuffersRequest.VertexBufferBinding(x.Buffer, x.Offset)).ToArray()));
+		var result = await this.connection.SendAsync(new AddIndirectDrawActionRequest(Interlocked.Increment(ref this.requestId), actionList.Id, renderPipeline.Id, [.. imageAttachments.Select(x => x.Id)], [.. bufferViewAttachments.Select(x => x.Id)], framebuffer, commandBufferView.Id, offset));
 
 		ThrowIfError(result);
 	}
 
-	public async Task AddPresentAction(int actionListId, int presentSet)
+	public async Task AddBindVertexBuffers(ActionListHandle actionList, int firstBufferIndex, (BufferHandle Buffer, int Offset)[] buffers)
 	{
-		var result = await this.connection.SendAsync(new AddPresentActionRequest(Interlocked.Increment(ref this.requestId), actionListId, presentSet));
+		var result = await this.connection.SendAsync(new AddBindVertexBuffersRequest(Interlocked.Increment(ref this.requestId), actionList.Id, firstBufferIndex, [.. buffers.Select(x => new AddBindVertexBuffersRequest.VertexBufferBinding(x.Buffer.Id, x.Offset))]));
 
 		ThrowIfError(result);
 	}
 
-	public async Task AddCopyBufferToImageAction(int actionListId, int buffer, ImageFormat bufferFormat, int image, AddCopyBufferToImageActionRequest.CopyRegion[] copyRegions)
+	public async Task AddPresentAction(ActionListHandle actionList, PresentSetHandle presentSet)
 	{
-		var result = await this.connection.SendAsync(new AddCopyBufferToImageActionRequest(Interlocked.Increment(ref this.requestId), actionListId, buffer, bufferFormat, image, copyRegions));
+		var result = await this.connection.SendAsync(new AddPresentActionRequest(Interlocked.Increment(ref this.requestId), actionList.Id, presentSet.Id));
 
 		ThrowIfError(result);
 	}
 
-	public async Task AddCopyBufferAction(int actionListId, int sourceBuffer, int destinationBuffer, int sourceOffset, int destinationOffset, int size)
+	public async Task AddCopyBufferToImageAction(ActionListHandle actionList, BufferHandle buffer, ImageFormat bufferFormat, ImageHandle image, AddCopyBufferToImageActionRequest.CopyRegion[] copyRegions)
 	{
-		var result = await this.connection.SendAsync(new AddCopyBufferActionRequest(Interlocked.Increment(ref this.requestId), actionListId, sourceBuffer, destinationBuffer, sourceOffset, destinationOffset, size));
+		var result = await this.connection.SendAsync(new AddCopyBufferToImageActionRequest(Interlocked.Increment(ref this.requestId), actionList.Id, buffer.Id, bufferFormat, image.Id, copyRegions));
 
 		ThrowIfError(result);
 	}
 
-	public async Task AddRunPipelineAction(int actionListId, int pipeline)
+	public async Task AddCopyBufferAction(ActionListHandle actionList, BufferHandle sourceBuffer, BufferHandle destinationBuffer, int sourceOffset, int destinationOffset, int size)
 	{
-		var result = await this.connection.SendAsync(new AddRunPipelineActionRequest(Interlocked.Increment(ref this.requestId), actionListId, pipeline));
+		var result = await this.connection.SendAsync(new AddCopyBufferActionRequest(Interlocked.Increment(ref this.requestId), actionList.Id, sourceBuffer.Id, destinationBuffer.Id, sourceOffset, destinationOffset, size));
 
 		ThrowIfError(result);
 	}
 
-	public async Task AddTriggerActionListAction(int actionListId, int triggeredActionListId)
+	public async Task AddRunPipelineAction(ActionListHandle actionList, StringSplitPipelineHandle pipeline)
 	{
-		var result = await this.connection.SendAsync(new AddTriggerActionListActionRequest(Interlocked.Increment(ref this.requestId), actionListId, triggeredActionListId));
+		var result = await this.connection.SendAsync(new AddRunPipelineActionRequest(Interlocked.Increment(ref this.requestId), actionList.Id, pipeline.Id));
 
 		ThrowIfError(result);
 	}
 
-	public async Task SetBufferData(int buffer, int offset, byte[] data)
+	public async Task AddTriggerActionListAction(ActionListHandle actionList, ActionListHandle triggeredActionList)
 	{
-		var result = await this.connection.SendAsync(new SetBufferDataRequest(Interlocked.Increment(ref this.requestId), buffer, offset, data));
+		var result = await this.connection.SendAsync(new AddTriggerActionListActionRequest(Interlocked.Increment(ref this.requestId), actionList.Id, triggeredActionList.Id));
 
 		ThrowIfError(result);
 	}
 
-	public async Task ResetActionList(int actionList)
+	public async Task SetBufferData(BufferHandle buffer, int offset, byte[] data)
 	{
-		var result = await this.connection.SendAsync(new ResetActionListRequest(Interlocked.Increment(ref this.requestId), actionList));
+		var result = await this.connection.SendAsync(new SetBufferDataRequest(Interlocked.Increment(ref this.requestId), buffer.Id, offset, data));
+
+		ThrowIfError(result);
+	}
+
+	public async Task ResetActionList(ActionListHandle actionList)
+	{
+		var result = await this.connection.SendAsync(new ResetActionListRequest(Interlocked.Increment(ref this.requestId), actionList.Id));
 
 		ThrowIfError(result);
 	}
@@ -206,16 +214,16 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 		return result.Value;
 	}
 
-	public async Task Send(int pipe, byte[] value)
+	public async Task Send(PipeHandle pipe, byte[] value)
 	{
-		var result = await this.connection.SendAsync(new SendRequest(Interlocked.Increment(ref this.requestId), pipe, value));
+		var result = await this.connection.SendAsync(new SendRequest(Interlocked.Increment(ref this.requestId), pipe.Id, value));
 
 		ThrowIfError(result);
 	}
 
-	public async Task ClearStringSplitPipeline(int pipeline)
+	public async Task ClearStringSplitPipeline(StringSplitPipelineHandle pipeline)
 	{
-		var result = await this.connection.SendAsync(new ClearStringSplitPipelineRequest(Interlocked.Increment(ref this.requestId), pipeline));
+		var result = await this.connection.SendAsync(new ClearStringSplitPipelineRequest(Interlocked.Increment(ref this.requestId), pipeline.Id));
 
 		ThrowIfError(result);
 	}
@@ -253,85 +261,6 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 		if (response.Result != "ok")
 		{
 			throw new Exception($"Mtgp request failed with '{response.Result}'");
-		}
-	}
-}
-
-public class ResourceBuilder(MtgpClient client)
-{
-	private readonly MtgpClient client = client;
-	private readonly List<(ResourceInfo Info, TaskCompletionSource<int> TaskSource)> resources = [];
-
-	private ResourceBuilder Add(ResourceInfo info, out Task<int> task)
-	{
-		var taskSource = new TaskCompletionSource<int>();
-
-		task = taskSource.Task;
-
-		this.resources.Add((info, taskSource));
-
-		return this;
-	}
-
-	public ResourceBuilder ActionList(out Task<int> task, string? reference = null)
-		=> this.Add(new CreateActionListInfo(reference), out task);
-
-	public ResourceBuilder Pipe(out Task<int> task, IdOrRef actionList, string? reference = null)
-		=> this.Add(new CreatePipeInfo(actionList, reference), out task);
-
-	public ResourceBuilder Buffer(out Task<int> task, int size, string? reference = null)
-		=> this.Add(new CreateBufferInfo(size, reference), out task);
-
-	public ResourceBuilder BufferView(out Task<int> task, IdOrRef buffer, int offset, int size, string? reference = null)
-		=> this.Add(new CreateBufferViewInfo(buffer, offset, size, reference), out task);
-
-	public ResourceBuilder Image(out Task<int> task, Extent3D size, ImageFormat format, string? reference = null)
-		=> this.Add(new CreateImageInfo(size, format, reference), out task);
-
-	public ResourceBuilder RenderPipeline(out Task<int> task,
-									   CreateRenderPipelineInfo.ShaderStageInfo[] shaderStages,
-									   CreateRenderPipelineInfo.VertexInputInfo vertexInput,
-									   CreateRenderPipelineInfo.FragmentAttribute[] fragmentAttributes,
-									   Rect3D viewport,
-									   Rect3D[]? scissors,
-									   bool enableAlpha,
-									   PolygonMode polygonMode,
-									   string? reference = null)
-		=> this.Add(new CreateRenderPipelineInfo(shaderStages, vertexInput, fragmentAttributes, viewport, scissors, enableAlpha, polygonMode, reference), out task);
-
-	public ResourceBuilder ComputePipeline(out Task<int> task, CreateComputePipelineInfo.ShaderInfo shader, string? reference = null)
-		=> this.Add(new CreateComputePipelineInfo(shader, reference), out task);
-
-	public ResourceBuilder Shader(out Task<int> task, byte[] data, string? reference = null)
-		=> this.Add(new CreateShaderInfo(data, reference), out task);
-
-	public ResourceBuilder SplitStringPipeline(out Task<int> task, int Width, int Height, IdOrRef LineImage, IdOrRef InstanceBufferView, IdOrRef IndirectCommandBufferView, string? Reference = null)
-		=> this.Add(new CreateStringSplitPipelineInfo(Width, Height, LineImage, InstanceBufferView, IndirectCommandBufferView, Reference), out task);
-
-	public ResourceBuilder PresentSet(out Task<int> task, Dictionary<PresentImagePurpose, ImageFormat> images, string? reference = null)
-		=> this.Add(new CreatePresentSetInfo(images, reference), out task);
-
-	public async Task BuildAsync()
-	{
-		var results = await this.client.CreateResourcesAsync(this.resources.Select(x => x.Info).ToArray());
-
-		for (var i = 0; i < resources.Count; i++)
-		{
-			try
-			{
-				if (results.Length <= i)
-				{
-					this.resources[i].TaskSource.SetException(new Exception("Missing resource creation result"));
-				}
-				else
-				{
-					this.resources[i].TaskSource.SetResult(await results[i]);
-				}
-			}
-			catch (Exception ex)
-			{
-				this.resources[i].TaskSource.SetException(ex);
-			}
 		}
 	}
 }

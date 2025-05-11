@@ -1,6 +1,8 @@
-﻿namespace Mtgp.Server;
+﻿using Mtgp.Server.Shader;
+
+namespace Mtgp.Server;
 
 public interface IBufferManager
 {
-	Task<(int BufferId, int Offset)> Allocate(int size);
+	Task<(BufferHandle Buffer, int Offset)> Allocate(int size);
 }

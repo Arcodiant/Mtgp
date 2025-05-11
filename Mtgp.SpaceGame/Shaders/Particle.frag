@@ -5,6 +5,7 @@
 	[Location=0] int character;
     [Location=1] int starPositionX;
     [Location=2] int tailCharacter;
+    [Location=3] float brightness;
 }
 
 struct Output
@@ -17,6 +18,6 @@ struct Output
 func Output Main(Input input)
 {
     result.character = input.positionX == input.starPositionX ? input.character : input.tailCharacter;
-    result.foreground = Vec(1.0, 1.0, 1.0);
+    result.foreground = Vec(input.brightness, input.brightness, input.brightness);
     result.background = Vec(0.0, 0.0, 0.0);
 }

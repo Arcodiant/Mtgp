@@ -1,0 +1,76 @@
+﻿<#@ template debug="false" hostspecific="false" language="C#" #>
+<#@ assembly name="System.Core" #>
+<#@ assembly name="System.Runtime" #>
+<#@ assembly name="System.Memory" #>
+<#@ assembly name="System.Text.Json" #>
+<#@ import namespace="System.Text" #>
+<#@ import namespace="System.Text.Json" #>
+<#@ import namespace="System.IO" #>
+<#@ import namespace="System.Linq" #>
+<#@ import namespace="System" #>
+<#@ output extension=".cs" #>
+using Mtgp.Shader;
+
+namespace Mtgp.Messages.Resources;
+
+<#
+var doc = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllText("./API.json"));
+
+var resources = doc.RootElement
+	.GetProperty("shaderResources")
+	.EnumerateObject();
+
+foreach (var resource in resources)
+{
+	var resourceName = resource.Name;
+	char firstLetter = char.ToUpper(resourceName[0]);
+	
+	var cappedResourceName = firstLetter + resourceName.Substring(1);
+
+	var parameterList = new StringBuilder();
+
+	foreach(var parameter in resource.Value.EnumerateObject())
+	{
+		var parameterName = parameter.Name;
+		char firstLetter2 = char.ToUpper(parameterName[0]);
+		parameterName = firstLetter2 + parameterName.Substring(1);
+
+		var typeProperty = parameter.Value.GetProperty("type");
+
+		var type = "";
+
+		if (typeProperty.ValueKind == System.Text.Json.JsonValueKind.Object)
+		{
+			switch (typeProperty.GetProperty("type").GetString())
+			{
+				case "lookup":
+					var typeParameters = typeProperty.GetProperty("parameters")
+														.EnumerateArray()
+														.Select(x => x.GetString());
+
+					type = "Dictionary<" + string.Join(", ", typeParameters) + ">";
+					break;
+				default:
+					throw new NotImplementedException();
+			}
+		}
+		else
+		{
+			type = typeProperty.GetString();
+		}
+
+		parameterList.Append($"{type} {parameterName}, ");
+	}
+
+	var parameters = parameterList.ToString();
+#>
+public record Create<#=cappedResourceName#>Info(<#=parameters#>string? Reference = null)
+	: ResourceInfo(Reference), ICreateResourceInfo
+{
+	static string ICreateResourceInfo.ResourceType => ResourceType;
+	public const string ResourceType = "<#=resourceName#>";
+}
+
+<#
+}
+#>

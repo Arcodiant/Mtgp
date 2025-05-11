@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Hosting;
 using Mtgp.Server;
+using Mtgp.Server.Shader;
 using Mtgp.Shader;
 using Mtgp.Util;
 using Mtgp.WorldSeed.World;
@@ -25,6 +26,7 @@ internal class UserSession(IFactory<MtgpClient, Stream> mtgpClientFactory, TcpCl
 
 		int inputPipe = 1;
 		int outputPipe = 2;
+		var outputPipeHandle = new PipeHandle(outputPipe);
 
 		var currentLocationName = world.StartingArea;
 
@@ -57,7 +59,7 @@ internal class UserSession(IFactory<MtgpClient, Stream> mtgpClientFactory, TcpCl
 		}
 
 		async Task Send(string message, TrueColour? foreground = null, TrueColour? background = null)
-			=> await client.Send(outputPipe, EncodeOutput(message, foreground ?? TrueColour.White, background ?? TrueColour.Black));
+			=> await client.Send(outputPipeHandle, EncodeOutput(message, foreground ?? TrueColour.White, background ?? TrueColour.Black));
 
 		async Task SendParts(params (string text, TrueColour foreground)[] parts)
 		{
@@ -71,7 +73,7 @@ internal class UserSession(IFactory<MtgpClient, Stream> mtgpClientFactory, TcpCl
 				offset += encoded.Length;
 			}
 
-			await client.Send(outputPipe, result);
+			await client.Send(outputPipeHandle, result);
 		}
 
 		async Task SendError(string message)
@@ -82,7 +84,7 @@ internal class UserSession(IFactory<MtgpClient, Stream> mtgpClientFactory, TcpCl
 			var location = world.Locations[currentLocationName];
 			await Send("");
 			await Send(location.Title, (1, 0.84f, 0));
-			await client.Send(outputPipe, EncodeOutputGradient(new string('=', location.Title.Length), (1, 1, 0), (0, 1, 1), TrueColour.Black));
+			await client.Send(outputPipeHandle, EncodeOutputGradient(new string('=', location.Title.Length), (1, 1, 0), (0, 1, 1), TrueColour.Black));
 			await Send(location.Description);
 			await Send("");
 			await Send("Exits:");

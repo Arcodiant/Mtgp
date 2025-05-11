@@ -1,0 +1,139 @@
+{
+  "shaderResources": {
+    "presentSet": {
+      "images": {
+        "type": {
+          "type": "lookup",
+          "parameters": [
+            "PresentImagePurpose",
+            "ImageFormat"
+          ]
+        }
+      }
+    },
+    "actionList": {},
+    "buffer": {
+      "size": {
+        "type": "int"
+      }
+    },
+    "bufferView": {
+      "buffer": {
+        "type": "IdOrRef"
+      },
+      "offset": {
+        "type": "int"
+      },
+      "size": {
+        "type": "int"
+      }
+    },
+    "computePipeline": {
+      "computeShader": {
+        "type": "ShaderInfo"
+      }
+    },
+    "image": {
+      "size": {
+        "type": "Extent3D"
+      },
+      "format": {
+        "type": "ImageFormat"
+      }
+    },
+    "pipe": {
+      "actionList": {
+        "type": "IdOrRef"
+      }
+    },
+    "renderPass": {
+      "imageAttachments": {
+        "type": {
+          "type": "lookup",
+          "parameters": [
+            "int",
+            "IdOrRef"
+          ]
+        }
+      },
+      "bufferAttachments": {
+        "type": {
+          "type": "lookup",
+          "parameters": [
+            "int",
+            "IdOrRef"
+          ]
+        }
+      },
+      "inputRate": {
+        "type": "InputRate"
+      },
+      "polygonMode": {
+        "type": "PolygonMode"
+      },
+      "vertexShader": {
+        "type": "IdOrRef"
+      },
+      "fragmentShader": {
+        "type": "IdOrRef"
+      },
+      "x": {
+        "type": "int"
+      },
+      "y": {
+        "type": "int"
+      },
+      "width": {
+        "type": "int"
+      },
+      "height": {
+        "type": "int"
+      }
+    },
+    "renderPipeline": {
+      "shaderStages": {
+        "type": "ShaderStageInfo[]"
+      },
+      "vertexInput": {
+        "type": "VertexInputInfo"
+      },
+      "fragmentAttributes": {
+        "type": "FragmentAttribute[]"
+      },
+      "viewport": {
+        "type": "Rect3D"
+      },
+      "scissors": {
+        "type": "Rect3D[]"
+      },
+      "enableAlpha": {
+        "type": "bool"
+      },
+      "polygonMode": {
+        "type": "PolygonMode"
+      }
+    },
+    "shader": {
+      "shaderData": {
+        "type": "byte[]"
+      }
+    },
+    "stringSplitPipeline": {
+      "width": {
+        "type": "int"
+      },
+      "height": {
+        "type": "int"
+      },
+      "lineImage": {
+        "type": "IdOrRef"
+      },
+      "instanceBufferView": {
+        "type": "IdOrRef"
+      },
+      "indirectCommandBufferView": {
+        "type": "IdOrRef"
+      }
+    }
+  }
+}

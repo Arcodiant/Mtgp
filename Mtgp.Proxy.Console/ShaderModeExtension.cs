@@ -311,6 +311,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 
 	private MtgpResponse GetPresentImage(GetPresentImageRequest request)
 	{
+
 		return new GetPresentImageResponse(0, this.resourceStore.Get<PresentSet>(request.PresentSet).Images);
 	}
 

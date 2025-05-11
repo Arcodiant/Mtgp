@@ -1,11 +1,13 @@
-﻿namespace Mtgp.Server;
+﻿using Mtgp.Server.Shader;
+
+namespace Mtgp.Server;
 
 public class BufferManager(MtgpClient client, int defaultBufferSize = 4096)
 	: IBufferManager
 {
-	private class BufferState(int id, int size, int nextOffset = 0)
+	private class BufferState(BufferHandle handle, int size, int nextOffset = 0)
 	{
-		public int Id { get; } = id;
+		public BufferHandle Handle { get; } = handle;
 		public int Size { get; } = size;
 		public int NextOffset { get; set; } = nextOffset;
 		public int Remaining => this.Size - this.NextOffset;
@@ -13,7 +15,7 @@ public class BufferManager(MtgpClient client, int defaultBufferSize = 4096)
 
 	private readonly List<BufferState> buffers = [];
 
-	public async Task<(int BufferId, int Offset)> Allocate(int size)
+	public async Task<(BufferHandle Buffer, int Offset)> Allocate(int size)
 	{
 		for (int i = 0; i < this.buffers.Count; i++)
 		{
@@ -25,7 +27,7 @@ public class BufferManager(MtgpClient client, int defaultBufferSize = 4096)
 
 				buffer.NextOffset += size;
 
-				return (buffer.Id, offset);
+				return (buffer.Handle, offset);
 			}
 		}
 
@@ -37,7 +39,7 @@ public class BufferManager(MtgpClient client, int defaultBufferSize = 4096)
 						.Buffer(out var bufferTask, newBufferSize)
 						.BuildAsync();
 
-		int bufferId = await bufferTask;
+		var bufferId = await bufferTask;
 
 		this.buffers.Add(new BufferState(bufferId, newBufferSize, size));
 

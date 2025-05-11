@@ -1,0 +1,80 @@
+﻿<#@ template debug="false" hostspecific="false" language="C#" #>
+<#@ assembly name="System.Core" #>
+<#@ assembly name="System.Runtime" #>
+<#@ assembly name="System.Memory" #>
+<#@ assembly name="System.Text.Json" #>
+<#@ import namespace="System.Text" #>
+<#@ import namespace="System.Text.Json" #>
+<#@ import namespace="System.IO" #>
+<#@ import namespace="System.Linq" #>
+<#@ import namespace="System" #>
+<#@ output extension=".cs" #>
+using Mtgp.Messages.Resources;
+using Mtgp.Server.Shader;
+using Mtgp.Shader;
+
+namespace Mtgp.Server;
+
+public partial class ResourceBuilder
+{
+<#
+var doc = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllText("./API.json"));
+
+var resources = doc.RootElement
+	.GetProperty("shaderResources")
+	.EnumerateObject();
+
+foreach (var resource in resources)
+{
+	var resourceName = resource.Name;
+	char firstLetter = char.ToUpper(resourceName[0]);
+	
+	resourceName = firstLetter + resourceName.Substring(1);
+
+	var parameterList = new StringBuilder();
+	var argumentList = new StringBuilder();
+
+	foreach(var parameter in resource.Value.EnumerateObject())
+	{
+		var parameterName = parameter.Name;
+		char firstLetter2 = char.ToUpper(parameterName[0]);
+		parameterName = firstLetter2 + parameterName.Substring(1);
+
+		var typeProperty = parameter.Value.GetProperty("type");
+
+		var type = "";
+
+		if (typeProperty.ValueKind == System.Text.Json.JsonValueKind.Object)
+		{
+			switch (typeProperty.GetProperty("type").GetString())
+			{
+				case "lookup":
+					var typeParameters = typeProperty.GetProperty("parameters")
+														.EnumerateArray()
+														.Select(x => x.GetString());
+
+					type = "Dictionary<" + string.Join(", ", typeParameters) + ">";
+					break;
+				default:
+					throw new NotImplementedException();
+			}
+		}
+		else
+		{
+			type = typeProperty.GetString();
+		}
+
+		parameterList.Append($"{type} {parameterName}, ");
+		argumentList.Append($"{parameterName}, ");
+	}
+
+	var parameters = parameterList.ToString();
+	var arguments = argumentList.ToString();
+#>
+	public ResourceBuilder <#=resourceName#>(out Task<<#=resourceName#>Handle> task, <#=parameters#>string? reference = null)
+		=> this.Add(new Create<#=resourceName#>Info(<#=arguments#>reference), id => new <#=resourceName#>Handle(id), out task);
+
+<#
+}
+#>
+}

@@ -1,18 +1,25 @@
-﻿using Mtgp.Shader;
+﻿using Mtgp.Server.Shader;
+using Mtgp.Shader;
 using Mtgp.Shader.Tsl;
 
 namespace Mtgp.Server;
+
+public static class ShaderManagerExtensions
+{
+	public static async Task<ShaderHandle> CreateShaderFromFileAsync(this IShaderManager manager, string path)
+		=> await manager.CreateShaderAsync(await File.ReadAllTextAsync(path));
+}
 
 public class ShaderManager
 	: IShaderManager
 {
 	private readonly MtgpClient client;
-	private readonly int transferActionList;
-	private readonly int transferPipe;
-	private int? transferBuffer;
+	private readonly ActionListHandle transferActionList;
+	private readonly PipeHandle transferPipe;
+	private BufferHandle? transferBuffer;
 	private int transferBufferSize;
 
-	private ShaderManager(MtgpClient client, int transferActionList, int transferPipe)
+	private ShaderManager(MtgpClient client, ActionListHandle transferActionList, PipeHandle transferPipe)
 	{
 		this.client = client;
 		this.transferActionList = transferActionList;
@@ -31,10 +38,7 @@ public class ShaderManager
 		return new ShaderManager(client, transferActionList, transferPipe);
 	}
 
-	public async Task<int> CreateShaderFromFileAsync(string path)
-		=> await CreateShaderAsync(await File.ReadAllTextAsync(path));
-
-	public async Task<int> CreateShaderAsync(string code)
+	public async Task<ShaderHandle> CreateShaderAsync(string code)
 	{
 		var shaderCompiler = new ShaderCompiler();
 
@@ -47,13 +51,13 @@ public class ShaderManager
 		return await shaderTask;
 	}
 
-	public async Task<int> CreateImageFromData(byte[] data, Extent3D size, ImageFormat format)
+	public async Task<ImageHandle> CreateImageFromData(byte[] data, Extent3D size, ImageFormat format)
 	{
 		await client.GetResourceBuilder()
 					 .Image(out var imageTask, size, format)
 					 .BuildAsync();
 
-		int image = await imageTask;
+		var image = await imageTask;
 
 		if (transferBuffer == null || transferBufferSize < data.Length)
 		{
@@ -66,10 +70,10 @@ public class ShaderManager
 			transferBufferSize = data.Length;
 		}
 
-		await client.SetBufferData(transferBuffer!.Value, 0, data);
+		await client.SetBufferData(transferBuffer!, 0, data);
 
 		await client.ResetActionList(transferActionList);
-		await client.AddCopyBufferToImageAction(transferActionList, transferBuffer!.Value, format, image, [new(0, size.Width, size.Height, 0, 0, size.Width, size.Height)]);
+		await client.AddCopyBufferToImageAction(transferActionList, transferBuffer!, format, image, [new(0, size.Width, size.Height, 0, 0, size.Width, size.Height)]);
 
 		await client.Send(transferPipe, []);
 

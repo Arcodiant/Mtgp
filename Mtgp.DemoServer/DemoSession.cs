@@ -34,8 +34,8 @@ internal class DemoSession(MtgpClient client, ILogger<DemoSession> logger)
 						})
 					.RenderPipeline(out var renderPipelineTask,
 						[
-							new(ShaderStage.Vertex, vertexShader, "Main"),
-							new(ShaderStage.Fragment, fragmentShader, "Main")
+							new(ShaderStage.Vertex, vertexShader.Id, "Main"),
+							new(ShaderStage.Fragment, fragmentShader.Id, "Main")
 						],
 						new([], []),
 						[
@@ -50,9 +50,9 @@ internal class DemoSession(MtgpClient client, ILogger<DemoSession> logger)
 
 		var presentImage = await client.GetPresentImage(presentSet);
 
-		int character = presentImage[PresentImagePurpose.Character];
-		int foreground = presentImage[PresentImagePurpose.Foreground];
-		int background = presentImage[PresentImagePurpose.Background];
+		var character = presentImage[PresentImagePurpose.Character];
+		var foreground = presentImage[PresentImagePurpose.Foreground];
+		var background = presentImage[PresentImagePurpose.Background];
 
 		await client.AddClearBufferAction(actionList, character, ' ');
 		await client.AddClearBufferAction(actionList, foreground, TrueColour.White);
@@ -60,7 +60,7 @@ internal class DemoSession(MtgpClient client, ILogger<DemoSession> logger)
 		await client.AddDrawAction(actionList, renderPipeline, [], [], (character, foreground, background), 1, 2);
 		await client.AddPresentAction(actionList, presentSet);
 
-		await client.Send(actionList, []);
+		await client.Send(pipe, []);
 
 		var waitHandle = new TaskCompletionSource();
 

@@ -493,6 +493,17 @@ public class ShaderJitter
 														.Call(ReadByType(loadType)));
 						break;
 					}
+				case ShaderOp.IntToFloat:
+					{
+						reader.IntToFloat(out int resultId, out int typeId, out int valueId);
+						var opType = types[typeId];
+						if (opType != ShaderType.Float(4))
+						{
+							throw new InvalidOperationException($"IntToFloat result must be float");
+						}
+						SetValue(resultId, opType, emitter => EmitValue(emitter, valueId).Convert<float>());
+						break;
+					}
 				case ShaderOp.Add:
 					{
 						reader.Add(out int resultId, out int typeId, out int leftId, out int rightId);

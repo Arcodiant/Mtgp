@@ -1,11 +1,11 @@
-﻿using Mtgp.Shader;
+﻿using Mtgp.Server.Shader;
+using Mtgp.Shader;
 
 namespace Mtgp.Server
 {
 	public interface IShaderManager
 	{
-		Task<int> CreateImageFromData(byte[] data, Extent3D size, ImageFormat format);
-		Task<int> CreateShaderAsync(string code);
-		Task<int> CreateShaderFromFileAsync(string path);
+		Task<ImageHandle> CreateImageFromData(byte[] data, Extent3D size, ImageFormat format);
+		Task<ShaderHandle> CreateShaderAsync(string code);
 	}
 }

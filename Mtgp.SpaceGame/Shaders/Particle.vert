@@ -13,6 +13,7 @@ struct Output
     [Location=0] int character;
     [Location=1] int starPositionX;
     [Location=2] int tailCharacter;
+    [Location=3] float brightness;
 }
 
 func Output Main(Input input)
@@ -26,4 +27,5 @@ func Output Main(Input input)
     result.positionY = input.y;
     result.character = input.speed == 1 ? '.' : (input.speed == 2 ? '+' : (input.speed == 3 ? '*' : 'O'));
     result.tailCharacter = input.speed > 3 ? '=' : '-';
+    result.brightness = input.vertexIndex == 0 ? 0.2 : 0.5 + (input.speed * 0.1);
 }
