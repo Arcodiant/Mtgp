@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+﻿using Mtgp.Shader;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Mtgp;
@@ -104,6 +105,14 @@ public readonly ref struct BitWriter(Span<byte> buffer, int writeCount = 0)
 
 		return this.Skip(4);
 	}
+
+	public readonly BitWriter Write(TrueColour colour)
+		=> this.Write(colour.R)
+				.Write(colour.G)
+				.Write(colour.B);
+
+	public readonly BitWriter WriteRunes(char[] value)
+		=> WriteRunes(new string(value));
 
 	public readonly BitWriter WriteRunes(string value)
 	{

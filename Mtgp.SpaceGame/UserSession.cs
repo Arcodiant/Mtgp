@@ -38,9 +38,9 @@ namespace Mtgp.SpaceGame
 
 			await client.SetDefaultPipe(DefaultPipe.Input, -1, [], false);
 
-			await uiManager.CreatePanel(new Rect2D((1, 1), (78, 18)));
+			await uiManager.CreatePanelAsync(new Rect2D((1, 1), (78, 18)), new(0.0f, 0.0f, 0.5f));
 
-			await uiManager.CreatePanel(new Rect2D((1, 20), (78, 2)));
+			await uiManager.CreatePanelAsync(new Rect2D((1, 20), (78, 2)), new(0.0f, 0.0f, 0.5f));
 
 			await uiManager.StringSplitSend(outputArea, "Welcome to the Space Game!");
 

@@ -14,7 +14,7 @@ public static class MtgpClientExtensions
 		switch(value.ColourFormat)
 		{
 			case ColourFormat.Ansi16:
-				await client.AddClearBufferAction(actionList, image, [Ansi16Colour.ToByte(value.Ansi16Colour)]);
+				await client.AddClearBufferAction(actionList, image, [value.Ansi16Colour.ToByte()]);
 				break;
 			case ColourFormat.Ansi256:
 				await client.AddClearBufferAction(actionList, image, [value.Ansi256Colour.Value]);
@@ -23,9 +23,7 @@ public static class MtgpClientExtensions
 				var data = new byte[12];
 
 				new BitWriter(data)
-					.Write(value.TrueColour.R)
-					.Write(value.TrueColour.G)
-					.Write(value.TrueColour.B);
+					.Write(value.TrueColour);
 
 				await client.AddClearBufferAction(actionList, image, data);
 				break;

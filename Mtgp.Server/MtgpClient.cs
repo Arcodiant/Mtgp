@@ -5,6 +5,7 @@ using Mtgp.Messages.Resources;
 using Mtgp.Server.Shader;
 using Mtgp.Shader;
 using Mtgp.Util;
+using System.ComponentModel.DataAnnotations;
 
 namespace Mtgp.Server;
 
@@ -233,6 +234,17 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 		var result = await this.connection.SendAsync<GetClientShaderCapabilitiesResponse>(new GetClientShaderCapabilitiesRequest(Interlocked.Increment(ref this.requestId)));
 		ThrowIfError(result);
 		return result.Capabilities;
+	}
+
+	public async Task DestroyResourceAsync<T>(T handle)
+		where T : ResourceHandle, IResourceHandle
+		=> await this.DestroyResourceAsync(T.ResourceType, handle.Id);
+
+	public async Task DestroyResourceAsync(string resourceType, int id)
+	{
+		var result = await this.connection.SendAsync(new DestroyResourceRequest(Interlocked.Increment(ref this.requestId), resourceType, id));
+
+		ThrowIfError(result);
 	}
 
 	public async Task<Task<int>[]> CreateResourcesAsync(params ResourceInfo[] resources)

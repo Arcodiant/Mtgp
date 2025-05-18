@@ -14,6 +14,6 @@ struct Output
 func Output Main(Input input)
 {
     result.character = 'X';
-    result.foreground = Vec(input.u, input.v, 1.0);
+    result.foreground = Vec(input.u, input.v, ((input.u + input.v) / 4.0) + 0.5);
     result.background = Vec(0.0, 0.0, 0.0);
 }

@@ -7,10 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="Shader\Resources.cs">
+    <None Include="Shader\ResourceHandles.cs">
       <DesignTime>True</DesignTime>
       <AutoGen>True</AutoGen>
-      <DependentUpon>Resources.tt</DependentUpon>
+      <DependentUpon>ResourceHandles.tt</DependentUpon>
     </None>
   </ItemGroup>
 
@@ -27,8 +27,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="Resources.tt">
-      <LastGenOutput>Resources.cs</LastGenOutput>
+    <None Update="ResourceBuilderMethods.tt">
+      <LastGenOutput>ResourceBuilderMethods.cs</LastGenOutput>
       <Generator>TextTemplatingFileGenerator</Generator>
     </None>
     <None Update="Shaders\Simple.vert">
@@ -46,10 +46,10 @@
     <None Update="Shaders\UI.frag">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="Shaders\UI\Simple.frag">
+    <None Update="Shaders\UI\Panel.frag">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="Shaders\UI\Simple.vert">
+    <None Update="Shaders\UI\Panel.vert">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="Shaders\UI\StringSplit.frag">
@@ -58,9 +58,9 @@
     <None Update="Shaders\UI\StringSplit.vert">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="Shader\Resources.tt">
+    <None Update="Shader\ResourceHandles.tt">
       <Generator>TextTemplatingFileGenerator</Generator>
-      <LastGenOutput>Resources.cs</LastGenOutput>
+      <LastGenOutput>ResourceHandles.cs</LastGenOutput>
     </None>
   </ItemGroup>
 
@@ -69,10 +69,15 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Update="Resources.cs">
+    <Compile Update="ResourceBuilderMethods.cs">
       <DesignTime>True</DesignTime>
       <AutoGen>True</AutoGen>
-      <DependentUpon>Resources.tt</DependentUpon>
+      <DependentUpon>ResourceBuilderMethods.tt</DependentUpon>
+    </Compile>
+    <Compile Update="Shader\ResourceHandles.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>ResourceHandles.tt</DependentUpon>
     </Compile>
     <Compile Update="Shader\Resources.cs">
       <DesignTime>True</DesignTime>

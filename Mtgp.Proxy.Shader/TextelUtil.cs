@@ -51,7 +51,7 @@ public static class TextelUtil
 				data[0] = new Ansi256Colour(colour).Value;
 				break;
 			case ImageFormat.R32G32B32_SFloat:
-				new BitWriter(data).Write(colour.R).Write(colour.G).Write(colour.B);
+				new BitWriter(data).Write(colour);
 				break;
 			default:
 				throw new NotImplementedException();

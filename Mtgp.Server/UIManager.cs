@@ -16,7 +16,6 @@ public class UIManager
 	private readonly MtgpClient client;
 	private readonly PresentSetHandle presentSet;
 	private readonly ImageFormat imageFormat;
-	private int lastBufferOffset = 0;
 
 	private (PipeHandle Pipe, ActionListHandle ActionList)? mainPipe;
 
@@ -65,28 +64,59 @@ public class UIManager
 		return shader;
 	}
 
-	public async Task<int> CreatePanel(Rect2D area)
+	public async Task<int> CreatePanelAsync(Rect2D area, TrueColour background, TrueColour? backgroundGradientFrom = null, TrueColour? foreground = null, char[,]? characters = null)
 	{
-		ShaderHandle vertexShader = await GetShaderAsync("./Shaders/UI/Simple.vert");
-		ShaderHandle fragmentShader = await GetShaderAsync("./Shaders/UI/Simple.frag");
+		if (characters is not null
+				&& (characters.GetLength(0) != 3 || characters.GetLength(1) != 3))
+		{
+			throw new ArgumentException("Characters array must be 3x3.");
+		}
 
-		await client.GetResourceBuilder()
-					.Buffer(out var sharedBufferTask, 16)
-					.BuildAsync();
+		characters ??= new char[3, 3]
+		{
+			{ '╔', '═', '╗' },
+			{ '║', ' ', '║' },
+			{ '╚', '═', '╝' }
+		};
 
-		var sharedBuffer = await sharedBufferTask;
+		backgroundGradientFrom ??= background;
+
+		foreground ??= TrueColour.White;
+
+		ShaderHandle vertexShader = await GetShaderAsync("./Shaders/UI/Panel.vert");
+		ShaderHandle fragmentShader = await GetShaderAsync("./Shaders/UI/Panel.frag");
+
+		var (vertexBuffer, vertexBufferOffset) = await this.bufferManager.Allocate(16);
+		var (panelBuffer, panelBufferOffset) = await this.bufferManager.Allocate(9 * 4);
 
 		var presentImage = await client.GetPresentImage(presentSet);
 
 		var vertexData = new byte[16];
 
 		new BitWriter(vertexData)
-			.Write(0f)
-			.Write(0f)
+			.Write(area.Offset.X)
+			.Write(area.Offset.Y)
 			.Write(area.Extent.Width)
 			.Write(area.Extent.Height);
 
-		await client.SetBufferData(sharedBuffer, 0, vertexData);
+		var characterData = new byte[9 * 4];
+
+		new BitWriter(characterData)
+			.WriteRunes([characters[0, 0], characters[0, 1], characters[0, 2]])
+			.WriteRunes([characters[1, 0], characters[1, 1], characters[1, 2]])
+			.WriteRunes([characters[2, 0], characters[2, 1], characters[2, 2]]);
+
+		var characterImage = await this.shaderManager.CreateImageFromData(characterData, new(3, 3, 1), ImageFormat.T32_SInt);
+
+		var panelData = new byte[9 * 4];
+
+		new BitWriter(panelData)
+			.Write(backgroundGradientFrom.Value)
+			.Write(background)
+			.Write(foreground.Value);
+
+		await client.SetBufferData(vertexBuffer, vertexBufferOffset, vertexData);
+		await client.SetBufferData(panelBuffer, panelBufferOffset, panelData);
 
 		await client.GetResourceBuilder()
 					.RenderPipeline(out var renderPipelineTask,
@@ -96,17 +126,23 @@ public class UIManager
 										],
 										new(
 											[
-												new(0, 8, InputRate.PerVertex)
+												new(0, 8, InputRate.PerVertex),
+												new(1, 9 * 4, InputRate.PerInstance)
 											],
 											[
 												new(0, 0, ShaderType.Float(4), 0),
 												new(1, 0, ShaderType.Float(4), 4),
-												new(2, 0, ShaderType.VectorOf(ShaderType.Float(4), 3), 8),
+												new(2, 1, ShaderType.VectorOf(ShaderType.Float(4), 3), 0),
+												new(3, 1, ShaderType.VectorOf(ShaderType.Float(4), 3), 12),
+												new(4, 1, ShaderType.VectorOf(ShaderType.Float(4), 3), 24),
 											]),
 										[
 											new(0, ShaderType.VectorOf(ShaderType.Float(4), 3), (1, 1, 0)),
+											new(1, ShaderType.VectorOf(ShaderType.Float(4), 3), (1, 1, 0)),
+											new(2, ShaderType.Float(4), (1, 0, 0)),
+											new(3, ShaderType.Float(4), (0, 1, 0)),
 										],
-										new((area.Offset.X, area.Offset.Y, 0), (area.Extent.Width, area.Extent.Height, 1)),
+										new((0, 0, 0), (80, 24, 1)),
 										[],
 										false,
 										PolygonMode.Fill)
@@ -120,8 +156,8 @@ public class UIManager
 
 		this.createMainActions.Add((2, async mainActionList =>
 		{
-			await client.AddBindVertexBuffers(mainActionList, 0, [(sharedBuffer, 0)]);
-			await client.AddDrawAction(mainActionList, renderPipeline, [], [], frameBuffer, 1, 2);
+			await client.AddBindVertexBuffers(mainActionList, 0, [(vertexBuffer, vertexBufferOffset), (panelBuffer, panelBufferOffset)]);
+			await client.AddDrawAction(mainActionList, renderPipeline, [characterImage], [], frameBuffer, 1, 2);
 		}
 		));
 
@@ -250,8 +286,8 @@ public class UIManager
 	}
 
 	public async Task StringSplitOverwrite(int stringSplitArea, string text)
-    {
+	{
 		await client.ClearStringSplitPipeline(this.stringSplitAreas[stringSplitArea].PipelineId);
 		await StringSplitSend(stringSplitArea, text);
-    }
+	}
 }

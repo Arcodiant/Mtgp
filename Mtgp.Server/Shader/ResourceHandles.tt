@@ -21,10 +21,13 @@ foreach (var resource in resources)
 	var resourceName = resource.Name;
 	char firstLetter = char.ToUpper(resourceName[0]);
 	
-	resourceName = firstLetter + resourceName.Substring(1);
+	var cappedResourceName = firstLetter + resourceName.Substring(1);
 #>
-public record <#=resourceName#>Handle(int Id)
-	: ResourceHandle(Id);
+public record <#=cappedResourceName#>Handle(int Id)
+	: ResourceHandle(Id), IResourceHandle
+{
+	public static string ResourceType => "<#=resourceName#>";
+}
 <#
 }
 #>

@@ -1,15 +1,14 @@
 ﻿using Microsoft.Extensions.Logging;
 using Mtgp.Messages;
 using Mtgp.Messages.Resources;
-using Mtgp.Proxy.Telnet;
+using Mtgp.Proxy.Profiles;
 using Mtgp.Proxy.Shader;
+using Mtgp.Proxy.Telnet;
 using Mtgp.Shader;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
+using System.Reflection;
 using System.Text;
-using Mtgp.Proxy.Profiles;
 using static System.Net.Mime.MediaTypeNames;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Mtgp.Proxy;
 
@@ -20,15 +19,15 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 	{
 		private readonly Dictionary<Type, object> stores = [];
 
-		private List<T> GetStore<T>()
+		private List<T?> GetStore<T>()
 		{
 			if (!this.stores.TryGetValue(typeof(T), out var store))
 			{
-				store = new List<T>();
+				store = new List<T?>();
 				this.stores[typeof(T)] = store;
 			}
 
-			return (List<T>)store;
+			return (List<T?>)store;
 		}
 
 		public int Add<T>(T item)
@@ -42,17 +41,24 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 
 		public T Get<T>(int index)
 		{
-			return this.GetStore<T>()[index];
+			T? value = this.GetStore<T>()[index];
+
+			return value is not null ? value : throw new InvalidOperationException();
 		}
 
 		public T[] Get<T>(int[] indices)
 		{
-			return indices.Select(Get<T>).ToArray();
+			return [.. indices.Select(Get<T>)];
 		}
 
-		public V[] Get<T, V>(int[] indices, Func<T, V> selector)
+		public V[] Get<T, V>(int[] indices, Func<T?, V> selector)
 		{
-			return indices.Select(Get<T>).Select(selector).ToArray();
+			return [.. indices.Select(Get<T>).Select(selector)];
+		}
+
+		public void Remove<T>(int index)
+		{
+			this.GetStore<T>()[index] = default;
 		}
 	}
 
@@ -61,7 +67,10 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 	private record BufferViewInfo(Memory<byte> View);
 	private record BufferInfo(byte[] Data);
 
+	private record ResourceKey(string ResourceType, int Id);
+
 	private readonly ResourceStore resourceStore = new();
+	private readonly Dictionary<ResourceKey, List<ResourceKey>> resourceReferences = [];
 
 	private readonly Dictionary<DefaultPipe, (int PipeId, Dictionary<ChannelType, ImageFormat> ChannelSet)> defaultPipeBindings = [];
 	private readonly Dictionary<int, DefaultPipe> defaultPipeLookup = [];
@@ -90,6 +99,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 		proxy.RegisterMessageHandler<SetDefaultPipeRequest>(SetDefaultPipe);
 		proxy.RegisterMessageHandler<SendRequest>(Send);
 		proxy.RegisterMessageHandler<CreateResourceRequest>(CreateResource);
+		proxy.RegisterMessageHandler<DestroyResourceRequest>(DestroyResource);
 		proxy.RegisterMessageHandler<GetPresentImageRequest>(GetPresentImage);
 		proxy.RegisterMessageHandler<SetBufferDataRequest>(SetBufferData);
 		proxy.RegisterMessageHandler<SetTimerTriggerRequest>(SetTimerTrigger);
@@ -310,10 +320,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 	}
 
 	private MtgpResponse GetPresentImage(GetPresentImageRequest request)
-	{
-
-		return new GetPresentImageResponse(0, this.resourceStore.Get<PresentSet>(request.PresentSet).Images);
-	}
+		=> new GetPresentImageResponse(0, this.resourceStore.Get<PresentSet>(request.PresentSet).Images);
 
 	private MtgpResponse CreateResource(CreateResourceRequest request)
 	{
@@ -348,7 +355,6 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 			return new PresentSet(images);
 		}
 
-
 		var remainingResources = request.Resources.Select((x, y) => (Info: x, Index: y)).ToList();
 
 		var results = new ResourceCreateResult[request.Resources.Length];
@@ -377,10 +383,13 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 						CreatePipeInfo pipeInfo => [pipeInfo.ActionList],
 						CreateBufferViewInfo bufferViewInfo => [bufferViewInfo.Buffer],
 						CreateStringSplitPipelineInfo stringSplitPipelineInfo => [stringSplitPipelineInfo.IndirectCommandBufferView, stringSplitPipelineInfo.InstanceBufferView, stringSplitPipelineInfo.LineImage],
-						CreateRenderPipelineInfo renderPipelineInfo => renderPipelineInfo.ShaderStages.Select(x => x.Shader).ToArray(),
+						CreateRenderPipelineInfo renderPipelineInfo => [.. renderPipelineInfo.ShaderStages.Select(x => x.Shader)],
 						CreateComputePipelineInfo computePipelineInfo => [computePipelineInfo.ComputeShader.Shader],
 						_ => []
 					};
+
+					ResourceKey[] newReferences = [];
+					string resourceType = string.Empty;
 
 					if (Dependencies.All(IsIdCreated))
 					{
@@ -406,20 +415,26 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 								}
 							}
 
-							result = resource.Info switch
+							(result, newReferences, resourceType) = resource.Info switch
 							{
-								CreateShaderInfo shaderInfo => Create((IShaderExecutor)ShaderJitter.Create(shaderInfo.ShaderData)),
-								CreatePipeInfo pipeInfo => Create(new PipeInfo(GetId(pipeInfo.ActionList))),
-								CreateActionListInfo actionListInfo => Create(new ActionListInfo([])),
-								CreateBufferInfo bufferInfo => Create(new BufferInfo(new byte[bufferInfo.Size])),
-								CreateBufferViewInfo bufferViewInfo => Create(new BufferViewInfo(this.resourceStore.Get<BufferInfo>(GetId(bufferViewInfo.Buffer)).Data.AsMemory()[bufferViewInfo.Offset..(bufferViewInfo.Offset + bufferViewInfo.Size)])),
-								CreateImageInfo imageInfo => Create(new ImageState(imageInfo.Size, imageInfo.Format)),
-								CreateStringSplitPipelineInfo stringSplitPipelineInfo => Create((IFixedFunctionPipeline)new StringSplitPipeline(this.resourceStore.Get<ImageState>(GetId(stringSplitPipelineInfo.LineImage)).Data,
-																																				  this.resourceStore.Get<BufferViewInfo>(GetId(stringSplitPipelineInfo.InstanceBufferView)).View,
-																																				  this.resourceStore.Get<BufferViewInfo>(GetId(stringSplitPipelineInfo.IndirectCommandBufferView)).View,
-																																				  stringSplitPipelineInfo.Height,
-																																				  stringSplitPipelineInfo.Width)),
-								CreateRenderPipelineInfo renderPipelineInfo => Create(CreateRenderPipeline(renderPipelineInfo.ShaderStages.ToDictionary(x => x.Stage, x => GetId(x.Shader)),
+								CreateShaderInfo shaderInfo => (Create((IShaderExecutor)ShaderJitter.Create(shaderInfo.ShaderData)), [], CreateShaderInfo.ResourceType),
+								CreatePipeInfo pipeInfo => (Create(new PipeInfo(GetId(pipeInfo.ActionList))), [new("actionList", GetId(pipeInfo.ActionList))], CreatePipeInfo.ResourceType),
+								CreateActionListInfo actionListInfo => (Create(new ActionListInfo([])), [], CreateActionListInfo.ResourceType),
+								CreateBufferInfo bufferInfo => (Create(new BufferInfo(new byte[bufferInfo.Size])), [], CreateBufferInfo.ResourceType),
+								CreateBufferViewInfo bufferViewInfo => (Create(new BufferViewInfo(this.resourceStore.Get<BufferInfo>(GetId(bufferViewInfo.Buffer)).Data.AsMemory()[bufferViewInfo.Offset..(bufferViewInfo.Offset + bufferViewInfo.Size)])), [new(CreateBufferInfo.ResourceType, GetId(bufferViewInfo.Buffer))], CreateBufferViewInfo.ResourceType),
+								CreateImageInfo imageInfo => (Create(new ImageState(imageInfo.Size, imageInfo.Format)), [], CreateImageInfo.ResourceType),
+								CreateStringSplitPipelineInfo stringSplitPipelineInfo => (Create((IFixedFunctionPipeline)new StringSplitPipeline(this.resourceStore.Get<ImageState>(GetId(stringSplitPipelineInfo.LineImage)).Data,
+																																					this.resourceStore.Get<BufferViewInfo>(GetId(stringSplitPipelineInfo.InstanceBufferView)).View,
+																																					this.resourceStore.Get<BufferViewInfo>(GetId(stringSplitPipelineInfo.IndirectCommandBufferView)).View,
+																																					stringSplitPipelineInfo.Height,
+																																					stringSplitPipelineInfo.Width)),
+																																					[
+																																						new(CreateImageInfo.ResourceType, GetId(stringSplitPipelineInfo.LineImage)),
+																																						new(CreateBufferViewInfo.ResourceType, GetId(stringSplitPipelineInfo.InstanceBufferView)),
+																																						new(CreateBufferViewInfo.ResourceType, GetId(stringSplitPipelineInfo.IndirectCommandBufferView))
+																																					],
+																																					CreateStringSplitPipelineInfo.ResourceType),
+								CreateRenderPipelineInfo renderPipelineInfo => (Create(CreateRenderPipeline(renderPipelineInfo.ShaderStages.ToDictionary(x => x.Stage, x => GetId(x.Shader)),
 																													renderPipelineInfo.VertexInput.VertexBufferBindings.Select(x => (x.Binding, x.Stride, x.InputRate)).ToArray(),
 																													renderPipelineInfo.VertexInput.VertexAttributes.Select(x => (x.Location, x.Binding, x.Type, x.Offset)).ToArray(),
 																													renderPipelineInfo.FragmentAttributes.Select(x => (x.Location, x.Type, x.InterpolationScale)).ToArray(),
@@ -427,15 +442,27 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 																													renderPipelineInfo.Scissors,
 																													renderPipelineInfo.EnableAlpha,
 																													renderPipelineInfo.PolygonMode)),
-								CreateComputePipelineInfo computePipelineInfo => Create(new ComputePipeline(this.resourceStore.Get<IShaderExecutor>(GetId(computePipelineInfo.ComputeShader.Shader)))),
-								CreatePresentSetInfo presentSetInfo => Create(CreatePresentSet(presentSetInfo.Images)),
-								_ => ResourceCreateResult.InvalidRequest
+																													[.. renderPipelineInfo.ShaderStages.Select(x => new ResourceKey(CreateShaderInfo.ResourceType, GetId(x.Shader)))],
+																													CreateRenderPipelineInfo.ResourceType),
+								CreateComputePipelineInfo computePipelineInfo => (Create(new ComputePipeline(this.resourceStore.Get<IShaderExecutor>(GetId(computePipelineInfo.ComputeShader.Shader)))), [new(CreateShaderInfo.ResourceType, GetId(computePipelineInfo.ComputeShader.Shader))], CreateComputePipelineInfo.ResourceType),
+								CreatePresentSetInfo presentSetInfo => (Create(CreatePresentSet(presentSetInfo.Images)), [], CreatePresentSetInfo.ResourceType),
+								_ => (ResourceCreateResult.InvalidRequest, Array.Empty<ResourceKey>(), string.Empty)
 							};
 						}
 
 						if (resource.Info.Reference != null)
 						{
 							createdIds[resource.Info.Reference!] = result;
+
+							var resourceKey = new ResourceKey(resourceType, result.ResourceId);
+
+							if (!this.resourceReferences.TryGetValue(resourceKey, out var references))
+							{
+								references = [];
+								this.resourceReferences.Add(resourceKey, references);
+							}
+
+							references.AddRange(newReferences);
 						}
 
 						createdResources.Add(resource.Index);
@@ -452,7 +479,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 				}
 			}
 
-			remainingResources = remainingResources.Where(x => !failedResources.Contains(x.Index)).ToList();
+			remainingResources = [.. remainingResources.Where(x => !failedResources.Contains(x.Index))];
 
 			if (createdResources.Count == 0)
 			{
@@ -462,10 +489,53 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 				}
 			}
 
-			remainingResources = remainingResources.Where(x => !createdResources.Contains(x.Index)).ToList();
+			remainingResources = [.. remainingResources.Where(x => !createdResources.Contains(x.Index))];
 		}
 
 		return new CreateResourceResponse(request.Id, [.. results]);
+	}
+
+	private MtgpResponse DestroyResource(DestroyResourceRequest request)
+	{
+		void Remove<T, TInfo>(int id)
+			where TInfo: ICreateResourceInfo
+		{
+			this.resourceStore.Remove<T>(id);
+
+			this.resourceReferences.Remove(new(TInfo.ResourceType, id));
+		}
+
+		switch (request.ResourceType)
+		{
+			case "presentSet":
+				if (this.resourceReferences.TryGetValue(new(CreatePresentSetInfo.ResourceType, request.ResourceId), out var presentSetRefences)
+						&& presentSetRefences.Count != 0)
+				{
+					return new MtgpResponse(0, "invalidRequest");
+				}
+
+				var presentSet = this.resourceStore.Get<PresentSet>(request.ResourceId);
+
+				foreach (var imageId in presentSet.Images.Values)
+				{
+					if(this.resourceReferences.TryGetValue(new(CreateImageInfo.ResourceType, imageId), out var references)
+						&& references.Count != 0)
+					{
+						return new MtgpResponse(0, "invalidRequest");
+					}
+				}
+
+				foreach(var imageId in presentSet.Images.Values)
+				{
+					Remove<ImageState, CreateImageInfo>(imageId);
+				}
+
+				Remove<PresentSet, CreatePresentSetInfo>(request.ResourceId);
+
+				return new MtgpResponse(0, "ok");
+			default:
+				return new MtgpResponse(0, "invalidRequest");
+		}
 	}
 
 	private MtgpResponse Send(SendRequest request)

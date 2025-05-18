@@ -29,11 +29,11 @@ public record struct Ansi16Colour(AnsiColour Colour, bool IsBright)
 			throw new ArgumentOutOfRangeException(nameof(value), "Value must be between 0 and 15.");
 	}
 
-	public static byte ToByte(Ansi16Colour colour)
+	public readonly byte ToByte()
 	{
-		if (colour.IsBright)
-			return (byte)((byte)colour.Colour + 8);
+		if (this.IsBright)
+			return (byte)((byte)this.Colour + 8);
 		else
-			return (byte)colour.Colour;
+			return (byte)this.Colour;
 	}
 };

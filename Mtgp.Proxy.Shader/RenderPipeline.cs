@@ -126,19 +126,22 @@ public class RenderPipeline(Dictionary<ShaderStage, IShaderExecutor> shaderStage
 
 		var fragmentStopwatch = Stopwatch.StartNew();
 
-		int maxX = int.MaxValue;
-		int maxY = int.MaxValue;
+		int maxX = viewport.Extent.Width;
+		int maxY = viewport.Extent.Height;
 
 		foreach(var frameAttachment in frameBuffer.Attachments)
 		{
-			if (frameAttachment.Size.Width < maxX)
+			int effectiveWidth = frameAttachment.Size.Width - viewport.Offset.X;
+			int effectiveHeight = frameAttachment.Size.Height - viewport.Offset.Y;
+
+			if (effectiveWidth < maxX)
 			{
-				maxX = frameAttachment.Size.Width;
+				maxX = effectiveWidth;
 			}
 
-			if (frameAttachment.Size.Height < maxY)
+			if (effectiveHeight < maxY)
 			{
-				maxY = frameAttachment.Size.Height;
+				maxY = effectiveHeight;
 			}
 		}
 
