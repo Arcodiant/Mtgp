@@ -12,7 +12,7 @@ using System.Text.Json;
 
 namespace Mtgp.Proxy
 {
-	internal class ProxySession(TcpClient telnetTcpClient, IFactory<TelnetConnection, TelnetClient> connectionFactory, IFactory<ShaderModeExtension, TelnetConnection, ClientProfile> shaderModeFactory, ILogger<ProxySession> logger)
+	internal class ProxySession(TcpClient telnetTcpClient, IFactory<TelnetConnection, TelnetClient> connectionFactory, IFactory<ShaderModeExtension, TelnetConnection, ClientProfile, EventExtension> shaderModeFactory, ILogger<ProxySession> logger)
 	{
 		static ClientProfile IdentifyProfile(IEnumerable<string> terminalTypes)
 		{
@@ -100,11 +100,15 @@ namespace Mtgp.Proxy
 
 			var proxy = new ProxyController(async request => await sendRequest(request), logger);
 
+			var eventExtension = new EventExtension();
+
+			proxy.AddExtension(eventExtension);
+
 			if (profile.SupportsShaderMode())
 			{
 				logger.LogInformation("Using shader mode");
 
-				var shaderExtension = shaderModeFactory.Create(connection, profile);
+				var shaderExtension = shaderModeFactory.Create(connection, profile, eventExtension);
 
 				await shaderExtension.SetupAsync();
 
@@ -116,14 +120,6 @@ namespace Mtgp.Proxy
 				proxy.AddExtension(new LineModeExtension(telnetClient));
 			}
 			proxy.AddExtension(new DataExtension([new LocalStorageDataScheme()]));
-
-			_ = Task.Run(async () =>
-			{
-				await foreach (var line in connection.LineReader.ReadAllAsync())
-				{
-					await proxy.SendOnDefaultPipe(DefaultPipe.Input, line);
-				}
-			});
 
 			using var mtgpClient = new TcpClient();
 

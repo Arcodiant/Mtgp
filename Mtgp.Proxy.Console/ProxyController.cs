@@ -52,11 +52,6 @@ internal class ProxyController(Func<MtgpRequest, Task<MtgpResponse>> sendRequest
 		}
 	}
 
-	public async Task SendOnDefaultPipe(DefaultPipe pipe, string message)
-	{
-		await (this.OnDefaultPipeSend?.Invoke(pipe, message) ?? Task.CompletedTask);
-	}
-
 	public async Task<MtgpResponse> SendOutgoingRequestAsync(MtgpRequest request)
 		=> await sendRequest(request with { Id = requestId++ });
 }

@@ -6,13 +6,12 @@ using Mtgp.Proxy.Shader;
 using Mtgp.Proxy.Telnet;
 using Mtgp.Shader;
 using System.Diagnostics;
-using System.Reflection;
+using System.IO.Pipelines;
 using System.Text;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace Mtgp.Proxy;
 
-internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetConnection connection, ClientProfile profile)
+internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetConnection connection, ClientProfile profile, EventExtension eventExtension)
 	: IProxyExtension
 {
 	private class ResourceStore
@@ -61,6 +60,8 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 			this.GetStore<T>()[index] = default;
 		}
 	}
+
+	private static readonly QualifiedName windowSizeChangedEventName = new("core", "shader", "windowSizeChanged");
 
 	private record PipeInfo(int ActionList);
 	private record ActionListInfo(List<IAction> Actions);
@@ -117,13 +118,43 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 		proxy.RegisterMessageHandler<AddTriggerActionListActionRequest>(AddTriggerActionListAction);
 		proxy.RegisterMessageHandler<GetClientShaderCapabilitiesRequest>(GetClientShaderCapabilities);
 
-		proxy.OnDefaultPipeSend += async (pipe, message) =>
+		eventExtension.RegisterEvent(windowSizeChangedEventName, OnWindowSizeChangedSubscription);
+
+		_ = Task.Run(async () =>
 		{
-			if (this.defaultPipeBindings.TryGetValue(pipe, out var pipeInfo))
+			await foreach (var line in connection.LineReader.ReadAllAsync())
 			{
-				await proxy.SendOutgoingRequestAsync(new SendRequest(0, pipeInfo.PipeId, Encoding.UTF32.GetBytes(message)));
+				if (this.defaultPipeBindings.TryGetValue(DefaultPipe.Input, out var pipeInfo))
+				{
+					await proxy.SendOutgoingRequestAsync(new SendRequest(0, pipeInfo.PipeId, Encoding.UTF32.GetBytes(line)));
+				}
 			}
-		};
+		});
+
+		_ = Task.Run(async () =>
+		{
+			await foreach (var (width, height) in connection.WindowSizeReader.ReadAllAsync())
+			{
+				this.size = new(width, height);
+				this.SendWindowSizeChangedEvent();
+			}
+		});
+	}
+
+	private void OnWindowSizeChangedSubscription(QualifiedName name)
+	{
+		this.SendWindowSizeChangedEvent();
+	}
+
+	private void SendWindowSizeChangedEvent()
+	{
+		var data = new byte[8];
+
+		new BitWriter(data)
+			.Write(this.size.Width)
+			.Write(this.size.Height);
+
+		_ = eventExtension.FireEventAsync(windowSizeChangedEventName, data);
 	}
 
 	private MtgpResponse GetClientShaderCapabilities(GetClientShaderCapabilitiesRequest request)

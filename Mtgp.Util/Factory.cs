@@ -22,13 +22,13 @@ internal class SimpleFactory<T, TArg>(IServiceProvider serviceProvider)
 	where T : class
 {
 	public T Create(TArg arg)
-		=> ActivatorUtilities.CreateInstance<T>(serviceProvider, arg);
+		=> ActivatorUtilities.CreateInstance<T>(serviceProvider, arg!);
 
 	public T CreateWithScope(TArg arg, out IServiceScope scope)
 	{
 		scope = serviceProvider.CreateScope();
 
-		return ActivatorUtilities.CreateInstance<T>(scope.ServiceProvider, arg);
+		return ActivatorUtilities.CreateInstance<T>(scope.ServiceProvider, arg!);
 	}
 }
 
@@ -37,12 +37,25 @@ internal class SimpleFactory<T, TArg1, TArg2>(IServiceProvider serviceProvider)
 	where T : class
 {
 	public T Create(TArg1 arg1, TArg2 arg2)
-		=> ActivatorUtilities.CreateInstance<T>(serviceProvider, arg1, arg2);
+		=> ActivatorUtilities.CreateInstance<T>(serviceProvider, arg1!, arg2!);
 
 	public T CreateWithScope(TArg1 arg1, TArg2 arg2, out IServiceScope scope)
 	{
 		scope = serviceProvider.CreateScope();
 
-		return ActivatorUtilities.CreateInstance<T>(scope.ServiceProvider, arg1, arg2);
+		return ActivatorUtilities.CreateInstance<T>(scope.ServiceProvider, arg1!, arg2!);
+	}
+}
+
+internal class SimpleFactory<T, TArg1, TArg2, TArg3>(IServiceProvider serviceProvider)
+	: IFactory<T, TArg1, TArg2, TArg3>
+	where T : class
+{
+	public T Create(TArg1 arg1, TArg2 arg2, TArg3 arg3)
+		=> ActivatorUtilities.CreateInstance<T>(serviceProvider, arg1!, arg2!, arg3!);
+	public T CreateWithScope(TArg1 arg1, TArg2 arg2, TArg3 arg3, out IServiceScope scope)
+	{
+		scope = serviceProvider.CreateScope();
+		return ActivatorUtilities.CreateInstance<T>(scope.ServiceProvider, arg1!, arg2!, arg3!);
 	}
 }

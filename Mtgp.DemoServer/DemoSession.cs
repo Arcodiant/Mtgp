@@ -22,12 +22,31 @@ internal class DemoSession(MtgpClient client, ILogger<DemoSession> logger)
 
 		var waitHandle = new TaskCompletionSource();
 
+		int? windowSizeChangedPipe = null;
+
 		client.SendReceived += message =>
 		{
-			waitHandle.SetResult();
+			if (message.Pipe == -1)
+			{
+				waitHandle.SetResult();
+			}
+			else if (message.Pipe == windowSizeChangedPipe)
+			{
+				new BitReader(message.Value)
+					.Read(out int width)
+					.Read(out int height);
+
+				logger.LogInformation("Window size changed: {Width}x{Height}", width, height);
+			}
+			else
+			{
+				logger.LogWarning("Received message on unknown pipe {Pipe}", message.Pipe);
+			}
 
 			return Task.CompletedTask;
 		};
+
+		windowSizeChangedPipe = (await client.SubscribeEventAsync(new("core", "shader", "windowSizeChanged"))).Id;
 
 		await client.SetDefaultPipe(DefaultPipe.Input, -1, [], false);
 

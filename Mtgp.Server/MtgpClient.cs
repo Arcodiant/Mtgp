@@ -85,6 +85,15 @@ public class MtgpClient(IFactory<MtgpConnection, Stream> connectionFactory, Stre
 		ThrowIfError(result);
 	}
 
+	public async Task<PipeHandle> SubscribeEventAsync(QualifiedName eventName)
+	{
+		var result = await this.connection.SendAsync<SubscribeEventResponse>(new SubscribeEventRequest(Interlocked.Increment(ref this.requestId), eventName));
+
+		ThrowIfError(result);
+		
+		return new PipeHandle(result.PipeId);
+	}
+
 	public async Task SetTimerTrigger(ActionListHandle actionList, int milliseconds)
 	{
 		var result = await this.connection.SendAsync(new SetTimerTriggerRequest(Interlocked.Increment(ref this.requestId), actionList.Id, milliseconds));

@@ -12,12 +12,14 @@ public class TelnetConnection(TelnetClient client, ILogger<TelnetConnection> log
 	private readonly Dictionary<TelnetOption, TelnetCommand> serverOptionState = [];
 
 	private readonly Channel<string> textChannel = Channel.CreateUnbounded<string>();
+	private readonly Channel<(int, int)> windowSizeChannel = Channel.CreateUnbounded<(int, int)>();
 
 	private readonly CancellationTokenSource readTaskCancellation = new();
 
 	private Task? readTask;
 
 	public ChannelReader<string> LineReader => this.textChannel.Reader;
+	public ChannelReader<(int Width, int Height)> WindowSizeReader => this.windowSizeChannel.Reader;
 
 	private bool IsRunning => !readTaskCancellation.IsCancellationRequested && readTask != null && !readTask.IsCompleted;
 
@@ -128,6 +130,15 @@ public class TelnetConnection(TelnetClient client, ILogger<TelnetConnection> log
 							{
 								waitingSubnegotiations.Remove(subNegotiationEvent.Option);
 								tcs.SetResult(subNegotiationEvent.Data ?? []);
+							}
+
+							if (subNegotiationEvent.Option == TelnetOption.NegotiateAboutWindowSize
+									&& subNegotiationEvent.Data is not null
+									&& subNegotiationEvent.Data.Length == 4)
+							{
+								int width = subNegotiationEvent.Data[0] * 256 + subNegotiationEvent.Data[1];
+								int height = subNegotiationEvent.Data[2] * 256 + subNegotiationEvent.Data[3];
+								await windowSizeChannel.Writer.WriteAsync((width, height));
 							}
 
 							break;
