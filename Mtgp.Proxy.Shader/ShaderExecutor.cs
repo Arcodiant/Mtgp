@@ -1,13 +1,16 @@
-﻿using Mtgp.Shader;
-using System;
+﻿using Mtgp.Messages.Resources;
+using Mtgp.Shader;
 
 namespace Mtgp.Proxy.Shader;
 
-public interface IShaderExecutor
+public abstract class ShaderExecutor
+	: IShaderProxyResource
 {
-	ShaderIoMappings InputMappings { get; }
-	ShaderIoMappings OutputMappings { get; }
-	void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, Span<byte> input, Span<byte> output);
+	public abstract ShaderIoMappings InputMappings { get; }
+	public abstract ShaderIoMappings OutputMappings { get; }
+	public abstract void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, Span<byte> input, Span<byte> output);
+
+	public static string ResourceType => CreateShaderInfo.ResourceType;
 }
 
 public record ShaderIoMappings(Dictionary<int, int> Locations, Dictionary<Builtin, int> Builtins, int Size)

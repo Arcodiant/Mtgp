@@ -1,10 +1,11 @@
 ﻿using Microsoft.Extensions.Logging;
+using Mtgp.Messages.Resources;
 using Mtgp.Shader;
 using System.Diagnostics;
 
 namespace Mtgp.Proxy.Shader;
 
-public class RenderPipeline(Dictionary<ShaderStage, IShaderExecutor> shaderStages,
+public class RenderPipeline(Dictionary<ShaderStage, ShaderExecutor> shaderStages,
 							  (int Binding, int Stride, InputRate InputRate)[] vertexBufferBindings,
 							  (int Location, int Binding, ShaderType Type, int Offset)[] vertexAttributes,
 							  (int Location, ShaderType Type, Scale InterpolationScale)[] fragmentAttributes,
@@ -12,7 +13,9 @@ public class RenderPipeline(Dictionary<ShaderStage, IShaderExecutor> shaderStage
 							  Rect3D[]? scissors,
 							  bool enableAlpha,
 							  PolygonMode polygonMode)
+	: IShaderProxyResource
 {
+	public static string ResourceType => CreateRenderPipelineInfo.ResourceType;
 
 	public void Execute(ILogger logger, int instanceCount, int vertexCount, (byte[] Buffer, int Offset)[] vertexBuffers, ImageState[] imageAttachments, Memory<byte>[] bufferViewAttachments, FrameBuffer frameBuffer)
 	{

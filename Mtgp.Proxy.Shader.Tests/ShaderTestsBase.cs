@@ -3,7 +3,7 @@ using Mtgp.Shader;
 
 namespace Mtgp.Proxy.Shader.Tests
 {
-	public class ShaderTestsBase(Func<ShaderIoMappings, ShaderIoMappings, Memory<byte>, IShaderExecutor> buildExecutor)
+	public class ShaderTestsBase(Func<ShaderIoMappings, ShaderIoMappings, Memory<byte>, ShaderExecutor> buildExecutor)
 	{
 		[TestMethod]
 		[DataRow(123)]

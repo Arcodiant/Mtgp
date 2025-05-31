@@ -6,72 +6,36 @@ using Mtgp.Proxy.Shader;
 using Mtgp.Proxy.Telnet;
 using Mtgp.Shader;
 using System.Diagnostics;
-using System.IO.Pipelines;
+using System.Security.AccessControl;
 using System.Text;
 
 namespace Mtgp.Proxy;
 
+internal record PipeInfo(int ActionList)
+	: IShaderProxyResource
+{
+	public static string ResourceType => CreatePipeInfo.ResourceType;
+}
+internal record ActionListInfo(List<IAction> Actions)
+	: IShaderProxyResource
+{
+	public static string ResourceType => CreateActionListInfo.ResourceType;
+}
+internal record BufferViewInfo(Memory<byte> View)
+	: IShaderProxyResource
+{
+	public static string ResourceType => CreateBufferViewInfo.ResourceType;
+}
+internal record BufferInfo(byte[] Data)
+	: IShaderProxyResource
+{
+	public static string ResourceType => CreateBufferInfo.ResourceType;
+}
+
 internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetConnection connection, ClientProfile profile, EventExtension eventExtension)
 	: IProxyExtension
 {
-	private class ResourceStore
-	{
-		private readonly Dictionary<Type, object> stores = [];
-
-		private List<T?> GetStore<T>()
-		{
-			if (!this.stores.TryGetValue(typeof(T), out var store))
-			{
-				store = new List<T?>();
-				this.stores[typeof(T)] = store;
-			}
-
-			return (List<T?>)store;
-		}
-
-		public int Add<T>(T item)
-		{
-			var store = this.GetStore<T>();
-
-			store.Add(item);
-
-			return store.Count - 1;
-		}
-
-		public T Get<T>(int index)
-		{
-			T? value = this.GetStore<T>()[index];
-
-			return value is not null ? value : throw new InvalidOperationException();
-		}
-
-		public T[] Get<T>(int[] indices)
-		{
-			return [.. indices.Select(Get<T>)];
-		}
-
-		public V[] Get<T, V>(int[] indices, Func<T?, V> selector)
-		{
-			return [.. indices.Select(Get<T>).Select(selector)];
-		}
-
-		public void Remove<T>(int index)
-		{
-			this.GetStore<T>()[index] = default;
-		}
-	}
-
-	private static readonly QualifiedName windowSizeChangedEventName = new("core", "shader", "windowSizeChanged");
-
-	private record PipeInfo(int ActionList);
-	private record ActionListInfo(List<IAction> Actions);
-	private record BufferViewInfo(Memory<byte> View);
-	private record BufferInfo(byte[] Data);
-
-	private record ResourceKey(string ResourceType, int Id);
-
 	private readonly ResourceStore resourceStore = new();
-	private readonly Dictionary<ResourceKey, List<ResourceKey>> resourceReferences = [];
 
 	private readonly Dictionary<DefaultPipe, (int PipeId, Dictionary<ChannelType, ImageFormat> ChannelSet)> defaultPipeBindings = [];
 	private readonly Dictionary<int, DefaultPipe> defaultPipeLookup = [];
@@ -118,7 +82,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 		proxy.RegisterMessageHandler<AddTriggerActionListActionRequest>(AddTriggerActionListAction);
 		proxy.RegisterMessageHandler<GetClientShaderCapabilitiesRequest>(GetClientShaderCapabilities);
 
-		eventExtension.RegisterEvent(windowSizeChangedEventName, OnWindowSizeChangedSubscription);
+		eventExtension.RegisterEvent(Events.WindowSizeChanged, OnWindowSizeChangedSubscription);
 
 		_ = Task.Run(async () =>
 		{
@@ -154,7 +118,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 			.Write(this.size.Width)
 			.Write(this.size.Height);
 
-		_ = eventExtension.FireEventAsync(windowSizeChangedEventName, data);
+		_ = eventExtension.FireEventAsync(Events.WindowSizeChanged, data);
 	}
 
 	private MtgpResponse GetClientShaderCapabilities(GetClientShaderCapabilitiesRequest request)
@@ -188,7 +152,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 
 	private MtgpResponse ClearStringSplitPipeline(ClearStringSplitPipelineRequest request)
 	{
-		var pipeline = this.resourceStore.Get<IFixedFunctionPipeline>(request.PipelineId);
+		var pipeline = this.resourceStore.Get<FixedFunctionPipeline>(request.PipelineId);
 
 		if (pipeline is StringSplitPipeline stringSplitPipeline)
 		{
@@ -222,6 +186,8 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 
 	private MtgpResponse AddIndirectDrawAction(AddIndirectDrawActionRequest request)
 	{
+		this.resourceStore.AddReference<ActionListInfo, RenderPipeline>(request.ActionList, request.RenderPipeline);
+
 		var actionList = this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions;
 
 		actionList.Add(new IndirectDrawAction(this.resourceStore.Get<RenderPipeline>(request.RenderPipeline),
@@ -238,7 +204,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 	{
 		var actionList = this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions;
 
-		actionList.Add(new RunPipelineAction(this.resourceStore.Get<IFixedFunctionPipeline>(request.Pipeline)));
+		actionList.Add(new RunPipelineAction(this.resourceStore.Get<FixedFunctionPipeline>(request.Pipeline)));
 
 		return new MtgpResponse(0, "ok");
 	}
@@ -266,6 +232,8 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 
 	private MtgpResponse AddDrawAction(AddDrawActionRequest request)
 	{
+		this.resourceStore.AddReference<ActionListInfo, RenderPipeline>(request.ActionList, request.RenderPipeline);
+
 		var actionList = this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions;
 
 		actionList.Add(new DrawAction(this.resourceStore.Get<RenderPipeline>(request.RenderPipeline),
@@ -336,6 +304,8 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 
 	private MtgpResponse ResetActionList(ResetActionListRequest request)
 	{
+		this.resourceStore.ClearReferences<ActionListInfo>(request.ActionList);
+
 		this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions.Clear();
 
 		return new MtgpResponse(0, "ok");
@@ -355,37 +325,6 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 
 	private MtgpResponse CreateResource(CreateResourceRequest request)
 	{
-		ResourceCreateResult Create<T>(T resource) => new(this.resourceStore.Add(resource), ResourceCreateResultType.Success);
-		RenderPipeline CreateRenderPipeline(Dictionary<ShaderStage, int> shaderStages,
-								 (int Binding, int Stride, InputRate InputRate)[] vertexBufferBindings,
-								 (int Location, int Binding, ShaderType Type, int Offset)[] vertexAttributes,
-								 (int Location, ShaderType Type, Scale InterpolationScale)[] fragmentAttributes,
-								 Rect3D viewport,
-								 Rect3D[]? scissors,
-								 bool enableAlpha,
-								 PolygonMode polygonMode)
-			=> new(shaderStages.ToDictionary(x => x.Key, x => this.resourceStore.Get<IShaderExecutor>(x.Value)), vertexBufferBindings, vertexAttributes, fragmentAttributes, viewport, scissors, enableAlpha, polygonMode);
-
-		PresentSet CreatePresentSet(Dictionary<PresentImagePurpose, ImageFormat> formats)
-		{
-			if (!formats.ContainsKey(PresentImagePurpose.Character) || !formats.ContainsKey(PresentImagePurpose.Foreground) || !formats.ContainsKey(PresentImagePurpose.Background))
-			{
-				throw new Exception("Missing required image purposes");
-			}
-
-			var images = new Dictionary<PresentImagePurpose, int>();
-
-			Span<byte> trueColourWhite = stackalloc byte[12];
-			Span<byte> trueColourBlack = stackalloc byte[12];
-
-			foreach (var (purpose, format) in formats)
-			{
-				images[purpose] = this.resourceStore.Add(new ImageState((this.size.Width, this.size.Height, 1), format));
-			}
-
-			return new PresentSet(images);
-		}
-
 		var remainingResources = request.Resources.Select((x, y) => (Info: x, Index: y)).ToList();
 
 		var results = new ResourceCreateResult[request.Resources.Length];
@@ -419,8 +358,21 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 						_ => []
 					};
 
-					ResourceKey[] newReferences = [];
-					string resourceType = string.Empty;
+					int GetId(IdOrRef idOrRef)
+					{
+						if (idOrRef.Id.HasValue)
+						{
+							return idOrRef.Id.Value;
+						}
+						else if (createdIds.TryGetValue(idOrRef.Reference!, out var created))
+						{
+							return created.ResourceId;
+						}
+						else
+						{
+							throw new Exception($"Missing dependency creation: {idOrRef.Reference}");
+						}
+					}
 
 					if (Dependencies.All(IsIdCreated))
 					{
@@ -430,70 +382,25 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 						}
 						else
 						{
-							int GetId(IdOrRef idOrRef)
+							result = resource.Info switch
 							{
-								if (idOrRef.Id.HasValue)
-								{
-									return idOrRef.Id.Value;
-								}
-								else if (createdIds.TryGetValue(idOrRef.Reference!, out var created))
-								{
-									return created.ResourceId;
-								}
-								else
-								{
-									throw new Exception($"Missing dependency creation: {idOrRef.Reference}");
-								}
-							}
-
-							(result, newReferences, resourceType) = resource.Info switch
-							{
-								CreateShaderInfo shaderInfo => (Create((IShaderExecutor)ShaderJitter.Create(shaderInfo.ShaderData)), [], CreateShaderInfo.ResourceType),
-								CreatePipeInfo pipeInfo => (Create(new PipeInfo(GetId(pipeInfo.ActionList))), [new("actionList", GetId(pipeInfo.ActionList))], CreatePipeInfo.ResourceType),
-								CreateActionListInfo actionListInfo => (Create(new ActionListInfo([])), [], CreateActionListInfo.ResourceType),
-								CreateBufferInfo bufferInfo => (Create(new BufferInfo(new byte[bufferInfo.Size])), [], CreateBufferInfo.ResourceType),
-								CreateBufferViewInfo bufferViewInfo => (Create(new BufferViewInfo(this.resourceStore.Get<BufferInfo>(GetId(bufferViewInfo.Buffer)).Data.AsMemory()[bufferViewInfo.Offset..(bufferViewInfo.Offset + bufferViewInfo.Size)])), [new(CreateBufferInfo.ResourceType, GetId(bufferViewInfo.Buffer))], CreateBufferViewInfo.ResourceType),
-								CreateImageInfo imageInfo => (Create(new ImageState(imageInfo.Size, imageInfo.Format)), [], CreateImageInfo.ResourceType),
-								CreateStringSplitPipelineInfo stringSplitPipelineInfo => (Create((IFixedFunctionPipeline)new StringSplitPipeline(this.resourceStore.Get<ImageState>(GetId(stringSplitPipelineInfo.LineImage)).Data,
-																																					this.resourceStore.Get<BufferViewInfo>(GetId(stringSplitPipelineInfo.InstanceBufferView)).View,
-																																					this.resourceStore.Get<BufferViewInfo>(GetId(stringSplitPipelineInfo.IndirectCommandBufferView)).View,
-																																					stringSplitPipelineInfo.Height,
-																																					stringSplitPipelineInfo.Width)),
-																																					[
-																																						new(CreateImageInfo.ResourceType, GetId(stringSplitPipelineInfo.LineImage)),
-																																						new(CreateBufferViewInfo.ResourceType, GetId(stringSplitPipelineInfo.InstanceBufferView)),
-																																						new(CreateBufferViewInfo.ResourceType, GetId(stringSplitPipelineInfo.IndirectCommandBufferView))
-																																					],
-																																					CreateStringSplitPipelineInfo.ResourceType),
-								CreateRenderPipelineInfo renderPipelineInfo => (Create(CreateRenderPipeline(renderPipelineInfo.ShaderStages.ToDictionary(x => x.Stage, x => GetId(x.Shader)),
-																													renderPipelineInfo.VertexInput.VertexBufferBindings.Select(x => (x.Binding, x.Stride, x.InputRate)).ToArray(),
-																													renderPipelineInfo.VertexInput.VertexAttributes.Select(x => (x.Location, x.Binding, x.Type, x.Offset)).ToArray(),
-																													renderPipelineInfo.FragmentAttributes.Select(x => (x.Location, x.Type, x.InterpolationScale)).ToArray(),
-																													renderPipelineInfo.Viewport,
-																													renderPipelineInfo.Scissors,
-																													renderPipelineInfo.EnableAlpha,
-																													renderPipelineInfo.PolygonMode)),
-																													[.. renderPipelineInfo.ShaderStages.Select(x => new ResourceKey(CreateShaderInfo.ResourceType, GetId(x.Shader)))],
-																													CreateRenderPipelineInfo.ResourceType),
-								CreateComputePipelineInfo computePipelineInfo => (Create(new ComputePipeline(this.resourceStore.Get<IShaderExecutor>(GetId(computePipelineInfo.ComputeShader.Shader)))), [new(CreateShaderInfo.ResourceType, GetId(computePipelineInfo.ComputeShader.Shader))], CreateComputePipelineInfo.ResourceType),
-								CreatePresentSetInfo presentSetInfo => (Create(CreatePresentSet(presentSetInfo.Images)), [], CreatePresentSetInfo.ResourceType),
-								_ => (ResourceCreateResult.InvalidRequest, Array.Empty<ResourceKey>(), string.Empty)
+								CreateShaderInfo shaderInfo => ResourceCreateResult.Success(this.resourceStore.Create(shaderInfo)),
+								CreatePipeInfo pipeInfo => ResourceCreateResult.Success(this.resourceStore.Create(pipeInfo, GetId)),
+								CreateActionListInfo actionListInfo => ResourceCreateResult.Success(this.resourceStore.Create(actionListInfo)),
+								CreateBufferInfo bufferInfo => ResourceCreateResult.Success(this.resourceStore.Create(bufferInfo)),
+								CreateBufferViewInfo bufferViewInfo => ResourceCreateResult.Success(this.resourceStore.Create(bufferViewInfo, GetId)),
+								CreateImageInfo imageInfo => ResourceCreateResult.Success(this.resourceStore.Create(imageInfo)),
+								CreateStringSplitPipelineInfo stringSplitPipelineInfo => ResourceCreateResult.Success(this.resourceStore.Create(stringSplitPipelineInfo, GetId)),
+								CreateRenderPipelineInfo renderPipelineInfo => ResourceCreateResult.Success(this.resourceStore.Create(renderPipelineInfo, GetId)),
+								CreateComputePipelineInfo computePipelineInfo => ResourceCreateResult.Success(this.resourceStore.Create(computePipelineInfo, GetId)),
+								CreatePresentSetInfo presentSetInfo => ResourceCreateResult.Success(this.resourceStore.Create(presentSetInfo, this.size)),
+								_ => ResourceCreateResult.InvalidRequest
 							};
 						}
 
-						if (resource.Info.Reference != null)
+						if (resource.Info.Reference is not null)
 						{
-							createdIds[resource.Info.Reference!] = result;
-
-							var resourceKey = new ResourceKey(resourceType, result.ResourceId);
-
-							if (!this.resourceReferences.TryGetValue(resourceKey, out var references))
-							{
-								references = [];
-								this.resourceReferences.Add(resourceKey, references);
-							}
-
-							references.AddRange(newReferences);
+							createdIds[resource.Info.Reference] = result;
 						}
 
 						createdResources.Add(resource.Index);
@@ -528,42 +435,31 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 
 	private MtgpResponse DestroyResource(DestroyResourceRequest request)
 	{
-		void Remove<T, TInfo>(int id)
-			where TInfo: ICreateResourceInfo
+		if (!this.resourceStore.CanRemove(request.ResourceType, request.ResourceId))
 		{
-			this.resourceStore.Remove<T>(id);
-
-			this.resourceReferences.Remove(new(TInfo.ResourceType, id));
+			return new MtgpResponse(0, "invalidRequest");
 		}
 
 		switch (request.ResourceType)
 		{
 			case "presentSet":
-				if (this.resourceReferences.TryGetValue(new(CreatePresentSetInfo.ResourceType, request.ResourceId), out var presentSetRefences)
-						&& presentSetRefences.Count != 0)
+				var presentSet = this.resourceStore.Get<PresentSet>(request.ResourceId);
+
+				if (!presentSet.Images.Values.All(this.resourceStore.CanRemove<ImageState>))
 				{
 					return new MtgpResponse(0, "invalidRequest");
 				}
 
-				var presentSet = this.resourceStore.Get<PresentSet>(request.ResourceId);
-
 				foreach (var imageId in presentSet.Images.Values)
 				{
-					if(this.resourceReferences.TryGetValue(new(CreateImageInfo.ResourceType, imageId), out var references)
-						&& references.Count != 0)
-					{
-						return new MtgpResponse(0, "invalidRequest");
-					}
+					this.resourceStore.Remove<ImageState>(imageId);
 				}
 
-				foreach(var imageId in presentSet.Images.Values)
-				{
-					Remove<ImageState, CreateImageInfo>(imageId);
-				}
-
-				Remove<PresentSet, CreatePresentSetInfo>(request.ResourceId);
+				this.resourceStore.Remove<PresentSet>(request.ResourceId);
 
 				return new MtgpResponse(0, "ok");
+			case "renderPass":
+
 			default:
 				return new MtgpResponse(0, "invalidRequest");
 		}

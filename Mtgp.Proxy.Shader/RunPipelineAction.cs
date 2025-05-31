@@ -2,7 +2,7 @@
 
 namespace Mtgp.Proxy.Shader;
 
-public class RunPipelineAction(IFixedFunctionPipeline pipeline)
+public class RunPipelineAction(FixedFunctionPipeline pipeline)
 	: IAction
 {
 	public void Execute(ILogger logger, ActionExecutionState state)

@@ -1,10 +1,14 @@
 ﻿using Microsoft.Extensions.Logging;
+using Mtgp.Messages.Resources;
 using Mtgp.Shader;
 
 namespace Mtgp.Proxy.Shader;
 
-public class ComputePipeline(IShaderExecutor shader)
+public class ComputePipeline(ShaderExecutor shader)
+	: IShaderProxyResource
 {
+	public static string ResourceType => CreateComputePipelineInfo.ResourceType;
+
 	public void Execute(ILogger logger, Extent3D dimensions, Memory<byte>[] bufferViewAttachments)
 	{
 		Span<byte> inputSpan = stackalloc byte[shader.InputMappings.Size];

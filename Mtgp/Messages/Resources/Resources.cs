@@ -51,13 +51,6 @@ public record CreatePipeInfo(IdOrRef ActionList, string? Reference = null)
 	public const string ResourceType = "pipe";
 }
 
-public record CreateRenderPassInfo(Dictionary<int, IdOrRef> ImageAttachments, Dictionary<int, IdOrRef> BufferAttachments, InputRate InputRate, PolygonMode PolygonMode, IdOrRef VertexShader, IdOrRef FragmentShader, int X, int Y, int Width, int Height, string? Reference = null)
-	: ResourceInfo(Reference), ICreateResourceInfo
-{
-	static string ICreateResourceInfo.ResourceType => ResourceType;
-	public const string ResourceType = "renderPass";
-}
-
 public record CreateRenderPipelineInfo(ShaderStageInfo[] ShaderStages, VertexInputInfo VertexInput, FragmentAttribute[] FragmentAttributes, Rect3D Viewport, Rect3D[] Scissors, bool EnableAlpha, PolygonMode PolygonMode, string? Reference = null)
 	: ResourceInfo(Reference), ICreateResourceInfo
 {

@@ -4,19 +4,12 @@ using System.Text;
 
 namespace Mtgp.Server;
 
-public class UIManager
+public class UIManager(IShaderManager shaderManager, IBufferManager bufferManager, MtgpClient client, PresentSetHandle presentSet, Extent2D size)
 {
 	private readonly List<StringSplitData> stringSplitAreas = [];
 	private readonly List<PanelData> panels = [];
 	private readonly Dictionary<string, ShaderHandle> shaderCache = [];
-	private readonly List<BufferHandle> shaderBuffers = [];
 	private readonly List<(int Priority, Func<ActionListHandle, Task> Create)> createMainActions = [];
-	private readonly IShaderManager shaderManager;
-	private readonly IBufferManager bufferManager;
-	private readonly MtgpClient client;
-	private readonly PresentSetHandle presentSet;
-	private readonly ImageFormat imageFormat;
-
 	private (PipeHandle Pipe, ActionListHandle ActionList)? mainPipe;
 
 
@@ -30,27 +23,12 @@ public class UIManager
 		var imageFormat = clientShaderCaps.PresentFormats.Last();
 
 		await client.GetResourceBuilder()
-					.PresentSet(out var presentSetTask,
-					new()
-					{
-						[PresentImagePurpose.Character] = ImageFormat.T32_SInt,
-						[PresentImagePurpose.Foreground] = imageFormat,
-						[PresentImagePurpose.Background] = imageFormat
-					})
+					.PresentSet(out var presentSetTask, imageFormat)
 					.BuildAsync();
 
 		var presentSet = await presentSetTask;
 
-		return new UIManager(shaderManager, bufferManager, client, presentSet, imageFormat);
-	}
-
-	private UIManager(IShaderManager shaderManager, IBufferManager bufferManager, MtgpClient client, PresentSetHandle presentSet, ImageFormat imageFormat)
-	{
-		this.shaderManager = shaderManager;
-		this.bufferManager = bufferManager;
-		this.client = client;
-		this.presentSet = presentSet;
-		this.imageFormat = imageFormat;
+		return new UIManager(shaderManager, bufferManager, client, presentSet, (80, 24));
 	}
 
 	private async Task<ShaderHandle> GetShaderAsync(string filePath)
@@ -86,8 +64,8 @@ public class UIManager
 		ShaderHandle vertexShader = await GetShaderAsync("./Shaders/UI/Panel.vert");
 		ShaderHandle fragmentShader = await GetShaderAsync("./Shaders/UI/Panel.frag");
 
-		var (vertexBuffer, vertexBufferOffset) = await this.bufferManager.Allocate(16);
-		var (panelBuffer, panelBufferOffset) = await this.bufferManager.Allocate(9 * 4);
+		var (vertexBuffer, vertexBufferOffset) = await bufferManager.Allocate(16);
+		var (panelBuffer, panelBufferOffset) = await bufferManager.Allocate(9 * 4);
 
 		var presentImage = await client.GetPresentImage(presentSet);
 
@@ -106,7 +84,7 @@ public class UIManager
 			.WriteRunes([characters[1, 0], characters[1, 1], characters[1, 2]])
 			.WriteRunes([characters[2, 0], characters[2, 1], characters[2, 2]]);
 
-		var characterImage = await this.shaderManager.CreateImageFromData(characterData, new(3, 3, 1), ImageFormat.T32_SInt);
+		var characterImage = await shaderManager.CreateImageFromData(characterData, new(3, 3, 1), ImageFormat.T32_SInt);
 
 		var panelData = new byte[9 * 4];
 
@@ -142,7 +120,7 @@ public class UIManager
 											new(2, ShaderType.Float(4), (1, 0, 0)),
 											new(3, ShaderType.Float(4), (0, 1, 0)),
 										],
-										new((0, 0, 0), (80, 24, 1)),
+										new((0, 0, 0), (size.Width, size.Height, 1)),
 										[],
 										false,
 										PolygonMode.Fill)
@@ -175,7 +153,7 @@ public class UIManager
 		var vertexShader = await GetShaderAsync("./Shaders/UI/StringSplit.vert");
 		var fragmentShader = await GetShaderAsync("./Shaders/UI/StringSplit.frag");
 
-		var presentImage = await client.GetPresentImage(this.presentSet);
+		var presentImage = await client.GetPresentImage(presentSet);
 
 		await client.GetResourceBuilder()
 					.ActionList(out var outputPipeActionListTask, "actionList")

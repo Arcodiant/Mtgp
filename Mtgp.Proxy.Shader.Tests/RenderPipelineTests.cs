@@ -8,12 +8,12 @@ namespace Mtgp.Proxy.Shader.Tests;
 public class RenderPipelineTests
 {
 	private class MockShaderExecutor(Action<ImageState[], Memory<byte>[], byte[], byte[]> execute, ShaderIoMappings inputMappings, ShaderIoMappings outputMappings)
-		: IShaderExecutor
+		: ShaderExecutor
 	{
-		public ShaderIoMappings InputMappings { get; } = inputMappings;
-		public ShaderIoMappings OutputMappings { get; } = outputMappings;
+		public override ShaderIoMappings InputMappings { get; } = inputMappings;
+		public override ShaderIoMappings OutputMappings { get; } = outputMappings;
 
-		public void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, Span<byte> input, Span<byte> output)
+		public override void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, Span<byte> input, Span<byte> output)
 		{
 			var inputData = input.ToArray();
 			var outputData = output.ToArray();
@@ -48,7 +48,7 @@ public class RenderPipelineTests
 										.AddLocation(ShaderType.Int(4), 1)
 										.Build();
 
-		var shaderStages = new Dictionary<ShaderStage, IShaderExecutor>
+		var shaderStages = new Dictionary<ShaderStage, ShaderExecutor>
 		{
 			[ShaderStage.Vertex] = new MockShaderExecutor((images, buffers, input, output) =>
 			{
@@ -116,7 +116,7 @@ public class RenderPipelineTests
 										.AddLocation(ShaderType.Int(4), 1)
 										.Build();
 
-		var shaderStages = new Dictionary<ShaderStage, IShaderExecutor>
+		var shaderStages = new Dictionary<ShaderStage, ShaderExecutor>
 		{
 			[ShaderStage.Vertex] = new MockShaderExecutor((images, buffers, input, output) =>
 			{

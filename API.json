@@ -46,50 +46,6 @@
         "type": "IdOrRef"
       }
     },
-    "renderPass": {
-      "imageAttachments": {
-        "type": {
-          "type": "lookup",
-          "parameters": [
-            "int",
-            "IdOrRef"
-          ]
-        }
-      },
-      "bufferAttachments": {
-        "type": {
-          "type": "lookup",
-          "parameters": [
-            "int",
-            "IdOrRef"
-          ]
-        }
-      },
-      "inputRate": {
-        "type": "InputRate"
-      },
-      "polygonMode": {
-        "type": "PolygonMode"
-      },
-      "vertexShader": {
-        "type": "IdOrRef"
-      },
-      "fragmentShader": {
-        "type": "IdOrRef"
-      },
-      "x": {
-        "type": "int"
-      },
-      "y": {
-        "type": "int"
-      },
-      "width": {
-        "type": "int"
-      },
-      "height": {
-        "type": "int"
-      }
-    },
     "renderPipeline": {
       "shaderStages": {
         "type": "ShaderStageInfo[]"

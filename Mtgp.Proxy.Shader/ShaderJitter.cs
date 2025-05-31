@@ -79,7 +79,7 @@ internal static class JitterMethods
 }
 
 public class ShaderJitter
-	: IShaderExecutor
+	: ShaderExecutor
 {
 	private readonly static Lazy<MethodInfo> ReadInt32 = new(() => typeof(JitterMethods).GetMethod(nameof(JitterMethods.ReadInt32))!);
 	private readonly static Lazy<MethodInfo> ReadFloat32 = new(() => typeof(JitterMethods).GetMethod(nameof(JitterMethods.ReadFloat32))!);
@@ -250,8 +250,8 @@ public class ShaderJitter
 	private delegate void ExecuteDelegate(Span<byte> input, Span<byte> output, SpanCollection bufferAttachments, SpanCollection imageAttachments, SpanCollection imageDimensionCollection);
 
 	private readonly ExecuteDelegate execute;
-	public ShaderIoMappings InputMappings { get; private set; }
-	public ShaderIoMappings OutputMappings { get; private set; }
+	public override ShaderIoMappings InputMappings { get; }
+	public override ShaderIoMappings OutputMappings { get; }
 
 	public ShaderJitter(Memory<byte> compiledShader, ShaderIoMappings inputMappings, ShaderIoMappings outputMappings)
 	{
@@ -773,7 +773,7 @@ public class ShaderJitter
 		this.execute = methodEmitter.CreateDelegate();
 	}
 
-	public void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, Span<byte> input, Span<byte> output)
+	public override void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, Span<byte> input, Span<byte> output)
 	{
 		var bufferCollection = new SpanCollection();
 

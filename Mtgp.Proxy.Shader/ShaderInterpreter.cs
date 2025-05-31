@@ -29,11 +29,11 @@ public readonly struct Field
 public record ShaderAttribute(ShaderType Type, int Location, int Offset);
 
 public class ShaderInterpreter
-		: IShaderExecutor
+		: ShaderExecutor
 {
 	private readonly Memory<byte> compiledShader;
-	public ShaderIoMappings InputMappings { get; }
-	public ShaderIoMappings OutputMappings { get; }
+	public override ShaderIoMappings InputMappings { get; }
+	public override ShaderIoMappings OutputMappings { get; }
 
 	public static ShaderInterpreter Create(Memory<byte> compiledShader)
 	{
@@ -91,7 +91,7 @@ public class ShaderInterpreter
 		public static UniformPointer FromUInt32(uint value) => new(value);
 	}
 
-	public void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, Span<byte> input, Span<byte> output)
+	public override void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, Span<byte> input, Span<byte> output)
 	{
 		bool isRunning = true;
 

@@ -8,7 +8,7 @@
 		{
 		}
 
-		private static IShaderExecutor BuildExecutor(ShaderIoMappings inputMappings, ShaderIoMappings outputMappings, Memory<byte> compiledShader)
+		private static ShaderExecutor BuildExecutor(ShaderIoMappings inputMappings, ShaderIoMappings outputMappings, Memory<byte> compiledShader)
 			=> new ShaderJitter(compiledShader, inputMappings, outputMappings);
 	}
 }

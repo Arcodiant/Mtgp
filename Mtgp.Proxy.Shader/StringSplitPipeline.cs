@@ -3,7 +3,7 @@
 namespace Mtgp.Proxy.Shader;
 
 public class StringSplitPipeline(Memory<byte> characterBuffer, Memory<byte> instanceBuffer, Memory<byte> drawCommandBuffer, int maxLineCount, int regionWidth)
-	: IFixedFunctionPipeline
+	: FixedFunctionPipeline
 {
 	private readonly Queue<string> bufferLines = [];
 
@@ -12,7 +12,7 @@ public class StringSplitPipeline(Memory<byte> characterBuffer, Memory<byte> inst
 		bufferLines.Clear();
 	}
 
-	public void Execute(Memory<byte> pipeData)
+	public override void Execute(Memory<byte> pipeData)
 	{
 		const int instanceSize = 16;
 

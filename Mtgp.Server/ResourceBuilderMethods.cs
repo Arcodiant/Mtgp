@@ -27,9 +27,6 @@ public partial class ResourceBuilder
 	public ResourceBuilder Pipe(out Task<PipeHandle> task, IdOrRef ActionList, string? reference = null)
 		=> this.Add(new CreatePipeInfo(ActionList, reference), id => new PipeHandle(id), out task);
 
-	public ResourceBuilder RenderPass(out Task<RenderPassHandle> task, Dictionary<int, IdOrRef> ImageAttachments, Dictionary<int, IdOrRef> BufferAttachments, InputRate InputRate, PolygonMode PolygonMode, IdOrRef VertexShader, IdOrRef FragmentShader, int X, int Y, int Width, int Height, string? reference = null)
-		=> this.Add(new CreateRenderPassInfo(ImageAttachments, BufferAttachments, InputRate, PolygonMode, VertexShader, FragmentShader, X, Y, Width, Height, reference), id => new RenderPassHandle(id), out task);
-
 	public ResourceBuilder RenderPipeline(out Task<RenderPipelineHandle> task, ShaderStageInfo[] ShaderStages, VertexInputInfo VertexInput, FragmentAttribute[] FragmentAttributes, Rect3D Viewport, Rect3D[] Scissors, bool EnableAlpha, PolygonMode PolygonMode, string? reference = null)
 		=> this.Add(new CreateRenderPipelineInfo(ShaderStages, VertexInput, FragmentAttributes, Viewport, Scissors, EnableAlpha, PolygonMode, reference), id => new RenderPipelineHandle(id), out task);
 

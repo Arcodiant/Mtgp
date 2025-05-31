@@ -16,7 +16,17 @@ internal class DemoSession(MtgpClient client, ILogger<DemoSession> logger)
 		var shaderManager = await ShaderManager.CreateAsync(client);
 		var bufferManager = new BufferManager(client);
 
-		var uiManager = await UIManager.CreateAsync(shaderManager, bufferManager, client);
+		var clientShaderCaps = await client.GetClientShaderCapabilities();
+
+		var imageFormat = clientShaderCaps.PresentFormats.Last();
+
+		await client.GetResourceBuilder()
+					.PresentSet(out var presentSetTask, imageFormat)
+					.BuildAsync();
+
+		var presentSet = await presentSetTask;
+
+		var uiManager = new UIManager(shaderManager, bufferManager, client, presentSet, new(80, 24));
 
 		int panelId = await uiManager.CreatePanelAsync(new((10, 4), (69, 19)), new(0.25f, 0.25f, 0.75f), backgroundGradientFrom: new(0f, 0f, 0.25f));
 

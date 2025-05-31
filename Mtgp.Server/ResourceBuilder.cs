@@ -53,3 +53,14 @@ public partial class ResourceBuilder(MtgpClient client)
 		}
 	}
 }
+
+public static class ResourceBuilderExtensions
+{
+	public static ResourceBuilder PresentSet(this ResourceBuilder builder, out Task<PresentSetHandle> task, ImageFormat colourImageFormat, string? reference = null)
+		=> builder.PresentSet(out task, new()
+		{
+			[PresentImagePurpose.Character] = ImageFormat.T32_SInt,
+			[PresentImagePurpose.Foreground] = colourImageFormat,
+			[PresentImagePurpose.Background] = colourImageFormat
+		}, reference);
+}

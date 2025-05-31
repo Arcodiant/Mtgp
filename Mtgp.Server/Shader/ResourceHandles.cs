@@ -35,11 +35,6 @@ public record PipeHandle(int Id)
 {
 	public static string ResourceType => "pipe";
 }
-public record RenderPassHandle(int Id)
-	: ResourceHandle(Id), IResourceHandle
-{
-	public static string ResourceType => "renderPass";
-}
 public record RenderPipelineHandle(int Id)
 	: ResourceHandle(Id), IResourceHandle
 {

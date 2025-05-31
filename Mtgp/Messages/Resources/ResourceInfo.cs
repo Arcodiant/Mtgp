@@ -17,7 +17,8 @@ public record ResourceInfo(string? Reference = null);
 
 public record ResourceCreateResult(int ResourceId, ResourceCreateResultType Result)
 {
-    public static ResourceCreateResult InvalidRequest => new(0, ResourceCreateResultType.InvalidRequest);
+	public static ResourceCreateResult Success(int resourceId) => new(resourceId, ResourceCreateResultType.Success);
+	public static ResourceCreateResult InvalidRequest => new(0, ResourceCreateResultType.InvalidRequest);
     public static ResourceCreateResult InvalidReference => new(0, ResourceCreateResultType.InvalidReference);
     public static ResourceCreateResult InternalError => new(0, ResourceCreateResultType.InternalError);
     public static ResourceCreateResult FailedReference => new(0, ResourceCreateResultType.FailedReference);
