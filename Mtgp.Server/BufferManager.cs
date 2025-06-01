@@ -2,7 +2,7 @@
 
 namespace Mtgp.Server;
 
-public class BufferManager(MtgpClient client, int defaultBufferSize = 4096)
+public class BufferManager(IMessageConnection connection, int defaultBufferSize = 4096)
 	: IBufferManager
 {
 	private class BufferState(BufferHandle handle, int size, int nextOffset = 0)
@@ -35,7 +35,7 @@ public class BufferManager(MtgpClient client, int defaultBufferSize = 4096)
 								? (int)Math.Ceiling(size / (double)defaultBufferSize) * defaultBufferSize
 								: defaultBufferSize;
 
-		await client.GetResourceBuilder()
+		await connection.GetResourceBuilder()
 						.Buffer(out var bufferTask, newBufferSize)
 						.BuildAsync();
 

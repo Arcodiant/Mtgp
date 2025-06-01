@@ -1,10 +1,14 @@
 ﻿using Microsoft.Extensions.Logging;
+using Mtgp.Comms;
+using Mtgp.Messages;
 using Mtgp.Server;
+using Mtgp.Server.Shader;
 using Mtgp.Shader;
+using Mtgp.Util;
 
 namespace Mtgp.DemoServer;
 
-internal class DemoSession(MtgpClient client, ILogger<DemoSession> logger)
+internal class DemoSession(MtgpConnection connection, ILogger<DemoSession> logger)
 	: IMtgpSession
 {
 	public void Dispose()
@@ -13,53 +17,54 @@ internal class DemoSession(MtgpClient client, ILogger<DemoSession> logger)
 
 	public async Task RunAsync(CancellationToken token)
 	{
-		var shaderManager = await ShaderManager.CreateAsync(client);
-		var bufferManager = new BufferManager(client);
+		PipeHandle? windowSizePipe = default;
 
-		var clientShaderCaps = await client.GetClientShaderCapabilities();
+		var exitTokenSource = new CancellationTokenSource();
 
-		var imageFormat = clientShaderCaps.PresentFormats.Last();
-
-		await client.GetResourceBuilder()
-					.PresentSet(out var presentSetTask, imageFormat)
-					.BuildAsync();
-
-		var presentSet = await presentSetTask;
-
-		var uiManager = new UIManager(shaderManager, bufferManager, client, presentSet, new(80, 24));
-
-		int panelId = await uiManager.CreatePanelAsync(new((10, 4), (69, 19)), new(0.25f, 0.25f, 0.75f), backgroundGradientFrom: new(0f, 0f, 0.25f));
-
-		var waitHandle = new TaskCompletionSource();
-
-		int? windowSizeChangedPipe = null;
-
-		client.SendReceived += message =>
+		async Task HandleSendAsync(SendRequest request)
 		{
-			if (message.Pipe == -1)
+			if (request.Pipe == windowSizePipe?.Id)
 			{
-				waitHandle.SetResult();
-			}
-			else if (message.Pipe == windowSizeChangedPipe)
-			{
-				new BitReader(message.Value)
+				new BitReader(request.Value)
 					.Read(out int width)
 					.Read(out int height);
 
 				logger.LogInformation("Window size changed: {Width}x{Height}", width, height);
 			}
+			else if (request.Pipe == -1)
+			{
+				exitTokenSource.Cancel();
+			}
 			else
 			{
-				logger.LogWarning("Received message on unknown pipe {Pipe}", message.Pipe);
+				logger.LogWarning("Received unexpected send request: {@Request}", request);
 			}
+		}
 
-			return Task.CompletedTask;
-		};
+		var messagePump = MtgpSessionPump.Create(connection, builder => builder.AddHandler<SendRequest>(HandleSendAsync));
 
-		windowSizeChangedPipe = (await client.SubscribeEventAsync(new("core", "shader", "windowSizeChanged"))).Id;
+		var clientCaps = await messagePump.GetClientShaderCapabilities();
 
-		await client.SetDefaultPipe(DefaultPipe.Input, -1, [], false);
+		logger.LogInformation("Client capabilities: {@Capabilities}", clientCaps);
 
-		await waitHandle.Task;
+		windowSizePipe = await messagePump.SubscribeEventAsync(Events.WindowSizeChanged);
+		await messagePump.SetDefaultPipe(DefaultPipe.Input, -1, [], false);
+
+		var shaderManager = await ShaderManager.CreateAsync(messagePump);
+		var bufferManager = new BufferManager(messagePump);
+
+		var imageFormat = clientCaps.PresentFormats.Last();
+
+		await messagePump.GetResourceBuilder()
+							.PresentSet(out var presentSetTask, imageFormat)
+							.BuildAsync();
+
+		var presentSet = await presentSetTask;
+
+		var uiManager = new UIManager(shaderManager, bufferManager, messagePump, presentSet, new(80, 24));
+
+		int panelId = await uiManager.CreatePanelAsync(new((10, 4), (60, 16)), new(0.25f, 0.25f, 0.75f), backgroundGradientFrom: new(0f, 0f, 0.25f));
+
+		await messagePump.RunAsync(exitTokenSource.Token);
 	}
 }

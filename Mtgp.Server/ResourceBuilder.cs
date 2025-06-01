@@ -4,9 +4,8 @@ using Mtgp.Shader;
 
 namespace Mtgp.Server;
 
-public partial class ResourceBuilder(MtgpClient client)
+public partial class ResourceBuilder(IMessageConnection connection)
 {
-	private readonly MtgpClient client = client;
 	private readonly List<(ResourceInfo Info, TaskCompletionSource<int> TaskSource)> resources = [];
 
 	private ResourceBuilder Add(ResourceInfo info, out Task<int> task)
@@ -31,7 +30,7 @@ public partial class ResourceBuilder(MtgpClient client)
 
 	public async Task BuildAsync()
 	{
-		var results = await this.client.CreateResourcesAsync(this.resources.Select(x => x.Info).ToArray());
+		var results = await connection.CreateResourcesAsync([.. this.resources.Select(x => x.Info)]);
 
 		for (var i = 0; i < resources.Count; i++)
 		{

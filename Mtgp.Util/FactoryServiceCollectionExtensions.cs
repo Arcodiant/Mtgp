@@ -1,14 +1,19 @@
-﻿using Mtgp.Util;
+﻿using Microsoft.Extensions.DependencyInjection.Extensions;
+using Mtgp.Util;
 
 namespace Microsoft.Extensions.DependencyInjection;
 
 public static class FactoryServiceCollectionExtensions
 {
 	public static IServiceCollection AddDefaultFactories(this IServiceCollection services)
-		=> services.AddTransient(typeof(IFactory<>), typeof(SimpleFactory<>))
-			.AddTransient(typeof(IFactory<,>), typeof(SimpleFactory<,>))
-			.AddTransient(typeof(IFactory<,,>), typeof(SimpleFactory<,,>))
-			.AddTransient(typeof(IFactory<,,,>), typeof(SimpleFactory<,,,>));
+	{
+		services.TryAddTransient(typeof(IFactory<>), typeof(SimpleFactory<>));
+		services.TryAddTransient(typeof(IFactory<,>), typeof(SimpleFactory<,>));
+		services.TryAddTransient(typeof(IFactory<,,>), typeof(SimpleFactory<,,>));
+		services.TryAddTransient(typeof(IFactory<,,,>), typeof(SimpleFactory<,,,>));
+
+		return services;
+	}
 
 	public static IServiceCollection AddFactory<T>(this IServiceCollection services)
 		where T : class

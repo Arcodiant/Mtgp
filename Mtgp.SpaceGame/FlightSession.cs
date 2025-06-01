@@ -1,11 +1,13 @@
-﻿using Mtgp.Server;
+﻿using Mtgp.Comms;
+using Mtgp.Messages;
+using Mtgp.Server;
 using Mtgp.Shader;
 using Mtgp.SpaceGame.Services;
 using System.Text;
 
 namespace Mtgp.SpaceGame;
 
-internal class FlightSession(MtgpClient client, IWorldManager world)
+internal class FlightSession(MtgpConnection connection, IWorldManager world)
 	: IMtgpSession
 {
 	public void Dispose()
@@ -33,7 +35,11 @@ internal class FlightSession(MtgpClient client, IWorldManager world)
 
 	public async Task RunAsync(CancellationToken cancellationToken)
 	{
-		var shaderManager = await ShaderManager.CreateAsync(client);
+		var exitTokenSource = new CancellationTokenSource();
+
+		var messagePump = MtgpSessionPump.Create(connection, builder => builder.AddHandler<SendRequest>(async request => { exitTokenSource.Cancel(); }));
+
+		var shaderManager = await ShaderManager.CreateAsync(messagePump);
 
 		var particleShader = await shaderManager.CreateShaderFromFileAsync("Shaders/Particle.comp");
 		var particleVertexShader = await shaderManager.CreateShaderFromFileAsync("Shaders/Particle.vert");
@@ -45,7 +51,7 @@ internal class FlightSession(MtgpClient client, IWorldManager world)
 		var titleImageText = File.ReadAllText("Images/Title.txt");
 		var (titleImageData, titleImageSize) = ConvertToImage(titleImageText);
 
-		var clientShaderCaps = await client.GetClientShaderCapabilities();
+		var clientShaderCaps = await messagePump.GetClientShaderCapabilities();
 
 		var imageFormat = clientShaderCaps.PresentFormats.Last();
 
@@ -54,7 +60,7 @@ internal class FlightSession(MtgpClient client, IWorldManager world)
 		int particleBufferSize = particleCount * particleSize;
 		int titleImageInstanceSize = 16;
 
-		await client.GetResourceBuilder()
+		await messagePump.GetResourceBuilder()
 				.ActionList(out var actionListTask, "ActionList")
 				.Pipe(out var pipeTask, "ActionList")
 				.PresentSet(out var presentSetTask,
@@ -121,15 +127,15 @@ internal class FlightSession(MtgpClient client, IWorldManager world)
 		var renderPipeline = await renderPipelineTask;
 		var titleImageRenderPipeline = await titleImageRenderPipelineTask;
 
-		var presentImage = await client.GetPresentImage(presentSet);
+		var presentImage = await messagePump.GetPresentImage(presentSet);
 		var frameBuffer = (Character: presentImage[PresentImagePurpose.Character],
 							Foreground: presentImage[PresentImagePurpose.Foreground],
 							Background: presentImage[PresentImagePurpose.Background]);
 
-		await client.SetBufferData(transferBuffer, 0, titleImageData);
-		await client.AddCopyBufferToImageAction(actionList, transferBuffer, ImageFormat.T32_SInt, titleImage, [new(0, titleImageSize.Width, titleImageSize.Height, 0, 0, titleImageSize.Width, titleImageSize.Height)]);
-		await client.Send(pipe, []);
-		await client.ResetActionList(actionList);
+		await messagePump.SetBufferData(transferBuffer, 0, titleImageData);
+		await messagePump.AddCopyBufferToImageAction(actionList, transferBuffer, ImageFormat.T32_SInt, titleImage, [new(0, titleImageSize.Width, titleImageSize.Height, 0, 0, titleImageSize.Width, titleImageSize.Height)]);
+		await messagePump.Send(pipe, []);
+		await messagePump.ResetActionList(actionList);
 
 		var titleImageInstanceBuffer = new byte[titleImageInstanceSize];
 
@@ -139,7 +145,7 @@ internal class FlightSession(MtgpClient client, IWorldManager world)
 			.Write(titleImageSize.Width)
 			.Write(titleImageSize.Height);
 
-		await client.SetBufferData(buffer, particleBufferSize * 2, titleImageInstanceBuffer);
+		await messagePump.SetBufferData(buffer, particleBufferSize * 2, titleImageInstanceBuffer);
 
 		var particleBuffer = new byte[particleSize];
 
@@ -153,35 +159,26 @@ internal class FlightSession(MtgpClient client, IWorldManager world)
 				.Write(-Random.Shared.Next(20))
 				.Write(SpeedBand(1 + Random.Shared.Next(30)));
 
-			await client.SetBufferData(buffer, particleSize * index, particleBuffer);
+			await messagePump.SetBufferData(buffer, particleSize * index, particleBuffer);
 		}
 
-		await client.AddClearBufferAction(actionList, frameBuffer.Character, [32, 0, 0, 0]);
-		await client.AddClearBufferAction(actionList, frameBuffer.Foreground, TrueColour.White);
-		await client.AddClearBufferAction(actionList, frameBuffer.Background, TrueColour.Black);
+		await messagePump.AddClearBufferAction(actionList, frameBuffer.Character, [32, 0, 0, 0]);
+		await messagePump.AddClearBufferAction(actionList, frameBuffer.Foreground, TrueColour.White);
+		await messagePump.AddClearBufferAction(actionList, frameBuffer.Background, TrueColour.Black);
 
-		await client.AddDispatchAction(actionList, computePipeline, (particleCount, 1, 1), [bufferView1, bufferView2]);
-		await client.AddCopyBufferAction(actionList, buffer, buffer, particleBufferSize, 0, particleBufferSize);
-		await client.AddBindVertexBuffers(actionList, 0, [(buffer, 0)]);
-		await client.AddDrawAction(actionList, renderPipeline, [], [], frameBuffer, particleCount, 2);
+		await messagePump.AddDispatchAction(actionList, computePipeline, (particleCount, 1, 1), [bufferView1, bufferView2]);
+		await messagePump.AddCopyBufferAction(actionList, buffer, buffer, particleBufferSize, 0, particleBufferSize);
+		await messagePump.AddBindVertexBuffers(actionList, 0, [(buffer, 0)]);
+		await messagePump.AddDrawAction(actionList, renderPipeline, [], [], frameBuffer, particleCount, 2);
 
-		await client.AddBindVertexBuffers(actionList, 0, [(buffer, particleBufferSize * 2)]);
-		await client.AddDrawAction(actionList, titleImageRenderPipeline, [titleImage], [], frameBuffer, 1, 2);
-		await client.AddPresentAction(actionList, presentSet);
+		await messagePump.AddBindVertexBuffers(actionList, 0, [(buffer, particleBufferSize * 2)]);
+		await messagePump.AddDrawAction(actionList, titleImageRenderPipeline, [titleImage], [], frameBuffer, 1, 2);
+		await messagePump.AddPresentAction(actionList, presentSet);
 
-		var waitHandle = new TaskCompletionSource();
+		await messagePump.SetDefaultPipe(DefaultPipe.Input, -1, [], false);
 
-		client.SendReceived += message =>
-		{
-			waitHandle.SetResult();
+		await messagePump.SetTimerTrigger(actionList, 10);
 
-			return Task.CompletedTask;
-		};
-
-		await client.SetDefaultPipe(DefaultPipe.Input, -1, [], false);
-
-		await client.SetTimerTrigger(actionList, 10);
-
-		await waitHandle.Task;
+		await messagePump.RunAsync(exitTokenSource.Token);
 	}
 }

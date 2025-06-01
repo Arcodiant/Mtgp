@@ -1,4 +1,5 @@
 ﻿using Mtgp.Proxy.Telnet;
+using Mtgp.Util;
 using System.Text;
 
 namespace Microsoft.Extensions.Logging;

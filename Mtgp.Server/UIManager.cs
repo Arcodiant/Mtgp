@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Mtgp.Server;
 
-public class UIManager(IShaderManager shaderManager, IBufferManager bufferManager, MtgpClient client, PresentSetHandle presentSet, Extent2D size)
+public class UIManager(IShaderManager shaderManager, IBufferManager bufferManager, IMessageConnection connection, PresentSetHandle presentSet, Extent2D size)
 {
 	private readonly List<StringSplitData> stringSplitAreas = [];
 	private readonly List<PanelData> panels = [];
@@ -16,19 +16,19 @@ public class UIManager(IShaderManager shaderManager, IBufferManager bufferManage
 	private record StringSplitData(PipeHandle PipeId, StringSplitPipelineHandle PipelineId);
 	private record PanelData();
 
-	public async static Task<UIManager> CreateAsync(IShaderManager shaderManager, IBufferManager bufferManager, MtgpClient client)
+	public async static Task<UIManager> CreateAsync(IShaderManager shaderManager, IBufferManager bufferManager, IMessageConnection connection)
 	{
-		var clientShaderCaps = await client.GetClientShaderCapabilities();
+		var connectionShaderCaps = await connection.GetClientShaderCapabilities();
 
-		var imageFormat = clientShaderCaps.PresentFormats.Last();
+		var imageFormat = connectionShaderCaps.PresentFormats.Last();
 
-		await client.GetResourceBuilder()
+		await connection.GetResourceBuilder()
 					.PresentSet(out var presentSetTask, imageFormat)
 					.BuildAsync();
 
 		var presentSet = await presentSetTask;
 
-		return new UIManager(shaderManager, bufferManager, client, presentSet, (80, 24));
+		return new UIManager(shaderManager, bufferManager, connection, presentSet, (80, 24));
 	}
 
 	private async Task<ShaderHandle> GetShaderAsync(string filePath)
@@ -67,15 +67,15 @@ public class UIManager(IShaderManager shaderManager, IBufferManager bufferManage
 		var (vertexBuffer, vertexBufferOffset) = await bufferManager.Allocate(16);
 		var (panelBuffer, panelBufferOffset) = await bufferManager.Allocate(9 * 4);
 
-		var presentImage = await client.GetPresentImage(presentSet);
+		var presentImage = await connection.GetPresentImage(presentSet);
 
 		var vertexData = new byte[16];
 
 		new BitWriter(vertexData)
 			.Write(area.Offset.X)
 			.Write(area.Offset.Y)
-			.Write(area.Extent.Width)
-			.Write(area.Extent.Height);
+			.Write(area.Offset.X + area.Extent.Width - 1)
+			.Write(area.Offset.Y + area.Extent.Height - 1);
 
 		var characterData = new byte[9 * 4];
 
@@ -93,10 +93,10 @@ public class UIManager(IShaderManager shaderManager, IBufferManager bufferManage
 			.Write(background)
 			.Write(foreground.Value);
 
-		await client.SetBufferData(vertexBuffer, vertexBufferOffset, vertexData);
-		await client.SetBufferData(panelBuffer, panelBufferOffset, panelData);
+		await connection.SetBufferData(vertexBuffer, vertexBufferOffset, vertexData);
+		await connection.SetBufferData(panelBuffer, panelBufferOffset, panelData);
 
-		await client.GetResourceBuilder()
+		await connection.GetResourceBuilder()
 					.RenderPipeline(out var renderPipelineTask,
 										[
 											new(ShaderStage.Vertex, vertexShader.Id, "Main"),
@@ -134,8 +134,8 @@ public class UIManager(IShaderManager shaderManager, IBufferManager bufferManage
 
 		this.createMainActions.Add((2, async mainActionList =>
 		{
-			await client.AddBindVertexBuffers(mainActionList, 0, [(vertexBuffer, vertexBufferOffset), (panelBuffer, panelBufferOffset)]);
-			await client.AddDrawAction(mainActionList, renderPipeline, [characterImage], [], frameBuffer, 1, 2);
+			await connection.AddBindVertexBuffers(mainActionList, 0, [(vertexBuffer, vertexBufferOffset), (panelBuffer, panelBufferOffset)]);
+			await connection.AddDrawAction(mainActionList, renderPipeline, [characterImage], [], frameBuffer, 1, 2);
 		}
 		));
 
@@ -143,7 +143,7 @@ public class UIManager(IShaderManager shaderManager, IBufferManager bufferManage
 
 		this.panels.Add(new());
 
-		await client.Send(mainPipe!.Value.Pipe, []);
+		await connection.Send(mainPipe!.Value.Pipe, []);
 
 		return this.panels.Count - 1;
 	}
@@ -153,9 +153,9 @@ public class UIManager(IShaderManager shaderManager, IBufferManager bufferManage
 		var vertexShader = await GetShaderAsync("./Shaders/UI/StringSplit.vert");
 		var fragmentShader = await GetShaderAsync("./Shaders/UI/StringSplit.frag");
 
-		var presentImage = await client.GetPresentImage(presentSet);
+		var presentImage = await connection.GetPresentImage(presentSet);
 
-		await client.GetResourceBuilder()
+		await connection.GetResourceBuilder()
 					.ActionList(out var outputPipeActionListTask, "actionList")
 					.Pipe(out var outputPipeTask, "actionList")
 					.Image(out var lineImageTask, (area.Extent.Width * area.Extent.Height, 1, 1), ImageFormat.T32_SInt)
@@ -167,7 +167,7 @@ public class UIManager(IShaderManager shaderManager, IBufferManager bufferManage
 		var sharedBuffer = await sharedBufferTask;
 		var outputPipeActionList = await outputPipeActionListTask;
 
-		await client.GetResourceBuilder()
+		await connection.GetResourceBuilder()
 					.BufferView(out var instanceBufferViewTask, sharedBuffer.Id, 0, 512)
 					.BufferView(out var indirectCommandBufferViewTask, sharedBuffer.Id, 512, 64)
 					.BuildAsync();
@@ -175,13 +175,13 @@ public class UIManager(IShaderManager shaderManager, IBufferManager bufferManage
 		var instanceBufferView = await instanceBufferViewTask;
 		var indirectCommandBufferView = await indirectCommandBufferViewTask;
 
-		await client.GetResourceBuilder()
+		await connection.GetResourceBuilder()
 					.StringSplitPipeline(out var splitStringPipelineTask, area.Extent.Width, area.Extent.Height, lineImage.Id, instanceBufferView.Id, indirectCommandBufferView.Id)
 					.BuildAsync();
 
 		var splitStringPipeline = await splitStringPipelineTask;
 
-		await client.GetResourceBuilder()
+		await connection.GetResourceBuilder()
 					.RenderPipeline(out var stringSplitRenderPipelineTask,
 										[
 											new(ShaderStage.Vertex, vertexShader.Id, "Main"),
@@ -211,15 +211,15 @@ public class UIManager(IShaderManager shaderManager, IBufferManager bufferManage
 
 		await EnsureMainPipe();
 
-		await client.AddRunPipelineAction(outputPipeActionList, splitStringPipeline);
-		await client.AddTriggerActionListAction(outputPipeActionList, mainPipe!.Value.ActionList);
+		await connection.AddRunPipelineAction(outputPipeActionList, splitStringPipeline);
+		await connection.AddTriggerActionListAction(outputPipeActionList, mainPipe!.Value.ActionList);
 
 		var frameBuffer = (presentImage[PresentImagePurpose.Character].Id, presentImage[PresentImagePurpose.Foreground].Id, presentImage[PresentImagePurpose.Background].Id);
 
 		this.createMainActions.Add((1, async mainActionList =>
 		{
-			await client.AddBindVertexBuffers(mainActionList, 0, [(sharedBuffer, 0)]);
-			await client.AddIndirectDrawAction(mainActionList, stringSplitRenderPipeline, [lineImage], [], frameBuffer, indirectCommandBufferView, 0);
+			await connection.AddBindVertexBuffers(mainActionList, 0, [(sharedBuffer, 0)]);
+			await connection.AddIndirectDrawAction(mainActionList, stringSplitRenderPipeline, [lineImage], [], frameBuffer, indirectCommandBufferView, 0);
 		}
 		));
 
@@ -234,7 +234,7 @@ public class UIManager(IShaderManager shaderManager, IBufferManager bufferManage
 	{
 		if (!mainPipe.HasValue)
 		{
-			await client.GetResourceBuilder()
+			await connection.GetResourceBuilder()
 						.ActionList(out var mainPipeActionListTask, "mainActionList")
 						.Pipe(out var mainPipeTask, "mainActionList")
 						.BuildAsync();
@@ -250,22 +250,22 @@ public class UIManager(IShaderManager shaderManager, IBufferManager bufferManage
 	{
 		var (mainPipeId, mainActionListId) = this.mainPipe!.Value;
 
-		await client.ResetActionList(mainActionListId);
+		await connection.ResetActionList(mainActionListId);
 		foreach (var (priority, action) in createMainActions.OrderByDescending(x => x.Priority))
 		{
 			await action(mainActionListId);
 		}
-		await client.AddPresentAction(mainActionListId, presentSet);
+		await connection.AddPresentAction(mainActionListId, presentSet);
 	}
 
 	public async Task StringSplitSend(int stringSplitArea, string text)
 	{
-		await client.Send(this.stringSplitAreas[stringSplitArea].PipeId, Encoding.UTF32.GetBytes(text));
+		await connection.Send(this.stringSplitAreas[stringSplitArea].PipeId, Encoding.UTF32.GetBytes(text));
 	}
 
 	public async Task StringSplitOverwrite(int stringSplitArea, string text)
 	{
-		await client.ClearStringSplitPipeline(this.stringSplitAreas[stringSplitArea].PipelineId);
+		await connection.ClearStringSplitPipeline(this.stringSplitAreas[stringSplitArea].PipelineId);
 		await StringSplitSend(stringSplitArea, text);
 	}
 }

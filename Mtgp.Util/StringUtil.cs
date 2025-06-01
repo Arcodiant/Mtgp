@@ -1,8 +1,8 @@
 ﻿using System.Text;
 
-namespace Mtgp.Proxy.Telnet;
+namespace Mtgp.Util;
 
-internal static class StringUtil
+public static class StringUtil
 {
 	public static string Clean(string value) => value.Aggregate(new StringBuilder(), (builder, character) =>
 	{

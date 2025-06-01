@@ -18,10 +18,7 @@ try
 	Log.Information("Starting host");
 
 	var builder = Host.CreateApplicationBuilder(args);
-	builder.Services.AddHostedService<MtgpServer>();
-	builder.Services.AddImplementingFactory<IMtgpSession, UserSession, TcpClient>();
-	builder.Services.AddFactory<MtgpClient, Stream>();
-	builder.Services.AddFactory<MtgpConnection, Stream>();
+	builder.Services.AddMtgpServer<UserSession>();
 	builder.Services.AddSerilog();
 	builder.Services.Configure<Auth0Options>(options =>
 	{

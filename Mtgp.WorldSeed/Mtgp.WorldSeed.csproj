@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <UserSecretsId>78f01cb4-98a6-424e-9b26-2565099edd24</UserSecretsId>
@@ -19,6 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Mtgp.Server.DependencyInjection\Mtgp.Server.DependencyInjection.csproj" />
     <ProjectReference Include="..\Mtgp.Server\Mtgp.Server.csproj" />
   </ItemGroup>
 

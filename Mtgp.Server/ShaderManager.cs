@@ -13,29 +13,29 @@ public static class ShaderManagerExtensions
 public class ShaderManager
 	: IShaderManager
 {
-	private readonly MtgpClient client;
+	private readonly IMessageConnection connection;
 	private readonly ActionListHandle transferActionList;
 	private readonly PipeHandle transferPipe;
 	private BufferHandle? transferBuffer;
 	private int transferBufferSize;
 
-	private ShaderManager(MtgpClient client, ActionListHandle transferActionList, PipeHandle transferPipe)
+	private ShaderManager(IMessageConnection connection, ActionListHandle transferActionList, PipeHandle transferPipe)
 	{
-		this.client = client;
+		this.connection = connection;
 		this.transferActionList = transferActionList;
 		this.transferPipe = transferPipe;
 	}
 
-	public static async Task<ShaderManager> CreateAsync(MtgpClient client)
+	public static async Task<ShaderManager> CreateAsync(IMessageConnection connection)
 	{
-		await client.GetResourceBuilder()
+		await connection.GetResourceBuilder()
 					.ActionList(out var transferActionListTask, "transferActionList")
 					.Pipe(out var transferPipeTask, "transferActionList")
 					.BuildAsync();
 
 		var (transferActionList, transferPipe) = (await transferActionListTask, await transferPipeTask);
 
-		return new ShaderManager(client, transferActionList, transferPipe);
+		return new ShaderManager(connection, transferActionList, transferPipe);
 	}
 
 	public async Task<ShaderHandle> CreateShaderAsync(string code)
@@ -44,7 +44,7 @@ public class ShaderManager
 
 		var shaderData = shaderCompiler.Compile(code);
 
-		await client.GetResourceBuilder()
+		await connection.GetResourceBuilder()
 					 .Shader(out var shaderTask, shaderData)
 					 .BuildAsync();
 
@@ -53,7 +53,7 @@ public class ShaderManager
 
 	public async Task<ImageHandle> CreateImageFromData(byte[] data, Extent3D size, ImageFormat format)
 	{
-		await client.GetResourceBuilder()
+		await connection.GetResourceBuilder()
 					 .Image(out var imageTask, size, format)
 					 .BuildAsync();
 
@@ -61,7 +61,7 @@ public class ShaderManager
 
 		if (transferBuffer == null || transferBufferSize < data.Length)
 		{
-			await client.GetResourceBuilder()
+			await connection.GetResourceBuilder()
 						.Buffer(out var bufferTask, data.Length)
 						.BuildAsync();
 
@@ -70,12 +70,12 @@ public class ShaderManager
 			transferBufferSize = data.Length;
 		}
 
-		await client.SetBufferData(transferBuffer!, 0, data);
+		await connection.SetBufferData(transferBuffer!, 0, data);
 
-		await client.ResetActionList(transferActionList);
-		await client.AddCopyBufferToImageAction(transferActionList, transferBuffer!, format, image, [new(0, size.Width, size.Height, 0, 0, size.Width, size.Height)]);
+		await connection.ResetActionList(transferActionList);
+		await connection.AddCopyBufferToImageAction(transferActionList, transferBuffer!, format, image, [new(0, size.Width, size.Height, 0, 0, size.Width, size.Height)]);
 
-		await client.Send(transferPipe, []);
+		await connection.Send(transferPipe, []);
 
 		return image;
 	}

@@ -7,4 +7,4 @@ public record ListEventsRequest(int Id)
 }
 
 public record ListEventsResponse(int Id, QualifiedName[] Events)
-	: MtgpResponse(Id, "ok");
+	: MtgpResponse(Id, Ok);

@@ -25,9 +25,9 @@ internal class TelnetPresentReceiver
 
 	private async Task DrawLoop()
 	{
-		await foreach (var value in this.drawBuffer.Reader.ReadAllAsync())
+		try
 		{
-			try
+			await foreach (var value in this.drawBuffer.Reader.ReadAllAsync())
 			{
 				var sortedValues = value.ToArray();
 				sortedValues = [.. sortedValues.Select((x, index) => (Value: x, Index: index))
@@ -137,10 +137,10 @@ internal class TelnetPresentReceiver
 					await this.client.WriteAsync(buffer[..count]);
 				}
 			}
-			catch(Exception ex)
-			{
-				Console.WriteLine($"Exception in Draw Loop: {ex.Message}");
-			}
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"Exception in Draw Loop: {ex.Message}");
 		}
 	}
 }

@@ -6,23 +6,6 @@ namespace System;
 
 public static class StreamExtensions
 {
-	public static async Task<byte[]> ReadBlockAsync(this Stream stream, ILogger logger)
-	{
-		byte[] header = new byte[4];
-
-		await stream.ReadExactlyAsync(header);
-
-		int blockSize = BitConverter.ToInt32(header);
-
-		byte[] block = new byte[blockSize];
-
-		await stream.ReadExactlyAsync(block);
-
-		logger.LogReadBlock(blockSize, block);
-
-		return block;
-	}
-
 	public static async Task WriteMessageAsync<T>(this Stream stream, T message, ILogger logger)
 	{
 		logger.LogWriteMessage(message);

@@ -7,12 +7,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.4" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.5" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Mtgp.Util\Mtgp.Util.csproj" />
-    <ProjectReference Include="..\Mtgp\Mtgp.csproj" />
+    <ProjectReference Include="..\Mtgp.Server\Mtgp.Server.csproj" />
   </ItemGroup>
 
 </Project>

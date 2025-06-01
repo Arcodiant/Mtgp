@@ -1,12 +1,13 @@
 ﻿using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Mtgp.Comms;
 using Mtgp.Util;
 using System.Net;
 using System.Net.Sockets;
 
 namespace Mtgp.Server;
 
-public class MtgpServer(ILogger<MtgpServer> logger, IFactory<MtgpClient, Stream> clientFactory, IFactory<IMtgpSession, MtgpClient> sessionFactory, IHostApplicationLifetime applicationLifetime)
+public class MtgpServer(ILogger<MtgpServer> logger, IFactory<IMtgpSession, MtgpConnection> sessionFactory, IHostApplicationLifetime applicationLifetime)
 	: IHostedService
 {
 	private readonly TcpListener listener = new(IPAddress.Any, 2323);
@@ -30,11 +31,9 @@ public class MtgpServer(ILogger<MtgpServer> logger, IFactory<MtgpClient, Stream>
 					{
 						try
 						{
-							var mtgpClient = clientFactory.Create(client.GetStream());
+							var connection = await MtgpConnection.CreateServerConnectionAsync(logger, client.GetStream());
 
-							await mtgpClient.StartAsync(true);
-
-							using var session = sessionFactory.CreateWithScope(mtgpClient, out var scope);
+							using var session = sessionFactory.CreateWithScope(connection, out var scope);
 
 							using (scope)
 							{

@@ -14,15 +14,11 @@ Log.Logger = new LoggerConfiguration()
 
 try
 {
-	Console.SetWindowSize(240, 75);
-
 	Log.Information("Starting host");
 
 	var builder = Host.CreateApplicationBuilder(args);
 	builder.Services.AddSingleton<IWorldManager, WorldManager>();
-	builder.Services.AddDefaultFactories();
-	builder.Services.AddImplementingFactory<IMtgpSession, FlightSession, MtgpClient>();
-	builder.Services.AddHostedService<MtgpServer>();
+	builder.Services.AddMtgpServer<FlightSession>();
 	builder.Services.AddSerilog();
 	builder.Services.Configure<Auth0Options>(options =>
 	{

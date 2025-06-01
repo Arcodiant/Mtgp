@@ -6,16 +6,10 @@ internal static class LoggerExtensions
 {
 	private const int eventIdBase = 10000;
 
-	private static readonly EventId readBlockEventId = new(eventIdBase + 1, nameof(StreamExtensions.ReadBlockAsync));
 	private static readonly EventId writeMessageEventId = new(eventIdBase + 2, nameof(StreamExtensions.WriteMessageAsync));
 	private static readonly EventId writingBytesEventId = new(eventIdBase + 3, nameof(StreamExtensions.WriteMessageAsync));
 
 	private static readonly LogLevel commsLogLevel = LogLevel.Trace;
-
-	private static readonly Action<ILogger, int, byte[], Exception?> logReadBlock = LoggerMessage.Define<int, byte[]>(
-		commsLogLevel,
-		readBlockEventId,
-		"Read {BlockSize} bytes {Data}");
 
 	private static class WriteMessages<T>
 	{
@@ -34,15 +28,6 @@ internal static class LoggerExtensions
 		commsLogLevel,
 		writingBytesEventId,
 		"Writing {MessageBytes} bytes {Data}");
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public static void LogReadBlock(this ILogger logger, int blockSize, byte[] data)
-	{
-		if (logger.IsEnabled(commsLogLevel))
-		{
-			logReadBlock(logger, blockSize, data, null);
-		}
-	}
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static void LogWriteMessage<T>(this ILogger logger, T message)
