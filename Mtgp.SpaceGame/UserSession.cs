@@ -107,11 +107,7 @@ internal class UserSession : IMtgpSession
 
 	public async Task RunAsync(CancellationToken cancellationToken)
 	{
-		var shaderManager = await ShaderManager.CreateAsync(pump);
-
-		var bufferManager = new BufferManager(pump);
-
-		uiManager = await UIManager.CreateAsync(shaderManager, bufferManager, pump);
+		uiManager = await UIManager.CreateAsync(pump);
 		outputArea = await uiManager.CreateStringSplitArea(new Rect2D((1, 1), (78, 18)), true);
 		inputArea = await uiManager.CreateStringSplitArea(new Rect2D((1, 21), (78, 2)), true);
 

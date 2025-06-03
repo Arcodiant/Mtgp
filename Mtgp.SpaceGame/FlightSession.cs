@@ -39,7 +39,7 @@ internal class FlightSession(MtgpConnection connection, IWorldManager world)
 
 		var messagePump = MtgpSessionPump.Create(connection, builder => builder.AddHandler<SendRequest>(async request => { exitTokenSource.Cancel(); }));
 
-		var shaderManager = await ShaderManager.CreateAsync(messagePump);
+		var shaderManager = new ShaderManager(messagePump);
 
 		var particleShader = await shaderManager.CreateShaderFromFileAsync("Shaders/Particle.comp");
 		var particleVertexShader = await shaderManager.CreateShaderFromFileAsync("Shaders/Particle.vert");

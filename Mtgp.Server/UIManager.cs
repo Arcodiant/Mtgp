@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Mtgp.Server;
 
-public class UIManager(IShaderManager shaderManager, IBufferManager bufferManager, IMessageConnection connection, PresentSetHandle presentSet, Extent2D size)
+public class UIManager(IShaderManager shaderManager, IBufferManager bufferManager, IImageManager imageManager, IMessageConnection connection, PresentSetHandle presentSet, Extent2D size)
 {
 	private readonly List<StringSplitData> stringSplitAreas = [];
 	private readonly List<PanelData> panels = [];
@@ -16,8 +16,12 @@ public class UIManager(IShaderManager shaderManager, IBufferManager bufferManage
 	private record StringSplitData(PipeHandle PipeId, StringSplitPipelineHandle PipelineId);
 	private record PanelData();
 
-	public async static Task<UIManager> CreateAsync(IShaderManager shaderManager, IBufferManager bufferManager, IMessageConnection connection)
+	public static async Task<UIManager> CreateAsync(IMessageConnection connection, IShaderManager? shaderManager = null, IBufferManager? bufferManager = null, IImageManager? imageManager = null)
 	{
+		shaderManager ??= new ShaderManager(connection);
+		bufferManager ??= new BufferManager(connection);
+		imageManager ??= await ImageManager.CreateAsync(connection);
+
 		var connectionShaderCaps = await connection.GetClientShaderCapabilities();
 
 		var imageFormat = connectionShaderCaps.PresentFormats.Last();
@@ -28,7 +32,7 @@ public class UIManager(IShaderManager shaderManager, IBufferManager bufferManage
 
 		var presentSet = await presentSetTask;
 
-		return new UIManager(shaderManager, bufferManager, connection, presentSet, (80, 24));
+		return new UIManager(shaderManager, bufferManager, imageManager, connection, presentSet, (80, 24));
 	}
 
 	private async Task<ShaderHandle> GetShaderAsync(string filePath)
@@ -84,7 +88,7 @@ public class UIManager(IShaderManager shaderManager, IBufferManager bufferManage
 			.WriteRunes([characters[1, 0], characters[1, 1], characters[1, 2]])
 			.WriteRunes([characters[2, 0], characters[2, 1], characters[2, 2]]);
 
-		var characterImage = await shaderManager.CreateImageFromData(characterData, new(3, 3, 1), ImageFormat.T32_SInt);
+		var characterImage = await imageManager.CreateImageFromData(characterData, new(3, 3, 1), ImageFormat.T32_SInt);
 
 		var panelData = new byte[9 * 4];
 
