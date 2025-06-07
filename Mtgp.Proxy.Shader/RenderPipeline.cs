@@ -9,7 +9,7 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderExecutor> shaderStages
 							  (int Binding, int Stride, InputRate InputRate)[] vertexBufferBindings,
 							  (int Location, int Binding, ShaderType Type, int Offset)[] vertexAttributes,
 							  (int Location, ShaderType Type, Scale InterpolationScale)[] fragmentAttributes,
-							  Rect3D viewport,
+							  Rect3D? viewport,
 							  Rect3D[]? scissors,
 							  bool enableAlpha,
 							  PolygonMode polygonMode)
@@ -37,6 +37,25 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderExecutor> shaderStages
 
 		Span<byte> GetPrimitiveSpan(int instanceIndex, int primitiveIndex) =>
 			vertexOutput.AsSpan((instanceIndex * primitiveCount + primitiveIndex) * vertexPerPrimitive * vertex.OutputMappings.Size, vertexPerPrimitive * vertex.OutputMappings.Size);
+
+		int maxX = viewport?.Extent?.Width ?? int.MaxValue;
+		int maxY = viewport?.Extent?.Height ?? int.MaxValue;
+
+		foreach (var frameAttachment in frameBuffer.Attachments)
+		{
+			int effectiveWidth = frameAttachment.Size.Width - (viewport?.Offset?.X ?? 0);
+			int effectiveHeight = frameAttachment.Size.Height - (viewport?.Offset?.Y ?? 0);
+
+			if (effectiveWidth < maxX)
+			{
+				maxX = effectiveWidth;
+			}
+
+			if (effectiveHeight < maxY)
+			{
+				maxY = effectiveHeight;
+			}
+		}
 
 		for (int instanceIndex = 0; instanceIndex < instanceCount; instanceIndex++)
 		{
@@ -110,7 +129,7 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderExecutor> shaderStages
 							continue;
 						}
 
-						if (!MathsUtil.IsWithin((x, y), (0, 0), (viewport.Extent.Width - 1, viewport.Extent.Height - 1)))
+						if (!MathsUtil.IsWithin((x, y), (0, 0), (maxX - 1, maxY - 1)))
 						{
 							continue;
 						}
@@ -128,25 +147,6 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderExecutor> shaderStages
 		logger.LogTrace("Vertex shaders took {ElapsedMs}ms", vertexStopwatch.Elapsed.TotalMilliseconds);
 
 		var fragmentStopwatch = Stopwatch.StartNew();
-
-		int maxX = viewport.Extent.Width;
-		int maxY = viewport.Extent.Height;
-
-		foreach(var frameAttachment in frameBuffer.Attachments)
-		{
-			int effectiveWidth = frameAttachment.Size.Width - viewport.Offset.X;
-			int effectiveHeight = frameAttachment.Size.Height - viewport.Offset.Y;
-
-			if (effectiveWidth < maxX)
-			{
-				maxX = effectiveWidth;
-			}
-
-			if (effectiveHeight < maxY)
-			{
-				maxY = effectiveHeight;
-			}
-		}
 
 		Parallel.ForEach(fragments.Where(frag => frag.X >= 0 && frag.Y >= 0 && frag.X < maxX && frag.Y < maxY), frag =>
 		{
@@ -203,8 +203,8 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderExecutor> shaderStages
 
 			fragment.Execute(imageAttachments, bufferViewAttachments, fragmentInput, output);
 
-			int pixelX = x + viewport.Offset.X;
-			int pixelY = y + viewport.Offset.Y;
+			int pixelX = x + (viewport?.Offset?.X ?? 0);
+			int pixelY = y + (viewport?.Offset?.Y ?? 0);
 
 			//alpha = enableAlpha ? alpha : 1.0f;
 

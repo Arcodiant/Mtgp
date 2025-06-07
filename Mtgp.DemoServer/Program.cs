@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Mtgp.DemoServer;
+using Mtgp.DemoServer.UI;
 using Mtgp.Server;
 using Serilog;
 
@@ -23,6 +24,12 @@ try
 		options.ClientId = builder.Configuration.GetSection("auth0")["clientId"]!;
 		options.Domain = builder.Configuration.GetSection("auth0")["domain"]!;
 	});
+
+	builder.Services.AddScoped<ISessionWorld, SessionWorld>();
+	builder.Services.AddScoped<GraphicsManager>();
+	builder.Services.AddTransient<IGraphicsManager>(provider => provider.GetRequiredService<GraphicsManager>());
+	builder.Services.AddTransient<ISessionService>(provider => provider.GetRequiredService<GraphicsManager>());
+	builder.Services.AddScoped<ISessionService, PanelManager>();
 
 	var host = builder.Build();
 

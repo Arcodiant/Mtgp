@@ -1,14 +1,14 @@
 ﻿using Microsoft.Extensions.Logging;
 using Mtgp.Comms;
+using Mtgp.DemoServer.UI;
 using Mtgp.Messages;
 using Mtgp.Server;
 using Mtgp.Server.Shader;
 using Mtgp.Shader;
-using Mtgp.Util;
 
 namespace Mtgp.DemoServer;
 
-internal class DemoSession(MtgpConnection connection, ILogger<DemoSession> logger)
+internal class DemoSession(MtgpConnection connection, ISessionWorld sessionWorld, IGraphicsManager graphics, IEnumerable<ISessionService> services, ILogger<DemoSession> logger)
 	: IMtgpSession
 {
 	public void Dispose()
@@ -18,6 +18,7 @@ internal class DemoSession(MtgpConnection connection, ILogger<DemoSession> logge
 	public async Task RunAsync(CancellationToken token)
 	{
 		PipeHandle? windowSizePipe = default;
+		Extent2D? windowSize = default;
 
 		var exitTokenSource = new CancellationTokenSource();
 
@@ -30,6 +31,10 @@ internal class DemoSession(MtgpConnection connection, ILogger<DemoSession> logge
 					.Read(out int height);
 
 				logger.LogInformation("Window size changed: {Width}x{Height}", width, height);
+
+				windowSize = new(width, height);
+
+				await graphics.SetWindowSizeAsync(windowSize);
 			}
 			else if (request.Pipe == -1)
 			{
@@ -43,12 +48,27 @@ internal class DemoSession(MtgpConnection connection, ILogger<DemoSession> logge
 
 		var messagePump = MtgpSessionPump.Create(connection, builder => builder.AddHandler<SendRequest>(HandleSendAsync));
 
+		foreach (var service in services)
+		{
+			await service.InitialiseAsync(messagePump);
+		}
+
 		windowSizePipe = await messagePump.SubscribeEventAsync(Events.WindowSizeChanged);
+
+		while (windowSize is null)
+		{
+			if (!await messagePump.HandleNextAsync())
+			{
+				return;
+			}
+		}
+
+		await messagePump.HandleNextAsync();
+
 		await messagePump.SetDefaultPipe(DefaultPipe.Input, -1, [], false);
 
-		var uiManager = await UIManager.CreateAsync(messagePump);
-
-		int panelId = await uiManager.CreatePanelAsync(new((10, 4), (60, 16)), new(0.25f, 0.25f, 0.75f), backgroundGradientFrom: new(0f, 0f, 0.25f));
+		var panel1 = await sessionWorld.CreateAsync(new Panel(new((0, 0), (windowSize.Width, windowSize.Height - 4)), new(0.0f, 0.0f, 0.5f), BackgroundGradient: new(0.25f, 0.25f, 0.75f)));
+		var panel2 = await sessionWorld.CreateAsync(new Panel(new((0, windowSize.Height - 4), (windowSize.Width, 4)), new(0.0f, 0.5f, 0.0f), BackgroundGradient: new(0.25f, 0.75f, 0.25f)));
 
 		await messagePump.RunAsync(exitTokenSource.Token);
 	}

@@ -100,6 +100,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 			await foreach (var (width, height) in connection.WindowSizeReader.ReadAllAsync())
 			{
 				this.size = new(width, height);
+				this.presentOptimiser.SetSize(this.size);
 				this.SendWindowSizeChangedEvent();
 			}
 		});

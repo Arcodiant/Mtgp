@@ -8,9 +8,18 @@ public class PresentOptimiser(IPresentReceiver wrappedReceiver, Extent2D size)
 {
 	private record struct Textel(Rune Rune, TrueColour Foreground, TrueColour Background);
 
-	private readonly Textel[,] buffer = new Textel[size.Width, size.Height];
+	private Textel[,] buffer = new Textel[size.Width, size.Height];
 
-    public void Draw(RuneDelta[] deltas)
+	public void SetSize(Extent2D newSize)
+	{
+		if (newSize.Width != size.Width || newSize.Height != size.Height)
+		{
+			buffer = new Textel[newSize.Width, newSize.Height];
+			size = newSize;
+		}
+	}
+
+	public void Draw(RuneDelta[] deltas)
 	{
 		var outputDeltas = new List<RuneDelta>();
 
