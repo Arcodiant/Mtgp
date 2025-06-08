@@ -23,6 +23,12 @@ internal class TelnetPresentReceiver
 		this.drawBuffer.Writer.TryWrite(value);
 	}
 
+	public void Clear()
+	{
+		this.client.WriteAsync(['\x1B', '[', '2', 'J']).Wait();
+		this.client.WriteAsync(['\x1B', '[', '3', 'J']).Wait();
+	}
+
 	private async Task DrawLoop()
 	{
 		try

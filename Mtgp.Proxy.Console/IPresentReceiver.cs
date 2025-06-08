@@ -5,4 +5,6 @@ namespace Mtgp;
 public interface IPresentReceiver
 {
 	void Draw(RuneDelta[] deltas);
+
+	void Clear();
 }

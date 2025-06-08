@@ -17,6 +17,8 @@ public class PresentOptimiser(IPresentReceiver wrappedReceiver, Extent2D size)
 			buffer = new Textel[newSize.Width, newSize.Height];
 			size = newSize;
 		}
+
+		wrappedReceiver.Clear();
 	}
 
 	public void Draw(RuneDelta[] deltas)
@@ -38,5 +40,12 @@ public class PresentOptimiser(IPresentReceiver wrappedReceiver, Extent2D size)
 		}
 
 		wrappedReceiver.Draw([.. outputDeltas]);
+	}
+
+	public void Clear()
+	{
+		buffer = new Textel[size.Width, size.Height];
+
+		wrappedReceiver.Clear();
 	}
 }

@@ -10,6 +10,7 @@ internal class ResourceStore
 	private record ResourceKey(string ResourceType, int Id);
 	private readonly Dictionary<ResourceKey, HashSet<ResourceKey>> resourceReferences = [];
 	private readonly Dictionary<ResourceKey, HashSet<ResourceKey>> resourceBackReferences = [];
+	private readonly List<ResourceKey> lockedResources = [];
 
 	private Dictionary<int, T> GetStore<T>()
 		where T : IShaderProxyResource
@@ -65,6 +66,22 @@ internal class ResourceStore
 		return [.. indices.Select(Get<T>).Select(selector)];
 	}
 
+	public void Lock<T>(int index)
+		where T : IShaderProxyResource
+		=> this.Lock(T.ResourceType, index);
+
+	public void Lock(string resourceType, int index)
+	{
+		var key = new ResourceKey(resourceType, index);
+
+		if (this.lockedResources.Contains(key))
+		{
+			throw new InvalidOperationException($"Resource {key.ResourceType} {key.Id} is already locked.");
+		}
+
+		this.lockedResources.Add(key);
+	}
+
 	public bool CanRemove<T>(int index)
 		where T : IShaderProxyResource
 		=> this.CanRemove(T.ResourceType, index);
@@ -72,12 +89,31 @@ internal class ResourceStore
 	public bool CanRemove(string resourceType, int index)
 		=> !this.resourceReferences.TryGetValue(new(resourceType, index), out var references) || references.Count <= 0;
 
+	public bool IsLocked<T>(int index)
+		where T : IShaderProxyResource
+		=> this.IsLocked(T.ResourceType, index);
+
+	public bool IsLocked(string resourceType, int index)
+		=> this.lockedResources.Contains(new(resourceType, index));
+
+	public void Unlock<T>(int index)
+		where T : IShaderProxyResource
+		=> this.Unlock(T.ResourceType, index);
+
+	public void Unlock(string resourceType, int index)
+		=> this.lockedResources.Remove(new(resourceType, index));
+
 	public void Remove<T>(int index)
 		where T : IShaderProxyResource
 	{
 		if (!this.CanRemove<T>(index))
 		{
 			throw new InvalidOperationException($"Cannot remove resource {typeof(T).Name} {index} because it is referenced by other resources.");
+		}
+
+		if (this.IsLocked<T>(index))
+		{
+			throw new InvalidOperationException($"Cannot remove resource {typeof(T).Name} {index} because it is locked.");
 		}
 
 		this.ClearReferences<T>(index);

@@ -6,7 +6,6 @@ using Mtgp.Proxy.Shader;
 using Mtgp.Proxy.Telnet;
 using Mtgp.Shader;
 using System.Diagnostics;
-using System.Security.AccessControl;
 using System.Text;
 
 namespace Mtgp.Proxy;
@@ -82,7 +81,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 		proxy.RegisterMessageHandler<AddTriggerActionListActionRequest>(AddTriggerActionListAction);
 		proxy.RegisterMessageHandler<GetClientShaderCapabilitiesRequest>(GetClientShaderCapabilities);
 
-		eventExtension.RegisterEvent(Events.WindowSizeChanged, OnWindowSizeChangedSubscription);
+		eventExtension.RegisterEvent(Events.WindowSizeChanged, _ => this.SendWindowSizeChangedEvent());
 
 		_ = Task.Run(async () =>
 		{
@@ -104,11 +103,6 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 				this.SendWindowSizeChangedEvent();
 			}
 		});
-	}
-
-	private void OnWindowSizeChangedSubscription(QualifiedName name)
-	{
-		this.SendWindowSizeChangedEvent();
 	}
 
 	private void SendWindowSizeChangedEvent()
@@ -436,7 +430,8 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 
 	private MtgpResponse DestroyResource(DestroyResourceRequest request)
 	{
-		if (!this.resourceStore.CanRemove(request.ResourceType, request.ResourceId))
+		if (!this.resourceStore.CanRemove(request.ResourceType, request.ResourceId)
+			|| this.resourceStore.IsLocked(request.ResourceType, request.ResourceId))
 		{
 			return new MtgpResponse(0, "invalidRequest");
 		}
@@ -453,6 +448,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 
 				foreach (var imageId in presentSet.Images.Values)
 				{
+					this.resourceStore.Unlock<ImageState>(imageId);
 					this.resourceStore.Remove<ImageState>(imageId);
 				}
 

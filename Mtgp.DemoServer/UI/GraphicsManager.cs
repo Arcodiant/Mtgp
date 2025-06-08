@@ -18,7 +18,12 @@ public interface IGraphicsManager
 	Task SetWindowSizeAsync(Extent2D size);
 }
 
-public class GraphicsManager(ILogger<GraphicsManager> logger, IShaderManager? shaderManager = null, IBufferManager? bufferManager = null, IImageManager? imageManager = null)
+public interface IGraphicsService
+{
+	Task InitialiseGraphicsAsync(IMessageConnection connection, IGraphicsManager graphicsManager);
+}
+
+public class GraphicsManager(IEnumerable<IGraphicsService> graphicsServices, ILogger<GraphicsManager> logger, IShaderManager? shaderManager = null, IBufferManager? bufferManager = null, IImageManager? imageManager = null)
 	: ISessionService, IGraphicsManager
 {
 	private Extent2D windowSize = new(80, 24);
@@ -34,6 +39,11 @@ public class GraphicsManager(ILogger<GraphicsManager> logger, IShaderManager? sh
 		imageManager ??= await Server.ImageManager.CreateAsync(connection);
 
 		await this.CreatePresentSetAsync();
+
+		foreach (var service in graphicsServices)
+		{
+			await service.InitialiseGraphicsAsync(connection, this);
+		}
 	}
 
 	private async Task CreatePresentSetAsync()

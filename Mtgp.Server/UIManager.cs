@@ -88,7 +88,7 @@ public class UIManager(IShaderManager shaderManager, IBufferManager bufferManage
 			.WriteRunes([characters[1, 0], characters[1, 1], characters[1, 2]])
 			.WriteRunes([characters[2, 0], characters[2, 1], characters[2, 2]]);
 
-		var characterImage = await imageManager.CreateImageFromData(characterData, new(3, 3, 1), ImageFormat.T32_SInt);
+		var characterImage = await imageManager.CreateImageFromDataAsync(characterData, new(3, 3, 1), ImageFormat.T32_SInt);
 
 		var panelData = new byte[9 * 4];
 

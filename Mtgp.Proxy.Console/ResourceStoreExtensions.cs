@@ -97,9 +97,9 @@ internal static class ResourceStoreExtensions
 
 		int id = store.Add(new PresentSet(images));
 
-		//store.AddReference<PresentSet, ImageState>(id, images[PresentImagePurpose.Character]);
-		//store.AddReference<PresentSet, ImageState>(id, images[PresentImagePurpose.Foreground]);
-		//store.AddReference<PresentSet, ImageState>(id, images[PresentImagePurpose.Background]);
+		store.Lock<ImageState>(images[PresentImagePurpose.Character]);
+		store.Lock<ImageState>(images[PresentImagePurpose.Foreground]);
+		store.Lock<ImageState>(images[PresentImagePurpose.Background]);
 
 		return id;
 	}

@@ -29,7 +29,7 @@ try
 	builder.Services.AddScoped<GraphicsManager>();
 	builder.Services.AddTransient<IGraphicsManager>(provider => provider.GetRequiredService<GraphicsManager>());
 	builder.Services.AddTransient<ISessionService>(provider => provider.GetRequiredService<GraphicsManager>());
-	builder.Services.AddScoped<ISessionService, PanelManager>();
+	builder.Services.AddScoped<IGraphicsService, PanelManager>();
 
 	var host = builder.Build();
 

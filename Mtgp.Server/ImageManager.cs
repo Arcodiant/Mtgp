@@ -1,11 +1,34 @@
 ﻿using Mtgp.Server.Shader;
 using Mtgp.Shader;
+using System.Text;
 
 namespace Mtgp.Server;
 
 public interface IImageManager
 {
-	Task<ImageHandle> CreateImageFromData(byte[] data, Extent3D size, ImageFormat format);
+	Task<ImageHandle> CreateImageFromDataAsync(byte[] data, Extent3D size, ImageFormat format);
+}
+
+public static class ImageManagerExtensions
+{
+	public static async Task<ImageHandle> CreateImageFromStringAsync(this IImageManager imageManager, string value, ImageFormat format)
+	{
+		var lines = value.Split('\n', '\r').Where(x => !string.IsNullOrEmpty(x));
+
+		int width = lines.Max(x => x.Length);
+		int height = lines.Count();
+
+		var combined = new StringBuilder();
+
+		foreach (var line in lines)
+		{
+			combined.Append(line.PadRight(width, ' '));
+		}
+
+		var data = Encoding.UTF32.GetBytes(combined.ToString());
+
+		return await imageManager.CreateImageFromDataAsync(data, new(width, height, 1), format);
+	}
 }
 
 public class ImageManager(IMessageConnection connection, ActionListHandle transferActionList, PipeHandle transferPipe)
@@ -26,7 +49,7 @@ public class ImageManager(IMessageConnection connection, ActionListHandle transf
 		return new ImageManager(connection, transferActionList, transferPipe);
 	}
 
-	public async Task<ImageHandle> CreateImageFromData(byte[] data, Extent3D size, ImageFormat format)
+	public async Task<ImageHandle> CreateImageFromDataAsync(byte[] data, Extent3D size, ImageFormat format)
 	{
 		await connection.GetResourceBuilder()
 					 .Image(out var imageTask, size, format)
