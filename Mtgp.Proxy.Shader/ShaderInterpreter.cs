@@ -1,4 +1,5 @@
 ﻿using Mtgp.Shader;
+using System;
 using System.Runtime.InteropServices;
 
 namespace Mtgp.Proxy.Shader;
@@ -131,10 +132,10 @@ public class ShaderInterpreter
 			return pointer;
 		}
 
-		Span<byte> GetSpan(int id, Span<byte> workingSet)
+		Span<byte> GetSpan(int id, Span<byte> workingSet, bool deref = false)
 		{
 			int valuePointer = results[id];
-			int valueSize = types[id].Size;
+			int valueSize = deref ? types[id].ElementType!.Size : types[id].Size;
 
 			return workingSet[valuePointer..][..valueSize];
 		}
@@ -206,6 +207,20 @@ public class ShaderInterpreter
 						shaderReader = shaderReader.TypeVector(out result, out int componentType, out int componentCount);
 
 						types[result] = ShaderType.VectorOf(types[componentType], componentCount);
+						break;
+					}
+				case ShaderOp.TypeStruct:
+					{
+						shaderReader.TypeStruct(out result, out int memberCount);
+						Span<int> members = new int[memberCount];
+
+						shaderReader = shaderReader.TypeStruct(out result, members, out _);
+						var memberTypes = new ShaderType[memberCount];
+						for (int i = 0; i < memberCount; i++)
+						{
+							memberTypes[i] = types[members[i]];
+						}
+						types[result] = ShaderType.StructOf(memberTypes);
 						break;
 					}
 				case ShaderOp.TypeRuntimeArray:
@@ -286,7 +301,7 @@ public class ShaderInterpreter
 								}
 								break;
 							case ShaderStorageClass.Function:
-								pointer = GetWorkingSetPointer(variableType.Size);
+								pointer = GetWorkingSetPointer(variableType.ElementType!.Size);
 								break;
 							case ShaderStorageClass.Image:
 								if (variableDecorations[result].Binding is not null)
@@ -337,6 +352,8 @@ public class ShaderInterpreter
 							throw new InvalidOperationException("Load result type must match variable element type");
 						}
 
+						var valueType = pointerType.ElementType;
+
 						var targetSpan = GetTarget(result, resultType, workingSet);
 
 						switch (pointerType.StorageClass)
@@ -350,9 +367,21 @@ public class ShaderInterpreter
 									inputSpan.CopyTo(targetSpan);
 									break;
 								}
+							case ShaderStorageClass.Uniform:
+								{
+									int pointerValue = BitConverter.ToInt32(GetSpan(pointer, workingSet));
+									var uniformPointer = UniformPointer.FromUInt32((uint)pointerValue);
+
+									var uniformSpan = bufferAttachments[uniformPointer.Binding].Span[(int)uniformPointer.Pointer..][..valueType.Size];
+
+									uniformSpan.CopyTo(targetSpan);
+									break;
+								}
 							case ShaderStorageClass.Function:
 								{
-									var inputSpan = GetSpan(pointer, workingSet);
+									int pointerValue = BitConverter.ToInt32(GetSpan(pointer, workingSet));
+
+									var inputSpan = workingSet[pointerValue..][..valueType.Size!];
 
 									inputSpan.CopyTo(targetSpan);
 									break;
@@ -387,7 +416,6 @@ public class ShaderInterpreter
 
 								valueToStore.CopyTo(outputSpan);
 								break;
-							case ShaderStorageClass.UniformConstant:
 							case ShaderStorageClass.Uniform:
 								var uniformPointer = UniformPointer.FromUInt32((uint)pointerValue);
 
@@ -396,7 +424,7 @@ public class ShaderInterpreter
 								valueToStore.CopyTo(uniformSpan);
 								break;
 							case ShaderStorageClass.Function:
-								var targetSpan = GetSpan(pointer, workingSet);
+								var targetSpan = workingSet[pointerValue..][..valueType.Size!];
 
 								valueToStore.CopyTo(targetSpan);
 								break;
@@ -676,23 +704,46 @@ public class ShaderInterpreter
 							throw new InvalidOperationException("Access chain base must be a pointer");
 						}
 
-						if (basePointerType.StorageClass is not ShaderStorageClass.Input
-								&& basePointerType.StorageClass is not ShaderStorageClass.Output
-								&& basePointerType.StorageClass is not ShaderStorageClass.Uniform
-								&& basePointerType.StorageClass is not ShaderStorageClass.UniformConstant)
+						if (basePointerType.StorageClass is ShaderStorageClass.Image)
 						{
 							throw new InvalidOperationException($"Invalid storage class {basePointerType.StorageClass} for access chain base pointer");
 						}
 
-						var subjectType = basePointerType.ElementType!;
-						var elementType = subjectType.ElementType!;
-
-						if (types[type] != ShaderType.PointerOf(elementType, basePointerType.StorageClass.Value))
-						{
-							throw new InvalidOperationException("Access chain result type must be a pointer to the element type of the base pointer");
-						}
+						int offsetIntoBase;
 
 						int index = BitConverter.ToInt32(GetSpan(indices[0], workingSet));
+
+						var subjectType = basePointerType.ElementType!;
+
+						if (subjectType.IsStruct())
+						{
+							if (index < 0 || index >= subjectType.Members!.Length)
+							{
+								throw new InvalidOperationException($"Access chain index {index} is out of bounds for struct type {subjectType}");
+							}
+							var memberType = subjectType.Members[index];
+							if (types[type] != ShaderType.PointerOf(memberType, basePointerType.StorageClass.Value))
+							{
+								throw new InvalidOperationException("Access chain result type must be a pointer to the member type of the base pointer");
+							}
+							offsetIntoBase = subjectType.Members.Take(index).Sum(m => m.Size);
+						}
+						else if (subjectType.IsRuntimeArray() || subjectType.IsVector())
+						{
+							var elementType = subjectType.ElementType!;
+
+							if (types[type] != ShaderType.PointerOf(elementType, basePointerType.StorageClass.Value))
+							{
+								throw new InvalidOperationException("Access chain result type must be a pointer to the element type of the base pointer");
+							}
+
+							offsetIntoBase = index * elementType.Size;
+						}
+						else
+						{
+							throw new InvalidOperationException($"Access chain base pointer type {subjectType} is not supported for access chain");
+						}
+
 						int basePointerValue = BitConverter.ToInt32(GetSpan(basePointer, workingSet));
 
 						var targetSpan = GetTarget(result, type, workingSet);
@@ -701,11 +752,11 @@ public class ShaderInterpreter
 						{
 							var uniformPointer = UniformPointer.FromUInt32((uint)basePointerValue);
 
-							new BitWriter(targetSpan).Write((int)new UniformPointer(uniformPointer.Binding, (uint)(uniformPointer.Pointer + (index * elementType.Size))).ToUInt32());
+							new BitWriter(targetSpan).Write((int)new UniformPointer(uniformPointer.Binding, (uint)(uniformPointer.Pointer + offsetIntoBase)).ToUInt32());
 						}
 						else
 						{
-							int elementPointer = basePointerValue + (index * elementType.Size);
+							int elementPointer = basePointerValue + offsetIntoBase;
 
 							new BitWriter(targetSpan).Write(elementPointer);
 						}

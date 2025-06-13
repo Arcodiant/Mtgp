@@ -7,6 +7,7 @@ public enum ShaderOp
 	TypeInt,
 	TypeFloat,
 	TypeVector,
+	TypeStruct,
 	TypeImage,
 	TypePointer,
 	TypeTextel,

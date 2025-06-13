@@ -15,6 +15,11 @@ public abstract class ShaderExecutor
 
 public record ShaderIoMappings(Dictionary<int, int> Locations, Dictionary<Builtin, int> Builtins, int Size)
 {
+	public ShaderIoMappings()
+		: this([], [], 0)
+	{
+	}
+
 	public Span<byte> GetLocation(Span<byte> data, int location, int index = 0)
 	{
 		if (!this.Locations.TryGetValue(location, out int offset))

@@ -1,5 +1,6 @@
 ﻿using FluentAssertions;
 using Mtgp.Shader;
+using Newtonsoft.Json.Linq;
 
 namespace Mtgp.Proxy.Shader.Tests
 {
@@ -370,7 +371,178 @@ namespace Mtgp.Proxy.Shader.Tests
             actual.Should().Be(123);
         }
 
-        [TestMethod]
+		[DataRow(789)]
+		[DataRow(123456)]
+		[DataRow(0)]
+		[DataRow(-987)]
+		[TestMethod]
+		public void ShouldReadFromUniformBinding(int value)
+		{
+			var shader = new byte[1024];
+
+			new ShaderWriter(shader)
+				.EntryPoint([5])
+				.DecorateBinding(4, 0)
+				.DecorateLocation(5, 0)
+				.TypeInt(1, 4)
+				.TypePointer(2, ShaderStorageClass.Uniform, 1)
+				.TypePointer(3, ShaderStorageClass.Output, 1)
+				.Variable(4, ShaderStorageClass.Uniform, 2)
+				.Variable(5, ShaderStorageClass.Output, 3)
+				.Load(6, 1, 4)
+				.Store(5, 6)
+				.Return();
+
+			var outputMappings = new ShaderIoMappings(new() { [0] = 0 }, [], 4);
+
+			var target = buildExecutor(new(), outputMappings, shader);
+
+			var uniformBinding = new byte[4];
+
+			new BitWriter(uniformBinding).Write(value);
+
+			Span<byte> outputData = stackalloc byte[4];
+
+			target.Execute([], [uniformBinding], default, outputData);
+
+			new BitReader(outputMappings.GetLocation(outputData, 0)).Read(out int outputValue);
+
+			outputValue.Should().Be(value);
+		}
+
+		[DataRow(789, 0f, 0.5f, 1f)]
+		[DataRow(123456, 0.1f, 0.2f, 0.3f)]
+		[DataRow(0, 0.25f, 0.5f, 0.75f)]
+		[DataRow(-987, 0.5f, 0.25f, 0.1f)]
+		[TestMethod]
+		public void ShouldReadFromUniformBindingStruct(int intValue, float rValue, float gValue, float bValue)
+		{
+			var shader = new byte[1024];
+
+			new ShaderWriter(shader)
+				.EntryPoint([5])
+				.DecorateBinding(8, 0)
+				.DecorateLocation(9, 0)
+				.DecorateLocation(10, 1)
+				.TypeInt(1, 4)
+				.TypeFloat(2, 4)
+				.TypeVector(3, 2, 3)
+				.TypeStruct(4, [1, 3])
+				.TypePointer(5, ShaderStorageClass.Uniform, 4)
+				.TypePointer(17, ShaderStorageClass.Uniform, 1)
+				.TypePointer(18, ShaderStorageClass.Uniform, 3)
+				.TypePointer(6, ShaderStorageClass.Output, 1)
+				.TypePointer(7, ShaderStorageClass.Output, 3)
+				.Variable(8, ShaderStorageClass.Uniform, 5)
+				.Variable(9, ShaderStorageClass.Output, 6)
+				.Variable(10, ShaderStorageClass.Output, 7)
+				.Constant(15, 1, 0)
+				.Constant(16, 1, 1)
+				.AccessChain(11, 17, 8, [15])
+				.AccessChain(12, 18, 8, [16])
+				.Load(13, 1, 11)
+				.Load(14, 3, 12)
+				.Store(9, 13)
+				.Store(10, 14)
+				.Return();
+			
+			var outputMappings = new ShaderIoMappings(new() { [0] = 0, [1] = 4 }, [], 16);
+
+			var target = buildExecutor(new(), outputMappings, shader);
+
+			var uniformBinding = new byte[16];
+
+			new BitWriter(uniformBinding)
+					.Write(intValue)
+					.Write(rValue)
+					.Write(gValue)
+					.Write(bValue);
+
+			Span<byte> outputData = stackalloc byte[16];
+
+			target.Execute([], [uniformBinding], default, outputData);
+
+			new BitReader(outputMappings.GetLocation(outputData, 0))
+				.Read(out int outputIntValue)
+				.Read(out float outputRValue)
+				.Read(out float outputGValue)
+				.Read(out float outputBValue);
+
+			outputIntValue.Should().Be(intValue);
+			outputRValue.Should().Be(rValue);
+			outputGValue.Should().Be(gValue);
+			outputBValue.Should().Be(bValue);
+		}
+
+		[DataRow(789, 0f, 0.5f, 1f)]
+		[DataRow(123456, 0.1f, 0.2f, 0.3f)]
+		[DataRow(0, 0.25f, 0.5f, 0.75f)]
+		[DataRow(-987, 0.5f, 0.25f, 0.1f)]
+		[TestMethod]
+		public void ShouldReadFromUniformBindingStructViaVariable(int intValue, float rValue, float gValue, float bValue)
+		{
+			var shader = new byte[1024];
+
+			new ShaderWriter(shader)
+				.EntryPoint([5])
+				.DecorateBinding(8, 0)
+				.DecorateLocation(9, 0)
+				.DecorateLocation(10, 1)
+				.TypeInt(1, 4)
+				.TypeFloat(2, 4)
+				.TypeVector(3, 2, 3)
+				.TypeStruct(4, [1, 3])
+				.TypePointer(5, ShaderStorageClass.Uniform, 4)
+				.TypePointer(17, ShaderStorageClass.Function, 1)
+				.TypePointer(18, ShaderStorageClass.Function, 3)
+				.TypePointer(19, ShaderStorageClass.Function, 4)
+				.TypePointer(6, ShaderStorageClass.Output, 1)
+				.TypePointer(7, ShaderStorageClass.Output, 3)
+				.Variable(8, ShaderStorageClass.Uniform, 5)
+				.Variable(20, ShaderStorageClass.Function, 19)
+				.Variable(9, ShaderStorageClass.Output, 6)
+				.Variable(10, ShaderStorageClass.Output, 7)
+				.Constant(15, 1, 0)
+				.Constant(16, 1, 1)
+				.Load(21, 4, 8)
+				.Store(20, 21)
+				.AccessChain(11, 17, 20, [15])
+				.AccessChain(12, 18, 20, [16])
+				.Load(13, 1, 11)
+				.Load(14, 3, 12)
+				.Store(9, 13)
+				.Store(10, 14)
+				.Return();
+
+			var outputMappings = new ShaderIoMappings(new() { [0] = 0, [1] = 4 }, [], 16);
+
+			var target = buildExecutor(new(), outputMappings, shader);
+
+			var uniformBinding = new byte[16];
+
+			new BitWriter(uniformBinding)
+					.Write(intValue)
+					.Write(rValue)
+					.Write(gValue)
+					.Write(bValue);
+
+			Span<byte> outputData = stackalloc byte[16];
+
+			target.Execute([], [uniformBinding], default, outputData);
+
+			new BitReader(outputMappings.GetLocation(outputData, 0))
+				.Read(out int outputIntValue)
+				.Read(out float outputRValue)
+				.Read(out float outputGValue)
+				.Read(out float outputBValue);
+
+			outputIntValue.Should().Be(intValue);
+			outputRValue.Should().Be(rValue);
+			outputGValue.Should().Be(gValue);
+			outputBValue.Should().Be(bValue);
+		}
+
+		[TestMethod]
 		public void ShouldStoreVectorViaAccessChain()
 		{
 			var shader = new byte[1024];

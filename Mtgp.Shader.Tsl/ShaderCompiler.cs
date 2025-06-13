@@ -3,6 +3,7 @@ using Superpower.Model;
 using Superpower.Parsers;
 using Superpower.Tokenizers;
 using System.Collections.Immutable;
+using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
 using System.Text;
 
@@ -273,7 +274,11 @@ public class ShaderCompiler
 			}
 			else if (type.Token == "vec")
 			{
-				return ShaderType.VectorOf(GetPrimitiveType((TypeReference)type.Arguments[0]), ((IntegerTypeArgument)type.Arguments[1]).Value);
+				return ShaderType.VectorOf(GetType((TypeReference)type.Arguments[0]), ((IntegerTypeArgument)type.Arguments[1]).Value);
+			}
+			else if(type.Token == "array")
+			{
+				return ShaderType.RuntimeArrayOf(GetType((TypeReference)type.Arguments[0]));
 			}
 			else if (type.Token == "void")
 			{
@@ -284,6 +289,7 @@ public class ShaderCompiler
 				throw new Exception($"Unknown type: {type}");
 			}
 		}
+
 		var tokens = token.Tokenize(source);
 
 		var file = shaderFile.Parse(tokens);
@@ -295,7 +301,14 @@ public class ShaderCompiler
 			return (structDef, ShaderType.StructOf(fields));
 		}
 
-		var structTypes = file.StructDefinitions.Select(BuildStructType).ToImmutableDictionary(x => x.Def.Name);
+		var structTypes = ImmutableDictionary<string, (StructDefinition Def, ShaderType Type)>.Empty;
+		structTypes = file.StructDefinitions.Select(BuildStructType).ToImmutableDictionary(x => x.Def.Name);
+
+		ShaderType GetType(TypeReference typeRef)
+			=> structTypes.TryGetValue(typeRef.Token, out var value)
+				? value.Type
+				: GetPrimitiveType(typeRef);
+
 		var funcs = file.FuncDefinitions.ToImmutableDictionary(x => x.Name);
 
 		var mainFunc = funcs[entrypointName];
@@ -367,7 +380,7 @@ public class ShaderCompiler
 
 		foreach (var binding in file.BindingDefinitions)
 		{
-			var type = GetPrimitiveType(binding.Type);
+			var type = GetType(binding.Type);
 
 			var (storage, dimension) = binding.BindingType switch
 			{
@@ -380,10 +393,6 @@ public class ShaderCompiler
 			if (storage == ShaderStorageClass.Image)
 			{
 				type = ShaderType.ImageOf(type, dimension);
-			}
-			else if (storage == ShaderStorageClass.Uniform)
-			{
-				type = ShaderType.RuntimeArrayOf(type);
 			}
 
 			type = ShaderType.PointerOf(type, storage);
@@ -456,6 +465,17 @@ public class ShaderCompiler
 				{
 					writer = writer.TypeRuntimeArray(id, GetTypeId(ref writer, type.ElementType!));
 				}
+				else if (type.IsStruct())
+				{
+					var members = new List<int>();
+
+					foreach (var member in type.Members!)
+					{
+						members.Add(GetTypeId(ref writer, member));
+					}
+
+					writer = writer.TypeStruct(id, members.ToArray());
+				}
 				else
 				{
 					throw new Exception($"Unknown type: {type}");
@@ -465,6 +485,41 @@ public class ShaderCompiler
 			}
 
 			return id;
+		}
+
+		var structNames = new Dictionary<int, string>();
+
+		foreach (var (structDef, type) in structTypes.Values)
+		{
+			var typesWriter = shaderState.TypesWriter;
+
+			int id = GetTypeId(ref typesWriter, type);
+			structNames[id] = structDef.Name;
+
+			shaderState = shaderState.WithTypesWriter(typesWriter);
+		}
+
+		(StructDefinition Def, ShaderType Type) GetStruct(int id)
+		{
+			var name = structNames[id];
+
+			return structTypes[name];
+		}
+
+		(ShaderType Type, int Index) GetStructField(int structId, string fieldName)
+		{
+			var (def, type) = GetStruct(structId);
+
+			if (!def.Fields.Any(x => x.Field == fieldName))
+			{
+				throw new Exception($"Field '{fieldName}' not found in struct '{def.Name}'");
+			}
+
+			int fieldIndex = def.Fields.Select((x, index) => (x.Field, Index: index))
+											.Single(x => x.Field == fieldName)
+											.Index;
+
+			return (type.Members![fieldIndex], fieldIndex);
 		}
 
 		foreach (var (id, storage, type, _) in vars)
@@ -490,7 +545,7 @@ public class ShaderCompiler
 
 		ShaderState WriteVariableDeclaration(ShaderState state, VariableDeclarationStatement variableDeclaration)
 		{
-			var type = GetPrimitiveType(variableDeclaration.Type);
+			var type = GetType(variableDeclaration.Type);
 			type = ShaderType.PointerOf(type, ShaderStorageClass.Function);
 			int id = GetNextId(type);
 
@@ -778,15 +833,15 @@ public class ShaderCompiler
 				return state;
 			}
 
-			state = WriteExpression(state, expression.Left, out int leftId, out var leftType);
+			state = WriteExpression(state, expression.Left, out int leftId, out var leftType, false);
 
-			if (leftType.IsPointer())
+			if (leftType.IsOrPointsTo(x => x.IsVector()))
 			{
-				state = WriteLoad(state, leftId, leftType, out leftId, out leftType);
-			}
+				if (leftType.IsPointer())
+				{
+					state = WriteLoad(state, leftId, leftType, out leftId, out leftType);
+				}
 
-			if (leftType.IsVector())
-			{
 				var elementType = leftType.ElementType!;
 
 				if (expression.Right is TokenExpression rightTokenExpression)
@@ -819,9 +874,37 @@ public class ShaderCompiler
 					throw new Exception($"Dot operator on vector requires a token expression, got {expression.Right}");
 				}
 			}
+			else if (leftType.IsPointer() && leftType.ElementType!.IsStruct())
+			{
+				if (expression.Right is TokenExpression rightTokenExpression)
+				{
+					var fieldName = rightTokenExpression.Value;
+
+					var typesWriter = state.TypesWriter;
+
+					int leftTypeId = GetTypeId(ref typesWriter, leftType.ElementType!);
+
+					(type, int index) = GetStructField(leftTypeId, fieldName);
+
+					type = ShaderType.PointerOf(type, leftType.StorageClass!.Value);
+
+					id = GetNextId(type);
+					int typeId = GetTypeId(ref typesWriter, type);
+
+					var indexType = ShaderType.Int(4);
+					int indexId = GetNextId(indexType);
+					typesWriter = typesWriter.Constant(indexId, GetTypeId(ref typesWriter, indexType), index);
+
+					return new(typesWriter, state.CodeWriter.AccessChain(id, typeId, leftId, new int[] { indexId }));
+				}
+				else
+				{
+					throw new Exception($"Dot operator on struct requires a token expression, got {expression.Right}");
+				}
+			}
 			else
 			{
-				throw new NotImplementedException($"Dot operator is only implemented for vectors, got {leftType} in {expression}");
+				throw new Exception($"Dot operator can only be used on vectors or structs, got {leftType}");
 			}
 		}
 		ShaderState WriteEqualityExpression(ShaderState state, BinaryExpression expression, out int id, out ShaderType type)

@@ -1,7 +1,6 @@
 ﻿using Mtgp.Shader;
 using Sigil;
-using System.Diagnostics.Tracing;
-using System.Numerics;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -13,6 +12,7 @@ internal static class JitterMethods
 	public static int ReadInt32(Span<byte> buffer) => BitConverter.ToInt32(buffer);
 	public static float ReadFloat32(Span<byte> buffer) => BitConverter.ToSingle(buffer);
 	public static Span<byte> Slice(Span<byte> buffer, int start, int length) => buffer.Slice(start, length);
+	public static void Copy(Span<byte> destination, Span<byte> source) => source.CopyTo(destination);
 
 	public record struct Vector_2<T>(T V1, T V2)
 		where T : unmanaged;
@@ -84,6 +84,7 @@ public class ShaderJitter
 	private readonly static Lazy<MethodInfo> ReadInt32 = new(() => typeof(JitterMethods).GetMethod(nameof(JitterMethods.ReadInt32))!);
 	private readonly static Lazy<MethodInfo> ReadFloat32 = new(() => typeof(JitterMethods).GetMethod(nameof(JitterMethods.ReadFloat32))!);
 	private readonly static Lazy<MethodInfo> Slice = new(() => typeof(JitterMethods).GetMethod(nameof(JitterMethods.Slice))!);
+	private readonly static Lazy<MethodInfo> Copy = new(() => typeof(JitterMethods).GetMethod(nameof(JitterMethods.Copy))!);
 
 	private static Type GetType(ShaderType type)
 	{
@@ -198,13 +199,20 @@ public class ShaderJitter
 
 	private static MethodInfo ReadByType(ShaderType loadType)
 	{
+		ReadByType(loadType, out var readMethod);
+
+		return readMethod ?? throw new NotSupportedException($"Cannot load type {loadType}");
+	}
+
+	private static bool ReadByType(ShaderType loadType, [NotNullWhen(true)]out MethodInfo? readMethod)
+	{
 		if (loadType == ShaderType.Int(4))
 		{
-			return ReadInt32.Value;
+			readMethod = ReadInt32.Value;
 		}
 		else if (loadType == ShaderType.Float(4))
 		{
-			return ReadFloat32.Value;
+			readMethod = ReadFloat32.Value;
 		}
 		else if (loadType.IsVector())
 		{
@@ -212,21 +220,29 @@ public class ShaderJitter
 
 			if (elementType == ShaderType.Int(4))
 			{
-				return ReadVec<int>(loadType.ElementCount);
+				readMethod = ReadVec<int>(loadType.ElementCount);
 			}
 			else if (elementType == ShaderType.Float(4))
 			{
-				return ReadVec<float>(loadType.ElementCount);
+				readMethod = ReadVec<float>(loadType.ElementCount);
 			}
 			else
 			{
 				throw new NotSupportedException($"Cannot load type {loadType}");
 			}
 		}
+		else if (loadType.IsStruct())
+		{
+			readMethod = default;
+
+			return false;
+		}
 		else
 		{
 			throw new NotSupportedException($"Cannot load type {loadType}");
 		}
+
+		return true;
 	}
 
 	private readonly static Lazy<MethodInfo> BitConverter__TryWriteBytes_Int32 = new(() => typeof(BitConverter).GetMethod(nameof(BitConverter.TryWriteBytes), [typeof(Span<byte>), typeof(int)])!);
@@ -269,13 +285,19 @@ public class ShaderJitter
 		reader = reader.TypeSection(out var types, out var constants, out var variables);
 
 		var values = new Dictionary<int, Func<Emit<ExecuteDelegate>, Emit<ExecuteDelegate>>>();
+		var constantValues = new Dictionary<int, Field>();
 
 		var imageDimensions = new Dictionary<int, Local>();
 
-		void SetValue(int id, ShaderType type, Func<Emit<ExecuteDelegate>, Emit<ExecuteDelegate>> emitAction)
+		void SetValue(int id, ShaderType type, Func<Emit<ExecuteDelegate>, Emit<ExecuteDelegate>> emitAction, Field? constantValue = null)
 		{
 			values[id] = emitAction;
 			types[id] = type;
+
+			if (constantValue != null)
+			{
+				constantValues[id] = constantValue.Value;
+			}
 		}
 
 		Emit<ExecuteDelegate> EmitValue(Emit<ExecuteDelegate> emitter, int id)
@@ -304,11 +326,11 @@ public class ShaderJitter
 		{
 			if (constant.Type == ShaderType.Int(4))
 			{
-				SetValue(id, constant.Type, emitter => emitter.LoadConstant(constant.Value.Int32));
+				SetValue(id, constant.Type, emitter => emitter.LoadConstant(constant.Value.Int32), constant.Value);
 			}
 			else if (constant.Type == ShaderType.Float(4))
 			{
-				SetValue(id, constant.Type, emitter => emitter.LoadConstant(constant.Value.Float));
+				SetValue(id, constant.Type, emitter => emitter.LoadConstant(constant.Value.Float), constant.Value);
 			}
 			else
 			{
@@ -468,6 +490,10 @@ public class ShaderJitter
 								throw new NotSupportedException($"Cannot store type {storeType}");
 							}
 						}
+						else if(storeType.IsStruct())
+						{
+							writeMethod = Copy.Value;
+						}
 						else
 						{
 							throw new NotSupportedException($"Cannot store type {storeType}");
@@ -489,8 +515,16 @@ public class ShaderJitter
 
 						var loadType = types[typeId];
 
-						SetValue(resultId, loadType, emitter => EmitValue(emitter, pointerId)
-														.Call(ReadByType(loadType)));
+						if(ReadByType(loadType, out var readMethod))
+						{
+							SetValue(resultId, loadType, emitter => EmitValue(emitter, pointerId)
+														.Call(readMethod));
+						}
+						else
+						{
+							SetValue(resultId, loadType, emitter => EmitValue(emitter, pointerId));
+						}
+
 						break;
 					}
 				case ShaderOp.IntToFloat:
@@ -501,7 +535,15 @@ public class ShaderJitter
 						{
 							throw new InvalidOperationException($"IntToFloat result must be float");
 						}
-						SetValue(resultId, opType, emitter => EmitValue(emitter, valueId).Convert<float>());
+
+						Field? constantValue = null;
+
+						if (constants.TryGetValue(valueId, out var constant))
+						{
+							constantValue = (float)constant.Value.Int32;
+						}
+
+						SetValue(resultId, opType, emitter => EmitValue(emitter, valueId).Convert<float>(), constantValue);
 						break;
 					}
 				case ShaderOp.Add:
@@ -659,13 +701,37 @@ public class ShaderJitter
 
 						reader.AccessChain(out int resultId, out int typeId, out int baseId, ids.AsSpan(), out _);
 
+						var baseType = types[baseId].ElementType!;
+
 						var resultType = types[typeId];
 
-						SetValue(resultId, resultType, emitter => EmitValue(EmitValue(emitter, baseId), ids[0])
-																		.LoadConstant(resultType.ElementType!.Size)
-																		.Multiply()
-																		.LoadConstant(resultType.ElementType!.Size)
-																		.Call(Slice.Value));
+						if (baseType.IsRuntimeArray() || baseType.IsVector())
+						{
+							SetValue(resultId, resultType, emitter => EmitValues(emitter, [baseId, ids[0]])
+																			.LoadConstant(resultType.ElementType!.Size)
+																			.Multiply()
+																			.LoadConstant(resultType.ElementType!.Size)
+																			.Call(Slice.Value));
+						}
+						else if (baseType.IsStruct())
+						{
+							if (!constantValues.TryGetValue(ids[0], out Field indexConstant))
+							{
+								throw new InvalidOperationException($"Access chain index {ids[0]} must be a constant");
+							}
+
+							int offset = baseType.Members!.Take(indexConstant.Int32).Sum(x => x.Size);
+
+							SetValue(resultId, resultType, emitter => EmitValue(emitter, baseId)
+																			.LoadConstant(offset)
+																			.LoadConstant(resultType.ElementType!.Size)
+																			.Call(Slice.Value));
+
+						}
+						else
+						{
+							throw new NotImplementedException($"Unimplemented access chain base type {baseType}.");
+						}
 
 						break;
 					}
@@ -940,6 +1006,20 @@ internal static class ShaderReaderSectionExtensions
 						reader = reader.TypeVector(out int id, out int componentTypeId, out int componentCount);
 
 						types[id] = ShaderType.VectorOf(types[componentTypeId], componentCount);
+
+						break;
+					}
+				case ShaderOp.TypeStruct:
+					{
+						reader.TypeStruct(out int id, out int memberCount);
+
+						var memberTypeIds = new int[memberCount];
+
+						reader = reader.TypeStruct(out _, memberTypeIds, out _);
+
+						var typeLookup = types;
+
+						types[id] = ShaderType.StructOf([.. memberTypeIds.Select(x => typeLookup[x])]);
 
 						break;
 					}

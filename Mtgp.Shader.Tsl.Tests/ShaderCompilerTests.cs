@@ -137,5 +137,158 @@ func Output Main()
 
 			value1.Should().Be(character);
 		}
+
+		[TestMethod]
+		[DataRow(42, 1.0f, 2.0f, 3.0f)]
+		[DataRow(123, 4.0f, 5.0f, 6.0f)]
+		[DataRow(0, -1.0f, -2.0f, -3.0f)]
+		[DataRow(-10, 0.0f, 0.0f, 0.0f)]
+		public void ShouldCompileUniformStructs(int intValue, float vecValueX, float vecValueY, float vecValueZ)
+		{
+			var shader = @"
+struct Output
+{
+	[Location=0] int value1;
+	[Location=1] vec<float,3> value2;
+}
+
+struct UniformData
+{
+	int value1;
+	vec<float,3> value2;
+}
+
+[Binding=0] uniform UniformData data;
+
+func Output Main()
+{
+	result.value1 = data.value1;
+	result.value2 = data.value2;
+}
+			";
+
+			var target = new ShaderCompiler();
+			var result = target.Compile(shader);
+
+			Console.WriteLine(ShaderDisassembler.Disassemble(result));
+
+			var executor = ShaderJitter.Create(result);
+
+			Span<byte> outputSpan = stackalloc byte[executor.OutputMappings.Size];
+			var uniformSpan = new byte[4 + 12];
+
+			new BitWriter(uniformSpan)
+				.Write(intValue)
+				.Write(vecValueX).Write(vecValueY).Write(vecValueZ);
+
+			executor.Execute([], [uniformSpan], [], outputSpan);
+
+			new BitReader(executor.OutputMappings.GetLocation(outputSpan, 0)).Read(out int value1);
+			new BitReader(executor.OutputMappings.GetLocation(outputSpan, 1)).Read(out float value2x).Read(out float value2y).Read(out float value2z);
+
+			value1.Should().Be(intValue);
+			value2x.Should().Be(vecValueX);
+			value2y.Should().Be(vecValueY);
+			value2z.Should().Be(vecValueZ);
+		}
+
+		[TestMethod]
+		[DataRow(new[] { 1, 2, 3 }, 0)]
+		[DataRow(new[] { 4, 5, 6 }, 1)]
+		[DataRow(new[] { 7, 8, 9 }, 2)]
+		[DataRow(new[] { 10, 11, 12 }, 0)]
+		public void ShouldCompileUniformArrays(int[] values, int index)
+		{
+			var shader = $@"
+struct Output
+{{
+	[Location=0] int value;
+}}
+
+[Binding=0] uniform array<int> data;
+
+func Output Main()
+{{
+	result.value = data[{index}];
+}}
+";
+
+			var target = new ShaderCompiler();
+			var result = target.Compile(shader);
+
+			Console.WriteLine(ShaderDisassembler.Disassemble(result));
+
+			var executor = ShaderJitter.Create(result);
+
+			Span<byte> outputSpan = stackalloc byte[executor.OutputMappings.Size];
+			var uniformSpan = new byte[4 + 12];
+
+			new BitWriter(uniformSpan).Write<int>(values.AsSpan());
+
+			executor.Execute([], [uniformSpan], [], outputSpan);
+
+			new BitReader(executor.OutputMappings.GetLocation(outputSpan, 0)).Read(out int value);
+
+			value.Should().Be(values[index]);
+		}
+
+		[TestMethod]
+		[DataRow(new[] { 1, 2, 3 }, new[] { 1.0f, 2.0f, 3.0f }, 0)]
+		[DataRow(new[] { 4, 5, 6 }, new[] { 2.5f, 3.5f, 4.5f }, 1)]
+		[DataRow(new[] { 7, 8, 9 }, new[] { -7.0f, -8.0f, -9.0f }, 2)]
+		[DataRow(new[] { -10, -11, -12 }, new[] { 10.0f, 11.0f, 12.0f }, 0)]
+		public void ShouldCompileUniformStructArrays(int[] intValues, float[] floatValues, int index)
+		{
+			var shader = $@"
+struct Output
+{{
+	[Location=0] int value1;
+	[Location=1] float value2;
+}}
+
+[Binding=0] uniform array<UniformData> data;
+
+struct UniformData
+{{
+	int value1;
+	float value2;
+}}
+
+func Output Main()
+{{
+	var UniformData dataVariable;
+
+	dataVariable = data[{index}];
+
+	result.value1 = dataVariable.value1;
+	result.value2 = dataVariable.value2;
+}}
+";
+
+			var target = new ShaderCompiler();
+			var result = target.Compile(shader);
+
+			Console.WriteLine(ShaderDisassembler.Disassemble(result));
+
+			var executor = ShaderJitter.Create(result);
+
+			Span<byte> outputSpan = stackalloc byte[executor.OutputMappings.Size];
+			var uniformSpan = new byte[8 * intValues.Length];
+
+			for(int i = 0; i < intValues.Length; i++)
+			{
+				new BitWriter(uniformSpan.AsSpan(i * 8, 8))
+					.Write(intValues[i])
+					.Write(floatValues[i]);
+			}
+
+			executor.Execute([], [uniformSpan], [], outputSpan);
+
+			new BitReader(executor.OutputMappings.GetLocation(outputSpan, 0)).Read(out int value1);
+			new BitReader(executor.OutputMappings.GetLocation(outputSpan, 1)).Read(out float  value2);
+
+			value1.Should().Be(intValues[index]);
+			value2.Should().Be(floatValues[index]);
+		}
 	}
 }

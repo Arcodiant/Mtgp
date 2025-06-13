@@ -6,7 +6,6 @@
 }
 
 [Binding=0] image2d int text;
-[Binding=0] uniform int menuIndex;
 
 struct Input
 {
@@ -14,11 +13,13 @@ struct Input
     [PositionY] int y;
     [Location=0] int u;
     [Location=1] int v;
+    [Location=2] vec<float, 3> foreground;
+    [Location=3] vec<float, 3> background;
 }
 
 func Output Main(Input input)
 {
-    result.colour = input.index == menuIndex ? Vec(1.0, 0.0, 1.0) : Vec(1.0, 1.0, 1.0);
-    result.background = Vec(0.0, 0.0, 0.0);
+    result.colour = input.foreground;
+    result.background = input.background;
     result.character = Gather(text, Vec(input.u, input.v));
 }

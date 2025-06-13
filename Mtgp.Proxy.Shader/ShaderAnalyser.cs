@@ -101,6 +101,16 @@ internal static class ShaderAnalyser
 						types[result] = ShaderType.PointerOf(type, storageClass);
 					}
 					break;
+				case ShaderOp.TypeStruct:
+					{
+						shaderReader.TypeStruct(out int result, out int memberCount);
+						var members = new int[memberCount];
+
+						shaderReader.TypeStruct(out _, members, out _);
+
+						types[result] = ShaderType.StructOf([.. members.Select(x => types[x])]);
+					}
+					break;
 				case ShaderOp.Variable:
 					{
 						shaderReader.Variable(out int result, out var storageClass, out var type);

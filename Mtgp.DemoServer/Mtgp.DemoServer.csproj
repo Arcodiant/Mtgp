@@ -35,10 +35,10 @@
     <None Update="Shaders\DemoUI\Panel.vert">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="Shaders\DemoUI\Menu.frag">
+    <None Update="Shaders\DemoUI\MenuItem.frag">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="Shaders\DemoUI\Menu.vert">
+    <None Update="Shaders\DemoUI\MenuItem.vert">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Update="Shaders\Simple.frag">

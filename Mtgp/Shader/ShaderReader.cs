@@ -167,6 +167,34 @@ public readonly ref struct ShaderReader(BitReader reader)
 		return new(reader);
 	}
 
+	public readonly ShaderReader TypeStruct(out int result, out int memberCount)
+	{
+		var reader = this.ReadShaderOp(ShaderOp.TypeStruct, out uint wordCount);
+
+		memberCount = (int)(wordCount - 2);
+
+		reader = reader.Read(out result);
+
+		return new(reader);
+	}
+
+	public readonly ShaderReader TypeStruct(out int result, Span<int> members, out int memberCount)
+	{
+		var reader = this.TypeStruct(out result, out memberCount).reader;
+
+		if (memberCount <= members.Length)
+		{
+			reader = reader.Read(members[..memberCount]);
+		}
+		else
+		{
+			reader.Read(members);
+			reader = reader.Skip(memberCount * 4);
+		}
+
+		return new(reader);
+	}
+
 	public readonly ShaderReader TypeRuntimeArray(out int result, out int elementType)
 	{
 		var reader = this.ReadShaderOp(ShaderOp.TypeRuntimeArray, ShaderOpConstants.TypeRuntimeArrayWordCount);

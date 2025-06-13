@@ -17,6 +17,35 @@ public record ShaderType(string Id, int Size, ShaderStorageClass? StorageClass =
 		=> new("vec", type.Size * count, ElementCount: count, ElementType: type);
 	public static ShaderType StructOf(params ShaderType[] members)
 		=> new("struct", members.Sum(m => m.Size), Members: members);
+
+	public bool IsOrPointsTo(Func<ShaderType, bool> predicate)
+		=> predicate(this) || (this.IsPointer() && ElementType is not null && predicate(ElementType));
+
+	public int GetOffset(int index)
+	{
+		if (Members is not null)
+		{
+			if (index < 0 || index >= Members.Length)
+			{
+				throw new ArgumentOutOfRangeException(nameof(index), "Index is out of range for shader type members.");
+			}
+
+			return Members.Take(index).Sum(x => x.Size);
+		}
+		else if (ElementCount > 0)
+		{
+			if (index < 0 || index >= ElementCount)
+			{
+				throw new ArgumentOutOfRangeException(nameof(index), "Index is out of range for shader type elements.");
+			}
+
+			return index * ElementType!.Size;
+		}
+		else
+		{
+			throw new InvalidOperationException("Shader type does not have members or elements to index into.");
+		}
+	}
 }
 
 public static class ShaderTypeExtensions
