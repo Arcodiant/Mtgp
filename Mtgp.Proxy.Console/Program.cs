@@ -6,7 +6,8 @@ using System.Diagnostics;
 
 Log.Logger = new LoggerConfiguration()
 	.Enrich.FromLogContext()
-	.WriteTo.Async(configure => configure.Console())
+	.WriteTo.Console()
+	//.WriteTo.Async(configure => configure.Console())
 	//.WriteTo.Seq("http://localhost:5341")
 	.MinimumLevel.Debug()
 	.CreateLogger();

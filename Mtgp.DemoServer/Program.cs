@@ -8,7 +8,7 @@ using Serilog;
 Log.Logger = new LoggerConfiguration()
 	.Enrich.FromLogContext()
 	.WriteTo.Console()
-	.WriteTo.Seq("http://localhost:5341")
+	//.WriteTo.Seq("http://localhost:5341")
 	.MinimumLevel.Debug()
 	.CreateLogger();
 
@@ -29,7 +29,7 @@ try
 	builder.Services.AddScoped<GraphicsManager>();
 	builder.Services.AddTransient<IGraphicsManager>(provider => provider.GetRequiredService<GraphicsManager>());
 	builder.Services.AddTransient<ISessionService>(provider => provider.GetRequiredService<GraphicsManager>());
-	//builder.Services.AddScoped<IGraphicsService, PanelManager>();
+	builder.Services.AddScoped<IGraphicsService, PanelManager>();
 	builder.Services.AddScoped<IGraphicsService, MenuManager>();
 
 	var host = builder.Build();

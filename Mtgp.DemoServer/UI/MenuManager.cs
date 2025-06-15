@@ -12,21 +12,22 @@ public class MenuManager(ISessionWorld sessionWorld, ILogger<MenuManager> logger
 	: IGraphicsService
 {
 	private IMessageConnection connection;
-	private (PipeHandle pipeId, ActionListHandle mainPipeActionList) mainPipe;
+	private ActionListHandle actionList;
+
+	private ImageHandle? menuImage = null;
+	private string? menuImageString = null;
+
+	public ActionListHandle ActionList => actionList;
 
 	public async Task InitialiseGraphicsAsync(IMessageConnection connection, IGraphicsManager graphics)
 	{
 		this.connection = connection;
 
 		await connection.GetResourceBuilder()
-					.ActionList(out var mainPipeActionListTask, "mainActionList")
-					.Pipe(out var mainPipeTask, "mainActionList")
+					.ActionList(out var mainPipeActionListTask)
 					.BuildAsync();
 
-		var pipeId = await mainPipeTask;
-		var mainPipeActionList = await mainPipeActionListTask;
-
-		mainPipe = (pipeId, mainPipeActionList);
+		actionList = await mainPipeActionListTask;
 
 		var vertexShader = await graphics.ShaderManager.CreateShaderFromFileAsync("./Shaders/DemoUI/MenuItem.vert");
 		var fragmentShader = await graphics.ShaderManager.CreateShaderFromFileAsync("./Shaders/DemoUI/MenuItem.frag");
@@ -71,9 +72,7 @@ public class MenuManager(ISessionWorld sessionWorld, ILogger<MenuManager> logger
 
 		var renderPipeline = await renderPipelineTask;
 
-		ImageHandle? menuImage = default;
-
-		async Task UpdateBuffers()
+		async Task UpdateBuffers(bool forceBuildActionList = false)
 		{
 			var menus = new List<Menu>();
 
@@ -88,9 +87,16 @@ public class MenuManager(ISessionWorld sessionWorld, ILogger<MenuManager> logger
 			int itemCount = items.Length;
 			int menuCount = menus.Count;
 
-			menuImage = await graphics.ImageManager.CreateImageFromStringAsync(string.Join('\n', items.Select(x => x.MenuItem)), ImageFormat.T32_SInt);
+			var newMenuImageString = string.Join('\n', items.Select(x => x.MenuItem));
 
 			bool buffersChanged = false;
+
+			if (newMenuImageString != menuImageString)
+			{
+				menuImage = await graphics.ImageManager.CreateImageFromStringAsync(newMenuImageString, ImageFormat.T32_SInt);
+				buffersChanged = true;
+				menuImageString = newMenuImageString;
+			}
 
 			if (itemCount > itemCapacity)
 			{
@@ -150,10 +156,11 @@ public class MenuManager(ISessionWorld sessionWorld, ILogger<MenuManager> logger
 			await connection.SetBufferData(menuBuffer, menuBufferOffset, menuBufferData);
 			await connection.SetBufferData(drawBuffer, drawBufferOffset, drawBufferData);
 
-			await BuildActionList();
+			if (buffersChanged || forceBuildActionList)
+			{
+				await BuildActionList();
+			}
 		}
-
-		await UpdateBuffers();
 
 		async Task BuildActionList()
 		{
@@ -168,38 +175,40 @@ public class MenuManager(ISessionWorld sessionWorld, ILogger<MenuManager> logger
 
 			var (drawBufferView, menuBufferView) = await (drawBufferViewTask, menuBufferViewTask);
 
-			await connection.ResetActionList(mainPipeActionList);
+			await connection.ResetActionList(actionList);
 
-			await connection.AddBindVertexBuffers(mainPipeActionList, 0, [(itemBuffer, itemBufferOffset)]);
-			await connection.AddIndirectDrawAction(mainPipeActionList, renderPipeline, [menuImage!], [menuBufferView], frameBuffer, drawBufferView, 0);
-			await connection.AddPresentAction(mainPipeActionList, graphics.PresentSet);
+			await connection.AddBindVertexBuffers(actionList, 0, [(itemBuffer, itemBufferOffset)]);
+			await connection.AddIndirectDrawAction(actionList, renderPipeline, [menuImage!], [menuBufferView], frameBuffer, drawBufferView, 0);
 		}
 
-		await BuildActionList();
-
-		await connection.Send(mainPipe.pipeId, []);
+		await UpdateBuffers(true);
 
 		graphics.WindowSizeChanged += async () =>
 		{
-			await connection.Send(mainPipe.pipeId, []);
 		};
 
 		sessionWorld.SubscribeComponentAdded<Menu>(async (entity, menu) =>
 		{
+			logger.LogDebug("Menu added: {Menu}", menu);
+
 			await UpdateBuffers();
-			await connection.Send(mainPipe.pipeId, []);
+			await graphics.RedrawAsync();
 		});
 
 		sessionWorld.SubscribeComponentRemoved<Menu>(async (entity, menu) =>
 		{
+			logger.LogDebug("Menu removed: {Menu}", menu);
+
 			await UpdateBuffers();
-			await connection.Send(mainPipe.pipeId, []);
+			await graphics.RedrawAsync();
 		});
 
 		sessionWorld.SubscribeComponentChanged<Menu>(async (entity, menu) =>
 		{
+			logger.LogDebug("Menu changed: {Menu}", menu);
+
 			await UpdateBuffers();
-			await connection.Send(mainPipe.pipeId, []);
+			await graphics.RedrawAsync();
 		});
 	}
 }

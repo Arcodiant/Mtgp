@@ -14,8 +14,10 @@ public class PanelManager(ISessionWorld sessionWorld, ILogger<PanelManager> logg
 {
 	private readonly Mapping<Entity, int> panelEntityToIndex = [];
 
-	private (PipeHandle Id, ActionListHandle ActionList) mainPipe;
+	private ActionListHandle actionList;
 	private IMessageConnection connection;
+
+	public ActionListHandle ActionList => actionList;
 
 	public async Task InitialiseGraphicsAsync(IMessageConnection connection, IGraphicsManager graphics)
 	{
@@ -27,9 +29,7 @@ public class PanelManager(ISessionWorld sessionWorld, ILogger<PanelManager> logg
 					.BuildAsync();
 
 		var pipeId = await mainPipeTask;
-		var mainPipeActionList = await mainPipeActionListTask;
-
-		mainPipe = (pipeId, mainPipeActionList);
+		actionList = await mainPipeActionListTask;
 
 		var characters = new char[3, 3]
 		{
@@ -110,11 +110,10 @@ public class PanelManager(ISessionWorld sessionWorld, ILogger<PanelManager> logg
 
 		var frameBuffer = new Messages.FrameBufferInfo(presentImage[PresentImagePurpose.Character].Id, presentImage[PresentImagePurpose.Foreground].Id, presentImage[PresentImagePurpose.Background].Id);
 
-		await connection.ResetActionList(mainPipeActionList);
+		await connection.ResetActionList(actionList);
 
-		await connection.AddBindVertexBuffers(mainPipeActionList, 0, [(vertexBuffer, vertexBufferOffset), (panelBuffer, panelBufferOffset)]);
-		await connection.AddIndirectDrawAction(mainPipeActionList, renderPipeline, [characterImage], [], frameBuffer, drawBufferView, 0);
-		await connection.AddPresentAction(mainPipeActionList, graphics.PresentSet);
+		await connection.AddBindVertexBuffers(actionList, 0, [(vertexBuffer, vertexBufferOffset), (panelBuffer, panelBufferOffset)]);
+		await connection.AddIndirectDrawAction(actionList, renderPipeline, [characterImage], [], frameBuffer, drawBufferView, 0);
 
 		graphics.WindowSizeChanged += async () =>
 		{
@@ -122,13 +121,10 @@ public class PanelManager(ISessionWorld sessionWorld, ILogger<PanelManager> logg
 
 			frameBuffer = new Messages.FrameBufferInfo(presentImage[PresentImagePurpose.Character].Id, presentImage[PresentImagePurpose.Foreground].Id, presentImage[PresentImagePurpose.Background].Id);
 
-			await connection.ResetActionList(mainPipeActionList);
+			await connection.ResetActionList(actionList);
 
-			await connection.AddBindVertexBuffers(mainPipeActionList, 0, [(vertexBuffer, vertexBufferOffset), (panelBuffer, panelBufferOffset)]);
-			await connection.AddIndirectDrawAction(mainPipeActionList, renderPipeline, [characterImage], [], frameBuffer, drawBufferView, 0);
-			await connection.AddPresentAction(mainPipeActionList, graphics.PresentSet);
-
-			await connection.Send(mainPipe.Id, []);
+			await connection.AddBindVertexBuffers(actionList, 0, [(vertexBuffer, vertexBufferOffset), (panelBuffer, panelBufferOffset)]);
+			await connection.AddIndirectDrawAction(actionList, renderPipeline, [characterImage], [], frameBuffer, drawBufferView, 0);
 		};
 
 		int panelCount = 0;
@@ -160,7 +156,7 @@ public class PanelManager(ISessionWorld sessionWorld, ILogger<PanelManager> logg
 
 			await connection.SetBufferData(drawBuffer, drawBufferOffset, drawBufferData);
 
-			await connection.Send(mainPipe.Id, []);
+			await graphics.RedrawAsync();
 		});
 
 		sessionWorld.SubscribeComponentChanged(async (Entity entity, Panel panel) =>
@@ -178,7 +174,7 @@ public class PanelManager(ISessionWorld sessionWorld, ILogger<PanelManager> logg
 				.Write(panel.Area.Extent.Height);
 			await connection.SetBufferData(panelBuffer, panelBufferOffset + (13 * 4 * index), panelData);
 
-			await connection.Send(mainPipe.Id, []);
+			await graphics.RedrawAsync();
 		});
 	}
 }

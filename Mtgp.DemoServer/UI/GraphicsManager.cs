@@ -16,11 +16,14 @@ public interface IGraphicsManager
 	event Func<Task>? WindowSizeChanged;
 
 	Task SetWindowSizeAsync(Extent2D size);
+
+	Task RedrawAsync();
 }
 
 public interface IGraphicsService
 {
 	Task InitialiseGraphicsAsync(IMessageConnection connection, IGraphicsManager graphicsManager);
+	ActionListHandle ActionList { get; }
 }
 
 public class GraphicsManager(IEnumerable<IGraphicsService> graphicsServices, ILogger<GraphicsManager> logger, IShaderManager? shaderManager = null, IBufferManager? bufferManager = null, IImageManager? imageManager = null)
@@ -29,6 +32,9 @@ public class GraphicsManager(IEnumerable<IGraphicsService> graphicsServices, ILo
 	private Extent2D windowSize = new(80, 24);
 	private IMessageConnection connection;
 	private PresentSetHandle? presentSet;
+
+	private ActionListHandle? actionList;
+	private PipeHandle? pipe;
 
 	public async Task InitialiseAsync(IMessageConnection connection)
 	{
@@ -44,6 +50,29 @@ public class GraphicsManager(IEnumerable<IGraphicsService> graphicsServices, ILo
 		{
 			await service.InitialiseGraphicsAsync(connection, this);
 		}
+
+		await connection.GetResourceBuilder()
+								.ActionList(out var actionListTask, "mainActionList")
+								.Pipe(out var pipeTask, "mainActionList")
+								.BuildAsync();
+
+		(actionList, pipe) = (await actionListTask, await pipeTask);
+
+		await BuildActionList();
+
+		await RedrawAsync();
+	}
+
+	private async Task BuildActionList()
+	{
+		await connection.ResetActionList(actionList!);
+
+		foreach (var service in graphicsServices)
+		{
+			await connection.AddTriggerActionListAction(actionList!, service.ActionList);
+		}
+
+		await connection.AddPresentAction(actionList!, presentSet!);
 	}
 
 	private async Task CreatePresentSetAsync()
@@ -56,7 +85,12 @@ public class GraphicsManager(IEnumerable<IGraphicsService> graphicsServices, ILo
 								.PresentSet(out var presentSetTask, imageFormat)
 								.BuildAsync();
 
-		this.PresentSet = await presentSetTask;
+		this.presentSet = await presentSetTask;
+	}
+
+	public async Task RedrawAsync()
+	{
+		await connection.Send(pipe!, []);
 	}
 
 	public event Func<Task>? WindowSizeChanged;
@@ -84,8 +118,15 @@ public class GraphicsManager(IEnumerable<IGraphicsService> graphicsServices, ILo
 
 		if (WindowSizeChanged is not null)
 		{
-			await WindowSizeChanged.Invoke();
+			foreach (var handler in WindowSizeChanged.GetInvocationList().Cast<Func<Task>>())
+			{
+				await handler.Invoke();
+			}
 		}
+
+		await BuildActionList();
+
+		await RedrawAsync();
 
 		if (oldPresentSet is not null)
 		{
