@@ -15,7 +15,7 @@ public static class ImageManagerExtensions
 	{
 		var lines = value.Split('\n', '\r').Where(x => !string.IsNullOrEmpty(x));
 
-		int width = lines.Max(x => x.Length);
+		int width = lines.Any() ? lines.Max(x => x.Length) : 0;
 		int height = lines.Count();
 
 		var combined = new StringBuilder();

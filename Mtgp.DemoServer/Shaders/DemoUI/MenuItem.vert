@@ -1,6 +1,7 @@
 ﻿struct InputVertex
 {
-    [Location=0] int x;
+    [VertexIndex] int vertexIndex;
+    [Location=0] int menuIndex;
     [Location=1] int offsetX;
     [Location=2] int offsetY;
     [Location=3] int baseU;
@@ -32,14 +33,14 @@ struct Output
 
 func Output Main(InputVertex input)
 {
-    result.x = input.offsetX + (input.x * (input.length - 1));
+    result.x = input.offsetX + (input.vertexIndex * (input.length - 1));
     result.y = input.offsetY;
-    result.u = input.baseU + (input.x * (input.length - 1));
+    result.u = input.baseU + (input.vertexIndex * (input.length - 1));
     result.v = input.baseV;
 
     var MenuData menu;
 
-    menu = menuData[1];
+    menu = menuData[input.menuIndex];
 
     result.foreground = menu.selectedIndex == input.menuItemIndex ? menu.selectedForeground : menu.defaultForeground;
     result.background = menu.selectedIndex == input.menuItemIndex ? menu.selectedBackground : menu.defaultBackground;

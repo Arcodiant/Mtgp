@@ -1,11 +1,12 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Arch.Core;
+using Microsoft.Extensions.Logging;
 using Mtgp.Server;
 using Mtgp.Server.Shader;
 using Mtgp.Shader;
 
 namespace Mtgp.DemoServer.UI;
 
-public record Menu(Rect2D Area, string[] Items, int SelectedIndex = 0);
+public record Menu(Rect2D Area, (TrueColour Foreground, TrueColour Background) Default, (TrueColour Foreground, TrueColour Background) Selected, string[] Items, int SelectedIndex = 0);
 
 public class MenuManager(ISessionWorld sessionWorld, ILogger<MenuManager> logger)
 	: IGraphicsService
@@ -30,67 +31,12 @@ public class MenuManager(ISessionWorld sessionWorld, ILogger<MenuManager> logger
 		var vertexShader = await graphics.ShaderManager.CreateShaderFromFileAsync("./Shaders/DemoUI/MenuItem.vert");
 		var fragmentShader = await graphics.ShaderManager.CreateShaderFromFileAsync("./Shaders/DemoUI/MenuItem.frag");
 
-		var presentImage = await connection.GetPresentImage(graphics.PresentSet);
+		int itemCapacity = 16;
+		int menuCapacity = 4;
 
-		var menuImage = await graphics.ImageManager.CreateImageFromStringAsync("Hello World!", ImageFormat.T32_SInt);
-
-		int maxPanelCount = 32;
-
-		var (vertexBuffer, vertexBufferOffset) = await graphics.BufferManager.Allocate(8);
-		var (itemBuffer, itemBufferOffset) = await graphics.BufferManager.Allocate(24 * maxPanelCount);
-		var (menuBuffer, menuBufferOffset) = await graphics.BufferManager.Allocate(52 * 2);
+		var (itemBuffer, itemBufferOffset) = await graphics.BufferManager.Allocate(28 * itemCapacity);
+		var (menuBuffer, menuBufferOffset) = await graphics.BufferManager.Allocate(52 * menuCapacity);
 		var (drawBuffer, drawBufferOffset) = await graphics.BufferManager.Allocate(8);
-
-		var vertexData = new byte[8];
-		var itemBufferData = new byte[24 * maxPanelCount];
-		var menuBufferData = new byte[52 * 2];
-		var drawBufferData = new byte[8];
-
-		new BitWriter(vertexData)
-			.Write(0)
-			.Write(1);
-
-		new BitWriter(itemBufferData)
-			.Write(0)
-			.Write(0)
-			.Write(0)
-			.Write(0)
-			.Write(12)
-			.Write(0)
-			.Write(0)
-			.Write(1)
-			.Write(0)
-			.Write(0)
-			.Write(12)
-			.Write(1);
-
-		new BitWriter(menuBufferData)
-			.Write(1)
-			.Write(new TrueColour(0.75f, 0.75f, 0.75f))
-			.Write(TrueColour.White)
-			.Write(TrueColour.Black)
-			.Write(new TrueColour(0.25f, 0.25f, 0.25f))
-			.Write(0)
-			.Write(new TrueColour(0.5f, 0.5f, 1.0f))
-			.Write(TrueColour.White)
-			.Write(TrueColour.Black)
-			.Write(new TrueColour(0.25f, 0.25f, 1.0f));
-
-		new BitWriter(drawBufferData)
-			.Write(2)
-			.Write(2);
-
-		await connection.SetBufferData(vertexBuffer, vertexBufferOffset, vertexData);
-		await connection.SetBufferData(itemBuffer, itemBufferOffset, itemBufferData);
-		await connection.SetBufferData(menuBuffer, menuBufferOffset, menuBufferData);
-		await connection.SetBufferData(drawBuffer, drawBufferOffset, drawBufferData);
-
-		await connection.GetResourceBuilder()
-						.BufferView(out var drawBufferViewTask, drawBuffer.Id, drawBufferOffset, 8)
-						.BufferView(out var menuBufferViewTask, menuBuffer.Id, menuBufferOffset, 52 * 2)
-						.BuildAsync();
-
-		var (drawBufferView, menuBufferView) = await (drawBufferViewTask, menuBufferViewTask);
 
 		await connection.GetResourceBuilder()
 					.RenderPipeline(out var renderPipelineTask,
@@ -100,17 +46,16 @@ public class MenuManager(ISessionWorld sessionWorld, ILogger<MenuManager> logger
 										],
 										new(
 											[
-												new(0, 4, InputRate.PerVertex),
-												new(1, 24, InputRate.PerInstance)
+												new(0, 28, InputRate.PerInstance)
 											],
 											[
 												new(0, 0, ShaderType.Int(4), 0),
-												new(1, 1, ShaderType.Int(4), 0),
-												new(2, 1, ShaderType.Int(4), 4),
-												new(3, 1, ShaderType.Int(4), 8),
-												new(4, 1, ShaderType.Int(4), 12),
-												new(5, 1, ShaderType.Int(4), 16),
-												new(6, 1, ShaderType.Int(4), 20),
+												new(1, 0, ShaderType.Int(4), 4),
+												new(2, 0, ShaderType.Int(4), 8),
+												new(3, 0, ShaderType.Int(4), 12),
+												new(4, 0, ShaderType.Int(4), 16),
+												new(5, 0, ShaderType.Int(4), 20),
+												new(6, 0, ShaderType.Int(4), 24),
 											]),
 											[
 												new(0, ShaderType.Int(4), (1, 0, 0)),
@@ -126,17 +71,135 @@ public class MenuManager(ISessionWorld sessionWorld, ILogger<MenuManager> logger
 
 		var renderPipeline = await renderPipelineTask;
 
-		var frameBuffer = new Messages.FrameBufferInfo(presentImage[PresentImagePurpose.Character].Id, presentImage[PresentImagePurpose.Foreground].Id, presentImage[PresentImagePurpose.Background].Id);
+		ImageHandle? menuImage = default;
 
-		await connection.ResetActionList(mainPipeActionList);
+		async Task UpdateBuffers()
+		{
+			var menus = new List<Menu>();
 
-		await connection.AddBindVertexBuffers(mainPipeActionList, 0, [(vertexBuffer, vertexBufferOffset), (itemBuffer, itemBufferOffset)]);
-		await connection.AddIndirectDrawAction(mainPipeActionList, renderPipeline, [menuImage], [menuBufferView], frameBuffer, drawBufferView, 0);
-		await connection.AddPresentAction(mainPipeActionList, graphics.PresentSet);
+			var query = new QueryDescription().WithAll<Menu>();
+
+			sessionWorld.World.Query(in query, (ref Menu menu) =>
+			{
+				menus.Add(menu);
+			});
+
+			var items = menus.SelectMany((menu, menuIndex) => menu.Items.Select((item, itemIndex) => (MenuIndex: menuIndex, ItemIndex: itemIndex, MenuItem: item))).ToArray();
+			int itemCount = items.Length;
+			int menuCount = menus.Count;
+
+			menuImage = await graphics.ImageManager.CreateImageFromStringAsync(string.Join('\n', items.Select(x => x.MenuItem)), ImageFormat.T32_SInt);
+
+			bool buffersChanged = false;
+
+			if (itemCount > itemCapacity)
+			{
+				itemCapacity = 1 << (int)Math.Ceiling(Math.Log2(itemCount));
+				(itemBuffer, itemBufferOffset) = await graphics.BufferManager.Allocate(28 * itemCapacity);
+
+				buffersChanged = true;
+			}
+
+			if (menuCount > menuCapacity)
+			{
+				menuCapacity = 1 << (int)Math.Ceiling(Math.Log2(menuCount));
+				(menuBuffer, menuBufferOffset) = await graphics.BufferManager.Allocate(52 * menuCapacity);
+
+				buffersChanged = true;
+			}
+
+			var itemBufferData = new byte[28 * itemCount];
+			var menuBufferData = new byte[52 * menuCount];
+			var drawBufferData = new byte[8];
+
+			var itemWriter = new BitWriter(itemBufferData);
+
+			int lineIndex = 0;
+
+			foreach (var (menuIndex, itemIndex, item) in items)
+			{
+				var menu = menus[menuIndex];
+
+				itemWriter = itemWriter.Write(menuIndex)
+										.Write(menu.Area.Offset.X)
+										.Write(menu.Area.Offset.Y + itemIndex)
+										.Write(0)
+										.Write(lineIndex)
+										.Write(Math.Min(item.Length, menu.Area.Extent.Width))
+										.Write(itemIndex);
+
+				lineIndex += 1;
+			}
+
+			var menuWriter = new BitWriter(menuBufferData);
+
+			foreach (var menu in menus)
+			{
+				menuWriter = menuWriter.Write(menu.SelectedIndex)
+										.Write(menu.Default.Foreground)
+										.Write(menu.Selected.Foreground)
+										.Write(menu.Default.Background)
+										.Write(menu.Selected.Background);
+			}
+
+			new BitWriter(drawBufferData)
+				.Write(itemCount)
+				.Write(2);
+
+			await connection.SetBufferData(itemBuffer, itemBufferOffset, itemBufferData);
+			await connection.SetBufferData(menuBuffer, menuBufferOffset, menuBufferData);
+			await connection.SetBufferData(drawBuffer, drawBufferOffset, drawBufferData);
+
+			await BuildActionList();
+		}
+
+		await UpdateBuffers();
+
+		async Task BuildActionList()
+		{
+			var presentImage = await connection.GetPresentImage(graphics.PresentSet);
+
+			var frameBuffer = new Messages.FrameBufferInfo(presentImage[PresentImagePurpose.Character].Id, presentImage[PresentImagePurpose.Foreground].Id, presentImage[PresentImagePurpose.Background].Id);
+
+			await connection.GetResourceBuilder()
+							.BufferView(out var drawBufferViewTask, drawBuffer.Id, drawBufferOffset, 8)
+							.BufferView(out var menuBufferViewTask, menuBuffer.Id, menuBufferOffset, 52 * menuCapacity)
+							.BuildAsync();
+
+			var (drawBufferView, menuBufferView) = await (drawBufferViewTask, menuBufferViewTask);
+
+			await connection.ResetActionList(mainPipeActionList);
+
+			await connection.AddBindVertexBuffers(mainPipeActionList, 0, [(itemBuffer, itemBufferOffset)]);
+			await connection.AddIndirectDrawAction(mainPipeActionList, renderPipeline, [menuImage!], [menuBufferView], frameBuffer, drawBufferView, 0);
+			await connection.AddPresentAction(mainPipeActionList, graphics.PresentSet);
+		}
+
+		await BuildActionList();
+
+		await connection.Send(mainPipe.pipeId, []);
 
 		graphics.WindowSizeChanged += async () =>
 		{
 			await connection.Send(mainPipe.pipeId, []);
 		};
+
+		sessionWorld.SubscribeComponentAdded<Menu>(async (entity, menu) =>
+		{
+			await UpdateBuffers();
+			await connection.Send(mainPipe.pipeId, []);
+		});
+
+		sessionWorld.SubscribeComponentRemoved<Menu>(async (entity, menu) =>
+		{
+			await UpdateBuffers();
+			await connection.Send(mainPipe.pipeId, []);
+		});
+
+		sessionWorld.SubscribeComponentChanged<Menu>(async (entity, menu) =>
+		{
+			await UpdateBuffers();
+			await connection.Send(mainPipe.pipeId, []);
+		});
 	}
 }
