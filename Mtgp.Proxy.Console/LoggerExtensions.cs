@@ -47,10 +47,15 @@ internal static class LoggerExtensions
 		receivedTelnetCloseEventId,
 		"Connection closed by client.");
 
-	private static readonly Action<ILogger, string, char, Exception?> logReceivedTelnetCsiEvent = LoggerMessage.Define<string, char>(
+	private static readonly Action<ILogger, string, char, bool, Exception?> logReceivedTelnetCsiEvent = LoggerMessage.Define<string, char, bool>(
 		telnetReceiveLogLevel,
 		receivedTelnetCsiEventId,
-		"Received CSI: {Value} with suffix {Suffix}");
+		"Received CSI: {Value} with suffix {Suffix}, altered {Altered}");
+
+	private static readonly Action<ILogger, string, char, bool, Exception?> logReceivedTelnetSs3Event = LoggerMessage.Define<string, char, bool>(
+		telnetReceiveLogLevel,
+		receivedTelnetCsiEventId,
+		"Received CSI: {Value} with suffix {Suffix}, altered {Altered}");
 
 	private static readonly Action<ILogger, TelnetEvent, Exception?> logReceivedUnknownTelnetEvent = LoggerMessage.Define<TelnetEvent>(
 		LogLevel.Warning,
@@ -106,7 +111,15 @@ internal static class LoggerExtensions
 	{
 		if (logger.IsEnabled(LogLevel.Debug))
 		{
-			logReceivedTelnetCsiEvent(logger, csiEvent.Value, csiEvent.Suffix, null);
+			logReceivedTelnetCsiEvent(logger, csiEvent.Value, csiEvent.Suffix, csiEvent.Altered, null);
+		}
+	}
+
+	public static void LogReceivedTelnetSs3Event(this ILogger logger, TelnetSs3Event ss3Event)
+	{
+		if (logger.IsEnabled(LogLevel.Debug))
+		{
+			logReceivedTelnetSs3Event(logger, ss3Event.Value, ss3Event.Suffix, ss3Event.Altered, null);
 		}
 	}
 

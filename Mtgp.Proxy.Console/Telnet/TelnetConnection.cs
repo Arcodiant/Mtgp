@@ -3,6 +3,12 @@ using System.Threading.Channels;
 
 namespace Mtgp.Proxy.Telnet;
 
+public enum AnsiEscapeType
+{
+	Csi,
+	Ss3
+}
+
 public class TelnetConnection(TelnetClient client, ILogger<TelnetConnection> logger)
 {
 	private readonly Dictionary<TelnetOption, TaskCompletionSource<byte[]>> waitingSubnegotiations = [];
@@ -13,6 +19,7 @@ public class TelnetConnection(TelnetClient client, ILogger<TelnetConnection> log
 
 	private readonly Channel<string> textChannel = Channel.CreateUnbounded<string>();
 	private readonly Channel<(int, int)> windowSizeChannel = Channel.CreateUnbounded<(int, int)>();
+	private readonly Channel<(AnsiEscapeType, string, char)> ansiEventChannel = Channel.CreateUnbounded<(AnsiEscapeType, string, char)>();
 
 	private readonly CancellationTokenSource readTaskCancellation = new();
 
@@ -20,6 +27,7 @@ public class TelnetConnection(TelnetClient client, ILogger<TelnetConnection> log
 
 	public ChannelReader<string> LineReader => this.textChannel.Reader;
 	public ChannelReader<(int Width, int Height)> WindowSizeReader => this.windowSizeChannel.Reader;
+	public ChannelReader<(AnsiEscapeType Type, string Data, char Terminator)> AnsiEventReader => this.ansiEventChannel.Reader;
 
 	private bool IsRunning => !readTaskCancellation.IsCancellationRequested && readTask != null && !readTask.IsCompleted;
 
@@ -149,6 +157,11 @@ public class TelnetConnection(TelnetClient client, ILogger<TelnetConnection> log
 						return;
 					case TelnetCsiEvent csiEvent:
 						logger.LogReceivedTelnetCsiEvent(csiEvent);
+						await ansiEventChannel.Writer.WriteAsync((AnsiEscapeType.Csi, csiEvent.Value, csiEvent.Suffix));
+						break;
+					case TelnetSs3Event ss3Event:
+						logger.LogReceivedTelnetSs3Event(ss3Event);
+						await ansiEventChannel.Writer.WriteAsync((AnsiEscapeType.Ss3, ss3Event.Value, ss3Event.Suffix));
 						break;
 					default:
 						logger.LogReceivedUnknownTelnetEvent(@event);

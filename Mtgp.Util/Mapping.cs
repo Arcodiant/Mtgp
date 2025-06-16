@@ -28,6 +28,19 @@ public class Mapping<TLeft, TRight>
 		rightToLeft[right] = left;
 	}
 
+	public bool Remove(TLeft left)
+	{
+		if (leftToRight.TryGetValue(left, out var right))
+		{
+			leftToRight.Remove(left);
+			rightToLeft.Remove(right);
+
+			return true;
+		}
+
+		return false;
+	}
+
 	public IEnumerator<KeyValuePair<TLeft, TRight>> GetEnumerator()
 		=> leftToRight.GetEnumerator();
 

@@ -8,6 +8,8 @@ public interface ISessionWorld
 
 	Task<Entity> CreateAsync<T>(T component);
 
+	Task DeleteAsync(Entity entity);
+
 	Task UpdateAsync<T>(Entity entity, Func<T, T> transform);
 
 	void SubscribeComponentAdded<T>(Func<Entity, T, Task> action);
@@ -108,6 +110,26 @@ public class SessionWorld
 			await RunPendingEventsAsync();
 
 			return result;
+		}
+		finally
+		{
+			if (entered)
+			{
+				eventSemaphore.Release();
+			}
+			
+		}
+	}
+
+	public async Task DeleteAsync(Entity entity)
+	{
+		bool entered = false;
+		try
+		{
+			await eventSemaphore.WaitAsync();
+			entered = true;
+			World.Destroy(entity);
+			await RunPendingEventsAsync();
 		}
 		finally
 		{

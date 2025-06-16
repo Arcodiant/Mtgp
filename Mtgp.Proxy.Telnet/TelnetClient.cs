@@ -76,7 +76,7 @@ public class TelnetClient(TcpClient client)
 
 	private async Task PopulateQueue(CancellationToken token)
 	{
-		if (eventQueue.Count == 0)
+		while (eventQueue.Count == 0)
 		{
 			if (!client.Connected)
 			{

@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Mtgp.DemoServer;
+using Mtgp.DemoServer.Modules;
 using Mtgp.DemoServer.UI;
 using Mtgp.Server;
 using Serilog;
@@ -31,6 +32,8 @@ try
 	builder.Services.AddTransient<ISessionService>(provider => provider.GetRequiredService<GraphicsManager>());
 	builder.Services.AddScoped<IGraphicsService, PanelManager>();
 	builder.Services.AddScoped<IGraphicsService, MenuManager>();
+	builder.Services.AddScoped<IDemoModule, WindowSizeEventModule>();
+	builder.Services.AddDefaultFactories();
 
 	var host = builder.Build();
 

@@ -82,6 +82,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 		proxy.RegisterMessageHandler<GetClientShaderCapabilitiesRequest>(GetClientShaderCapabilities);
 
 		eventExtension.RegisterEvent(Events.WindowSizeChanged, _ => this.SendWindowSizeChangedEvent());
+		eventExtension.RegisterEvent(Events.KeyPressed, _ => { });
 
 		_ = Task.Run(async () =>
 		{
@@ -90,6 +91,26 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 				if (this.defaultPipeBindings.TryGetValue(DefaultPipe.Input, out var pipeInfo))
 				{
 					await proxy.SendOutgoingRequestAsync(new SendRequest(0, pipeInfo.PipeId, Encoding.UTF32.GetBytes(line)));
+				}
+			}
+		});
+
+		_ = Task.Run(async () =>
+		{
+			await foreach (var ansiEvent in connection.AnsiEventReader.ReadAllAsync())
+			{
+				Key? pressedKey = ansiEvent.Terminator switch
+				{
+					'A' => Key.UpArrow,
+					'B' => Key.DownArrow,
+					'C' => Key.RightArrow,
+					'D' => Key.LeftArrow,
+					_ => null
+				};
+
+				if (pressedKey is not null)
+				{
+					await eventExtension.FireEventAsync(Events.KeyPressed, [(byte)pressedKey]);
 				}
 			}
 		});

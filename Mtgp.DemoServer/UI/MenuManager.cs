@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Mtgp.Server;
 using Mtgp.Server.Shader;
 using Mtgp.Shader;
+using System.Formats.Asn1;
 
 namespace Mtgp.DemoServer.UI;
 
@@ -184,32 +185,14 @@ public class MenuManager(ISessionWorld sessionWorld, ILogger<MenuManager> logger
 
 		await UpdateBuffers(true);
 
-		graphics.WindowSizeChanged += async () =>
+		async Task HandleComponentEvent(Entity entity, Menu menu)
 		{
-		};
-
-		sessionWorld.SubscribeComponentAdded<Menu>(async (entity, menu) =>
-		{
-			logger.LogDebug("Menu added: {Menu}", menu);
-
 			await UpdateBuffers();
 			await graphics.RedrawAsync();
-		});
+		}
 
-		sessionWorld.SubscribeComponentRemoved<Menu>(async (entity, menu) =>
-		{
-			logger.LogDebug("Menu removed: {Menu}", menu);
-
-			await UpdateBuffers();
-			await graphics.RedrawAsync();
-		});
-
-		sessionWorld.SubscribeComponentChanged<Menu>(async (entity, menu) =>
-		{
-			logger.LogDebug("Menu changed: {Menu}", menu);
-
-			await UpdateBuffers();
-			await graphics.RedrawAsync();
-		});
+		sessionWorld.SubscribeComponentAdded<Menu>(HandleComponentEvent);
+		sessionWorld.SubscribeComponentRemoved<Menu>(HandleComponentEvent);
+		sessionWorld.SubscribeComponentChanged<Menu>(HandleComponentEvent);
 	}
 }

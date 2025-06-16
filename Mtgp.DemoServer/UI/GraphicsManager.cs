@@ -2,6 +2,7 @@
 using Mtgp.Server;
 using Mtgp.Server.Shader;
 using Mtgp.Shader;
+using System.Text;
 
 namespace Mtgp.DemoServer.UI;
 
@@ -66,6 +67,12 @@ public class GraphicsManager(IEnumerable<IGraphicsService> graphicsServices, ILo
 	private async Task BuildActionList()
 	{
 		await connection.ResetActionList(actionList!);
+
+		var presentImages = await connection.GetPresentImage(presentSet!);
+
+		await connection.AddClearBufferAction(actionList!, presentImages[PresentImagePurpose.Character], Encoding.UTF32.GetBytes(" "));
+		await connection.AddClearBufferAction(actionList!, presentImages[PresentImagePurpose.Foreground], TrueColour.White);
+		await connection.AddClearBufferAction(actionList!, presentImages[PresentImagePurpose.Background], TrueColour.Black);
 
 		foreach (var service in graphicsServices)
 		{

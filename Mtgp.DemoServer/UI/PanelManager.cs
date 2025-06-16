@@ -129,7 +129,18 @@ public class PanelManager(ISessionWorld sessionWorld, ILogger<PanelManager> logg
 
 		int panelCount = 0;
 
-		sessionWorld.SubscribeComponentAdded(async (Entity entity, Panel panel) =>
+		async Task UpdateDrawBuffer()
+		{
+			var drawBufferData = new byte[8];
+
+			new BitWriter(drawBufferData)
+				.Write(panelCount)
+				.Write(2);
+
+			await connection.SetBufferData(drawBuffer, drawBufferOffset, drawBufferData);
+		}
+
+		async Task UpdatePanelBuffer(Panel panel, int index)
 		{
 			var panelData = new byte[13 * 4];
 
@@ -142,19 +153,42 @@ public class PanelManager(ISessionWorld sessionWorld, ILogger<PanelManager> logg
 				.Write(panel.Area.Extent.Width)
 				.Write(panel.Area.Extent.Height);
 
-			await connection.SetBufferData(panelBuffer, panelBufferOffset + (13 * 4 * panelCount), panelData);
+			await connection.SetBufferData(panelBuffer, panelBufferOffset + (13 * 4 * index), panelData);
+		}
+
+		sessionWorld.SubscribeComponentAdded(async (Entity entity, Panel panel) =>
+		{
+			int index = panelCount;
+
+			await UpdatePanelBuffer(panel, index);
 
 			this.panelEntityToIndex[entity] = panelCount;
 
 			panelCount++;
 
-			var drawBufferData = new byte[8];
+			await UpdateDrawBuffer();
 
-			new BitWriter(drawBufferData)
-				.Write(panelCount)
-				.Write(2);
+			await graphics.RedrawAsync();
+		});
 
-			await connection.SetBufferData(drawBuffer, drawBufferOffset, drawBufferData);
+		sessionWorld.SubscribeComponentRemoved(async (Entity entity, Panel panel) =>
+		{
+			int index = this.panelEntityToIndex[entity];
+
+			this.panelEntityToIndex.Remove(entity);
+
+			if (panelCount > 1 && index < panelCount - 1)
+			{
+				var lastPanelEntity = this.panelEntityToIndex.RightToLeft[panelCount - 1];
+
+				this.panelEntityToIndex[lastPanelEntity] = index;
+
+				await UpdatePanelBuffer(sessionWorld.World.Get<Panel>(lastPanelEntity), index);
+			}
+
+			panelCount--;
+
+			await UpdateDrawBuffer();
 
 			await graphics.RedrawAsync();
 		});
@@ -163,16 +197,7 @@ public class PanelManager(ISessionWorld sessionWorld, ILogger<PanelManager> logg
 		{
 			int index = this.panelEntityToIndex[entity];
 
-			var panelData = new byte[13 * 4];
-			new BitWriter(panelData)
-				.Write(panel.Background)
-				.Write(panel.BackgroundGradient ?? panel.Background)
-				.Write(panel.Foreground ?? TrueColour.White)
-				.Write(panel.Area.Offset.X)
-				.Write(panel.Area.Offset.Y)
-				.Write(panel.Area.Extent.Width)
-				.Write(panel.Area.Extent.Height);
-			await connection.SetBufferData(panelBuffer, panelBufferOffset + (13 * 4 * index), panelData);
+			await UpdatePanelBuffer(panel, index);
 
 			await graphics.RedrawAsync();
 		});

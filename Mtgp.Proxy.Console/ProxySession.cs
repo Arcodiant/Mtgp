@@ -150,6 +150,8 @@ namespace Mtgp.Proxy
                     {
                         var request = (MtgpRequest)message;
 
+                        logger.LogDebug("Received request {RequestID} of type: {RequestType}", request.Id, request.GetType());
+
 						logger.LogTrace("Received request: {@Request}", request);
 
                         var stopwatch = Stopwatch.StartNew();
@@ -160,7 +162,7 @@ namespace Mtgp.Proxy
 
                         stopwatch.Stop();
 
-                        logger.LogTrace("Handled request {RequestID} in {ElapsedMs}ms", request.Id, stopwatch.Elapsed.TotalMilliseconds);
+                        logger.LogDebug("Handled request {RequestID} in {ElapsedMs}ms", request.Id, stopwatch.Elapsed.TotalMilliseconds);
                     }
                 }
                 else
