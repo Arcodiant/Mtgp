@@ -76,7 +76,7 @@ internal class DemoSession(MtgpConnection connection, ISessionWorld sessionWorld
 		var panel1 = await sessionWorld.CreateAsync(new Panel(new((0, 0), (windowSize.Width, windowSize.Height - 4)), new(0.0f, 0.0f, 0.5f), BackgroundGradient: new(0.25f, 0.25f, 0.75f)));
 		var panel2 = await sessionWorld.CreateAsync(new Panel(new((0, windowSize.Height - 4), (windowSize.Width, 4)), new(0.0f, 0.5f, 0.0f), BackgroundGradient: new(0.25f, 0.75f, 0.25f)));
 
-		var menu1 = await sessionWorld.CreateAsync(new Menu(new(1, 1, 80, 24), ((0.75f, 0.75f, 0.75f), TrueColour.Black), (TrueColour.White, (0.0f, 0.0f, 0.75f)), ["1. First Demo", "2. Second Demo"]));
+		var menu1 = await sessionWorld.CreateAsync(new Menu(new(1, 1, 80, 24), ((0.75f, 0.75f, 0.75f), TrueColour.Black), (TrueColour.White, (0.0f, 0.75f, 0.0f)), ["1. First Demo", "2. Second Demo"]));
 		var menu2 = await sessionWorld.CreateAsync(new Menu(new(1, 4, 80, 24), ((0.75f, 0.75f, 0.75f), TrueColour.Black), (TrueColour.White, (0.75f, 0.0f, 0.0f)), ["3. Third Demo", "4. Fourth Demo", "q. Quit"]));
 
 		onInput = async input =>

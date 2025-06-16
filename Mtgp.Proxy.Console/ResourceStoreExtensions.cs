@@ -63,7 +63,7 @@ internal static class ResourceStoreExtensions
 												[.. renderPipelineInfo.FragmentAttributes.Select(x => (x.Location, x.Type, x.InterpolationScale))],
 												renderPipelineInfo.Viewport,
 												renderPipelineInfo.Scissors,
-												renderPipelineInfo.EnableAlpha,
+												renderPipelineInfo.AlphaIndices,
 												renderPipelineInfo.PolygonMode));
 
 		store.AddReferences<RenderPipeline, ShaderExecutor>(id, shaders.Values);

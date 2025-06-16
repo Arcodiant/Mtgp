@@ -102,7 +102,7 @@ public class PanelManager(ISessionWorld sessionWorld, ILogger<PanelManager> logg
 											],
 										null,
 										[],
-										false,
+										[],
 										PolygonMode.Fill)
 					.BuildAsync();
 

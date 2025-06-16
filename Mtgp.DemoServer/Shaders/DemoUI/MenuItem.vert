@@ -29,6 +29,7 @@ struct Output
     [Location=1] int v;
     [Location=2] vec<float, 3> foreground;
     [Location=3] vec<float, 3> background;
+    [Location=4] float alpha;
 }
 
 func Output Main(InputVertex input)
@@ -44,4 +45,5 @@ func Output Main(InputVertex input)
 
     result.foreground = menu.selectedIndex == input.menuItemIndex ? menu.selectedForeground : menu.defaultForeground;
     result.background = menu.selectedIndex == input.menuItemIndex ? menu.selectedBackground : menu.defaultBackground;
+    result.alpha = menu.selectedIndex == input.menuItemIndex ? 1.0 : 0.0;
 }

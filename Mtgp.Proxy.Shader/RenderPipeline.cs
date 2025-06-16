@@ -11,7 +11,7 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderExecutor> shaderStages
 							  (int Location, ShaderType Type, Scale InterpolationScale)[] fragmentAttributes,
 							  Rect3D? viewport,
 							  Rect3D[]? scissors,
-							  bool enableAlpha,
+							  int[] alphaIndices,
 							  PolygonMode polygonMode)
 	: IShaderProxyResource
 {
@@ -83,7 +83,8 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderExecutor> shaderStages
 						int size = attribute.Type.Size;
 
 						buffer.Buffer.AsSpan(bindingOffset + attribute.Offset, size).CopyTo(inputSpan[offset..]);
-					};
+					}
+					;
 
 					foreach (var (builtin, offset) in vertex.InputMappings.Builtins)
 					{
@@ -103,7 +104,8 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderExecutor> shaderStages
 							default:
 								throw new NotSupportedException($"Builtin {builtin} is not supported in vertex shader input.");
 						}
-					};
+					}
+					;
 
 					var outputSpan = primitiveSpan[(vertexIndex * vertex.OutputMappings.Size)..][..vertex.OutputMappings.Size];
 
@@ -199,21 +201,28 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderExecutor> shaderStages
 							throw new NotSupportedException($"Builtin {builtin} is not supported in fragment shader input.");
 					}
 				}
-				;
 
-				int outputSize = ShaderType.Textel.Size;
+				int outputSize = fragment.OutputMappings.Size;
 
 				var output = new byte[outputSize];
 
 				fragment.Execute(imageAttachments, bufferViewAttachments, fragmentInput, output);
 
+				float alpha = 1.0f;
+
+				if (fragment.OutputMappings.Builtins.ContainsKey(Builtin.Alpha))
+				{
+					var alphaValue = fragment.OutputMappings.GetBuiltin(output, Builtin.Alpha);
+					new BitReader(alphaValue).Read(out alpha);
+				}
+
 				int pixelX = x + (viewport?.Offset?.X ?? 0);
 				int pixelY = y + (viewport?.Offset?.Y ?? 0);
 
-				//alpha = enableAlpha ? alpha : 1.0f;
-
 				for (int frameAttachmentIndex = 0; frameAttachmentIndex < frameBuffer.Attachments.Length; frameAttachmentIndex++)
 				{
+					float attachmentAlpha = alphaIndices.Contains(frameAttachmentIndex) ? alpha : 1.0f;
+
 					var attachment = frameBuffer.Attachments[frameAttachmentIndex];
 					int index = pixelX + pixelY * attachment.Size.Width;
 
@@ -222,18 +231,19 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderExecutor> shaderStages
 
 					var target = attachment.Data.Span[(index * size)..][..size];
 
-					if (format == ImageFormat.R32G32B32_SFloat || format == ImageFormat.T32_SInt)
+					if (format == ImageFormat.T32_SInt)
 					{
 						fragment.OutputMappings.GetLocation(output, frameAttachmentIndex)[..size].CopyTo(target);
 					}
 					else
 					{
 						var colour = TextelUtil.GetColour(fragment.OutputMappings.GetLocation(output, frameAttachmentIndex), ImageFormat.R32G32B32_SFloat).TrueColour;
+						colour = TrueColour.Lerp(TextelUtil.GetColour(target, format).TrueColour, colour, attachmentAlpha);
 						TextelUtil.SetColour(target, colour, format);
 					}
 				}
 			}
-			catch(Exception ex)
+			catch (Exception ex)
 			{
 				logger.LogError(ex, "Error in fragment shader execution at ({X}, {Y})", frag.X, frag.Y);
 			}

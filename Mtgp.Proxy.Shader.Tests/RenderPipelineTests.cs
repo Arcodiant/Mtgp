@@ -76,7 +76,7 @@ public class RenderPipelineTests
 			[(0, ShaderType.Int(4), new(1, 0, 0)), (1, ShaderType.Int(4), new(0, 1, 0))],
 			new(new(0, 0, 0), new(10, 10, 1)),
 			null,
-			false,
+			[],
 			PolygonMode.Fill
 		);
 
@@ -142,7 +142,7 @@ public class RenderPipelineTests
 			[],
 			new(new(0, 0, 0), new(10, 10, 1)),
 			null,
-			false,
+			[],
 			PolygonMode.Fill
 		);
 

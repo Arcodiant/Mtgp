@@ -63,10 +63,11 @@ public class MenuManager(ISessionWorld sessionWorld, ILogger<MenuManager> logger
 												new(1, ShaderType.Int(4), (0, 1, 0)),
 												new(2, ShaderType.VectorOf(ShaderType.Float(4), 3), (1, 1, 0)),
 												new(3, ShaderType.VectorOf(ShaderType.Float(4), 3), (1, 1, 0)),
+												new(4, ShaderType.Float(4), (1, 1, 0)),
 											],
 										null,
 										[],
-										false,
+										[2],
 										PolygonMode.Fill)
 					.BuildAsync();
 

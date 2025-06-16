@@ -126,7 +126,7 @@ public class UIManager(IShaderManager shaderManager, IBufferManager bufferManage
 										],
 										new((0, 0, 0), (size.Width, size.Height, 1)),
 										[],
-										false,
+										[],
 										PolygonMode.Fill)
 					.BuildAsync();
 
@@ -207,7 +207,7 @@ public class UIManager(IShaderManager shaderManager, IBufferManager bufferManage
 										],
 										new((area.Offset.X, area.Offset.Y, 0), (area.Extent.Width, area.Extent.Height, 1)),
 										[],
-										transparentBackground,
+										transparentBackground ? [2] : [],
 										PolygonMode.Fill)
 					.BuildAsync();
 

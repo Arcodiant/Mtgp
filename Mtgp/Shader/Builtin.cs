@@ -7,5 +7,6 @@ public enum Builtin
 	PositionX,
 	PositionY,
 	Timer,
-	WorkgroupId
+	WorkgroupId,
+	Alpha
 }
