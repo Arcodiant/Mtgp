@@ -7,4 +7,4 @@ public record SubscribeEventRequest(int Id, QualifiedName Event)
 }
 
 public record SubscribeEventResponse(int Id, int PipeId)
-	: MtgpResponse(Id, "ok");
+	: MtgpResponse(Id, Ok);

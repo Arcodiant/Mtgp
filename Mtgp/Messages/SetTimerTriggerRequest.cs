@@ -5,3 +5,6 @@ public record SetTimerTriggerRequest(int Id, int ActionList, int Milliseconds)
 {
 	public static string Command => "core.shader.setTimerTrigger";
 }
+
+public record SetTimerTriggerResponse(int Id, int TimerId)
+	: MtgpResponse(Id, Ok);

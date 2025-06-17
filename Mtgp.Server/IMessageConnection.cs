@@ -23,8 +23,11 @@ namespace Mtgp.Server
 		public static async Task<PipeHandle> SubscribeEventAsync(this IMessageConnection connection, QualifiedName eventName)
 			=> new((await connection.SendAsync<SubscribeEventResponse>(new SubscribeEventRequest(0, eventName))).PipeId);
 
-		public static async Task SetTimerTrigger(this IMessageConnection connection, ActionListHandle actionList, int milliseconds)
-			=> await connection.SendAsync(new SetTimerTriggerRequest(0, actionList.Id, milliseconds));
+		public static async Task<int> SetTimerTrigger(this IMessageConnection connection, ActionListHandle actionList, int milliseconds)
+			=> (await connection.SendAsync<SetTimerTriggerResponse>(new SetTimerTriggerRequest(0, actionList.Id, milliseconds))).TimerId;
+
+		public static async Task DeleteTimerTrigger(this IMessageConnection connection, int timerId)
+			=> await connection.SendAsync(new DeleteTimerTriggerRequest(0, timerId));
 
 		public static async Task OpenUrl(this IMessageConnection connection, string url)
 			=> await connection.SendAsync(new OpenUrlRequest(0, url));

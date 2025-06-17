@@ -30,9 +30,12 @@ try
 	builder.Services.AddScoped<GraphicsManager>();
 	builder.Services.AddTransient<IGraphicsManager>(provider => provider.GetRequiredService<GraphicsManager>());
 	builder.Services.AddTransient<ISessionService>(provider => provider.GetRequiredService<GraphicsManager>());
+	builder.Services.AddScoped<ParallaxStarsManager>();
+	builder.Services.AddTransient<IGraphicsService>(provider => provider.GetRequiredService<ParallaxStarsManager>());
 	builder.Services.AddScoped<IGraphicsService, PanelManager>();
 	builder.Services.AddScoped<IGraphicsService, MenuManager>();
 	builder.Services.AddScoped<IDemoModule, WindowSizeEventModule>();
+	builder.Services.AddScoped<IDemoModule, ParallaxStarsModule>();
 	builder.Services.AddDefaultFactories();
 
 	var host = builder.Build();

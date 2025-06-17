@@ -19,6 +19,8 @@ public interface IGraphicsManager
 	Task SetWindowSizeAsync(Extent2D size);
 
 	Task RedrawAsync();
+	Task SetTimerAsync(TimeSpan period);
+	Task DeleteTimerAsync();
 }
 
 public interface IGraphicsService
@@ -36,6 +38,8 @@ public class GraphicsManager(IEnumerable<IGraphicsService> graphicsServices, ILo
 
 	private ActionListHandle? actionList;
 	private PipeHandle? pipe;
+
+	private int? timerId;
 
 	public async Task InitialiseAsync(IMessageConnection connection)
 	{
@@ -62,6 +66,23 @@ public class GraphicsManager(IEnumerable<IGraphicsService> graphicsServices, ILo
 		await BuildActionList();
 
 		await RedrawAsync();
+	}
+
+	public async Task SetTimerAsync(TimeSpan period)
+	{
+		if (timerId is null)
+		{
+			timerId = await connection.SetTimerTrigger(actionList!, (int)period.TotalMilliseconds);
+		}
+	}
+
+	public async Task DeleteTimerAsync()
+	{
+		if (timerId is not null)
+		{
+			await connection.DeleteTimerTrigger(timerId.Value);
+			timerId = null;
+		}
 	}
 
 	private async Task BuildActionList()

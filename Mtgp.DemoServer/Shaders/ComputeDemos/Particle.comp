@@ -1,0 +1,17 @@
+﻿struct Input
+{
+    [WorkgroupId] int workgroupId;
+}
+
+[Binding=0] uniform array<vec<int,4>> currentParticles;
+[Binding=1] uniform array<vec<int,4>> newParticles;
+
+func void Main(Input input)
+{
+    var vec<int,4> particle;
+    particle = currentParticles[input.workgroupId];
+    var int newX;
+    newX = particle.x + particle.w;
+    newX = newX > 130 ? particle.z : newX;
+    newParticles[input.workgroupId] = Vec(newX, particle.y, particle.z, particle.w);
+}

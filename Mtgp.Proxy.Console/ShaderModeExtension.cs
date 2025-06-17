@@ -41,6 +41,9 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 	private TelnetPresentReceiver? presentReceiver;
 	private PresentOptimiser? presentOptimiser;
 
+	private Dictionary<int, (CancellationTokenSource CancellationSource, Task Task)> runningTimers = [];
+	private int nextTimerId = 0;
+
 	private Extent2D size = new(80, 25);
 
 	public async Task SetupAsync()
@@ -67,6 +70,7 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 		proxy.RegisterMessageHandler<GetPresentImageRequest>(GetPresentImage);
 		proxy.RegisterMessageHandler<SetBufferDataRequest>(SetBufferData);
 		proxy.RegisterMessageHandler<SetTimerTriggerRequest>(SetTimerTrigger);
+		proxy.RegisterMessageHandler<DeleteTimerTriggerRequest>(DeleteTimerTrigger);
 		proxy.RegisterMessageHandler<ResetActionListRequest>(ResetActionList);
 		proxy.RegisterMessageHandler<ClearStringSplitPipelineRequest>(ClearStringSplitPipeline);
 		proxy.RegisterMessageHandler<AddCopyBufferToImageActionRequest>(AddCopyBufferToImageAction);
@@ -145,15 +149,19 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 			ColourFormat.TrueColour => [ImageFormat.Ansi16, ImageFormat.Ansi256, ImageFormat.R32G32B32_SFloat],
 		}));
 
-	private MtgpResponse SetTimerTrigger(SetTimerTriggerRequest request)
+	private SetTimerTriggerResponse SetTimerTrigger(SetTimerTriggerRequest request)
 	{
 		int actionList = request.ActionList;
 
-		_ = Task.Run(async () =>
+		int timerId = nextTimerId++;
+
+		var cancellationSource = new CancellationTokenSource();
+
+		var timerTask = Task.Run(async () =>
 		{
 			await Task.Delay(request.Milliseconds);
 
-			while (true)
+			while (!cancellationSource.Token.IsCancellationRequested)
 			{
 				var delay = Task.Delay(request.Milliseconds);
 
@@ -163,7 +171,26 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 			}
 		});
 
-		return new MtgpResponse(0, "ok");
+		this.runningTimers[timerId] = (cancellationSource, timerTask);
+
+		return new SetTimerTriggerResponse(0, timerId);
+	}
+
+	private MtgpResponse DeleteTimerTrigger(DeleteTimerTriggerRequest request)
+	{
+		if (this.runningTimers.TryGetValue(request.TimerId, out var timerInfo))
+		{
+			this.runningTimers.Remove(request.TimerId);
+
+			timerInfo.CancellationSource.Cancel();
+			timerInfo.Task.Wait();
+
+			return new MtgpResponse(0, "ok");
+		}
+		else
+		{
+			return new MtgpResponse(0, "invalidRequest");
+		}
 	}
 
 	private MtgpResponse ClearStringSplitPipeline(ClearStringSplitPipelineRequest request)

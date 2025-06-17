@@ -88,22 +88,22 @@ internal class MainMenuModule(IGraphicsManager graphics, ISessionWorld sessionWo
 	{
 		switch (key)
 		{
-			case Key.UpArrow:
+			case Key.DownArrow:
 				selectedIndex++;
 
-				if (selectedIndex > 1)
+				if (selectedIndex >= this.moduleLookup.Count)
 				{
 					selectedIndex = 0;
 				}
 
 				await sessionWorld.UpdateAsync<Menu>(menu, x => x with { SelectedIndex = selectedIndex });
 				break;
-			case Key.DownArrow:
+			case Key.UpArrow:
 				selectedIndex--;
 
 				if (selectedIndex < 0)
 				{
-					selectedIndex = 1;
+					selectedIndex = this.moduleLookup.Count - 1;
 				}
 				await sessionWorld.UpdateAsync<Menu>(menu, x => x with { SelectedIndex = selectedIndex });
 				break;
