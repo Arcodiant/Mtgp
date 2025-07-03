@@ -127,7 +127,8 @@ public class UIManager(IShaderManager shaderManager, IBufferManager bufferManage
 										new((0, 0, 0), (size.Width, size.Height, 1)),
 										[],
 										[],
-										PolygonMode.Fill)
+										PolygonMode.Fill,
+										PrimitiveTopology.AxisAlignedQuadList)
 					.BuildAsync();
 
 		var renderPipeline = await renderPipelineTask;
@@ -208,7 +209,8 @@ public class UIManager(IShaderManager shaderManager, IBufferManager bufferManage
 										new((area.Offset.X, area.Offset.Y, 0), (area.Extent.Width, area.Extent.Height, 1)),
 										[],
 										transparentBackground ? [2] : [],
-										PolygonMode.Fill)
+										PolygonMode.Fill,
+										PrimitiveTopology.AxisAlignedQuadList)
 					.BuildAsync();
 
 		var stringSplitRenderPipeline = await stringSplitRenderPipelineTask;

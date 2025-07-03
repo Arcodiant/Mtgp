@@ -94,7 +94,8 @@ internal class FlightSession(MtgpConnection connection, IWorldManager world)
 									new(new(0, 0, 0), new(120, 36, 1)),
 									[],
 									[],
-									PolygonMode.Fill)
+									PolygonMode.Fill,
+									PrimitiveTopology.AxisAlignedQuadList)
 				.RenderPipeline(out var titleImageRenderPipelineTask,
 									[new(ShaderStage.Vertex, titleImageVertexShader.Id, "Main"), new(ShaderStage.Fragment, titleImageFragmentShader.Id, "Main")],
 									new([new(0, 16, InputRate.PerInstance)],
@@ -111,7 +112,8 @@ internal class FlightSession(MtgpConnection connection, IWorldManager world)
 									new(new(0, 0, 0), new(120, 36, 1)),
 									[],
 									[],
-									PolygonMode.Fill)
+									PolygonMode.Fill,
+									PrimitiveTopology.AxisAlignedQuadList)
 				.BuildAsync();
 
 		var actionList = await actionListTask;

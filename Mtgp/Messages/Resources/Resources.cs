@@ -51,7 +51,7 @@ public record CreatePipeInfo(IdOrRef ActionList, string? Reference = null)
 	public const string ResourceType = "pipe";
 }
 
-public record CreateRenderPipelineInfo(ShaderStageInfo[] ShaderStages, VertexInputInfo VertexInput, FragmentAttribute[] FragmentAttributes, Rect3D? Viewport, Rect3D[] Scissors, int[] AlphaIndices, PolygonMode PolygonMode, string? Reference = null)
+public record CreateRenderPipelineInfo(ShaderStageInfo[] ShaderStages, VertexInputInfo VertexInput, FragmentAttribute[] FragmentAttributes, Rect3D? Viewport, Rect3D[] Scissors, int[] AlphaIndices, PolygonMode PolygonMode, PrimitiveTopology PrimitiveTopology, string? Reference = null)
 	: ResourceInfo(Reference), ICreateResourceInfo
 {
 	static string ICreateResourceInfo.ResourceType => ResourceType;

@@ -77,7 +77,8 @@ public class RenderPipelineTests
 			new(new(0, 0, 0), new(10, 10, 1)),
 			null,
 			[],
-			PolygonMode.Fill
+			PolygonMode.Fill,
+			PrimitiveTopology.AxisAlignedQuadList
 		);
 
 		var frameBufferImages = new ImageState[]
@@ -143,7 +144,8 @@ public class RenderPipelineTests
 			new(new(0, 0, 0), new(10, 10, 1)),
 			null,
 			[],
-			PolygonMode.Fill
+			PolygonMode.Fill,
+			PrimitiveTopology.AxisAlignedQuadList
 		);
 
 		var frameBufferImages = new ImageState[]

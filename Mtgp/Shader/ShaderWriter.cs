@@ -189,6 +189,12 @@ public readonly ref struct ShaderWriter(BitWriter writer)
 							.Write(type)
 							.Write(value));
 
+	public readonly ShaderWriter FloatToInt(int result, int type, int value)
+		=> new(this.Write(ShaderOp.FloatToInt, ShaderOpConstants.ConvertWordCount)
+							.Write(result)
+							.Write(type)
+							.Write(value));
+
 	public readonly ShaderWriter Abs(int result, int type, int value)
 		=> new(this.Write(ShaderOp.Abs, ShaderOpConstants.UnaryWordCount)
 							.Write(result)

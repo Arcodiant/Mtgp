@@ -20,7 +20,7 @@ public enum TelnetCommand
     /// </summary>
     BRK = 243,
     /// <summary>
-    /// Interupt Process
+    /// Interrupt Process
     /// </summary>
     IP = 244,
     /// <summary>

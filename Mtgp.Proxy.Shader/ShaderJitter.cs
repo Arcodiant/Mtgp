@@ -546,6 +546,25 @@ public class ShaderJitter
 						SetValue(resultId, opType, emitter => EmitValue(emitter, valueId).Convert<float>(), constantValue);
 						break;
 					}
+				case ShaderOp.FloatToInt:
+					{
+						reader.FloatToInt(out int resultId, out int typeId, out int valueId);
+						var opType = types[typeId];
+						if (opType != ShaderType.Int(4))
+						{
+							throw new InvalidOperationException($"FloatToInt result must be int");
+						}
+
+						Field? constantValue = null;
+
+						if (constants.TryGetValue(valueId, out var constant))
+						{
+							constantValue = (int)constant.Value.Float;
+						}
+
+						SetValue(resultId, opType, emitter => EmitValue(emitter, valueId).Convert<int>(), constantValue);
+						break;
+					}
 				case ShaderOp.Add:
 					{
 						reader.Add(out int resultId, out int typeId, out int leftId, out int rightId);

@@ -57,16 +57,19 @@
         "type": "FragmentAttribute[]"
       },
       "viewport": {
-        "type": "Rect3D"
+        "type": "Rect3D?"
       },
       "scissors": {
         "type": "Rect3D[]"
       },
-      "enableAlpha": {
-        "type": "bool"
+      "alphaIndices": {
+        "type": "int[]"
       },
       "polygonMode": {
         "type": "PolygonMode"
+      },
+      "primitiveTopology": {
+        "type": "PrimitiveTopology"
       }
     },
     "shader": {

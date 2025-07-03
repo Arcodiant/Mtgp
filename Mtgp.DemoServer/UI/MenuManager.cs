@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging;
 using Mtgp.Server;
 using Mtgp.Server.Shader;
 using Mtgp.Shader;
-using System.Formats.Asn1;
 
 namespace Mtgp.DemoServer.UI;
 
@@ -69,7 +68,8 @@ public class MenuManager(ISessionWorld sessionWorld, ILogger<MenuManager> logger
 										null,
 										[],
 										[2],
-										PolygonMode.Fill)
+										PolygonMode.Fill,
+										PrimitiveTopology.AxisAlignedQuadList)
 					.BuildAsync();
 
 		var renderPipeline = await renderPipelineTask;

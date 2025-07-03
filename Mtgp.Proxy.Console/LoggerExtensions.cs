@@ -55,7 +55,7 @@ internal static class LoggerExtensions
 	private static readonly Action<ILogger, string, char, bool, Exception?> logReceivedTelnetSs3Event = LoggerMessage.Define<string, char, bool>(
 		telnetReceiveLogLevel,
 		receivedTelnetCsiEventId,
-		"Received CSI: {Value} with suffix {Suffix}, altered {Altered}");
+		"Received SS3: {Value} with suffix {Suffix}, altered {Altered}");
 
 	private static readonly Action<ILogger, TelnetEvent, Exception?> logReceivedUnknownTelnetEvent = LoggerMessage.Define<TelnetEvent>(
 		LogLevel.Warning,

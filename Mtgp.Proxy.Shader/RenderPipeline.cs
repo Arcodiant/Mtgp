@@ -12,7 +12,8 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderExecutor> shaderStages
 							  Rect3D? viewport,
 							  Rect3D[]? scissors,
 							  int[] alphaIndices,
-							  PolygonMode polygonMode)
+							  PolygonMode polygonMode,
+							  PrimitiveTopology primitiveTopology)
 	: IShaderProxyResource
 {
 	public static string ResourceType => CreateRenderPipelineInfo.ResourceType;
@@ -24,7 +25,13 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderExecutor> shaderStages
 		var vertex = shaderStages[ShaderStage.Vertex];
 		var fragment = shaderStages[ShaderStage.Fragment];
 
-		const int vertexPerPrimitive = 2;
+		int vertexPerPrimitive =
+			primitiveTopology switch
+			{
+				PrimitiveTopology.AxisAlignedQuadList => 2,
+				PrimitiveTopology.LineStrip => 2,
+				_ => throw new NotSupportedException($"Primitive topology {primitiveTopology} is not supported."),
+			};
 
 		int primitiveCount = vertexCount / vertexPerPrimitive;
 
@@ -117,29 +124,80 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderExecutor> shaderStages
 				int toX = BitConverter.ToInt32(vertex.OutputMappings.GetBuiltin(primitiveSpan, Builtin.PositionX, 1));
 				int toY = BitConverter.ToInt32(vertex.OutputMappings.GetBuiltin(primitiveSpan, Builtin.PositionY, 1));
 
-				int deltaX = toX - fromX;
-				int deltaY = toY - fromY;
+				int deltaX = Math.Abs(toX - fromX);
+				int deltaY = Math.Abs(toY - fromY);
 
-				for (int y = fromY; y < toY + 1; y++)
+				void AddFragment(int x, int y)
 				{
-					double yNormalised = deltaY == 0f ? 0f : (double)(y - fromY) / deltaY;
-
-					for (int x = fromX; x < toX + 1; x++)
+					if (MathsUtil.IsWithin((x, y), (0, 0), (maxX - 1, maxY - 1)))
 					{
-						if (polygonMode == PolygonMode.Line && !(x == fromX || x == toX || y == fromY || y == toY))
-						{
-							continue;
-						}
-
-						if (!MathsUtil.IsWithin((x, y), (0, 0), (maxX - 1, maxY - 1)))
-						{
-							continue;
-						}
-
 						double xNormalised = deltaX == 0f ? 0f : (double)(x - fromX) / deltaX;
+						double yNormalised = deltaY == 0f ? 0f : (double)(y - fromY) / deltaY;
 
 						fragments.Add((x, y, xNormalised, yNormalised, instanceIndex, primitiveIndex));
 					}
+				}
+
+				switch (primitiveTopology)
+				{
+					case PrimitiveTopology.AxisAlignedQuadList:
+						for (int y = fromY; y < toY + 1; y++)
+						{
+							double yNormalised = deltaY == 0f ? 0f : (double)(y - fromY) / deltaY;
+
+							for (int x = fromX; x < toX + 1; x++)
+							{
+								if (polygonMode == PolygonMode.Line && !(x == fromX || x == toX || y == fromY || y == toY))
+								{
+									continue;
+								}
+
+								if (!MathsUtil.IsWithin((x, y), (0, 0), (maxX - 1, maxY - 1)))
+								{
+									continue;
+								}
+
+								double xNormalised = deltaX == 0f ? 0f : (double)(x - fromX) / deltaX;
+
+								AddFragment(x, y);
+							}
+						}
+						break;
+					case PrimitiveTopology.LineStrip:
+						{
+							int sx = fromX < toX ? 1 : -1;
+							int sy = fromY < toY ? 1 : -1;
+
+							int err = deltaX - deltaY;
+
+							int x = fromX;
+							int y = fromY;
+
+							AddFragment(x, y);
+
+							while (x != toX || y != toY)
+							{
+								int e2 = 2 * err;
+
+								if (e2 > -deltaY)
+								{
+									err -= deltaY;
+									x += sx;
+								}
+
+								if (e2 < deltaX)
+								{
+									err += deltaX;
+									y += sy;
+								}
+								
+								AddFragment(x, y);
+							}
+
+							break;
+						}
+					default:
+						throw new NotSupportedException($"Primitive topology {primitiveTopology} is not supported.");
 				}
 			}
 		}

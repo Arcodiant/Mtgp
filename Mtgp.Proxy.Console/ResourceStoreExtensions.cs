@@ -64,7 +64,8 @@ internal static class ResourceStoreExtensions
 												renderPipelineInfo.Viewport,
 												renderPipelineInfo.Scissors,
 												renderPipelineInfo.AlphaIndices,
-												renderPipelineInfo.PolygonMode));
+												renderPipelineInfo.PolygonMode,
+												renderPipelineInfo.PrimitiveTopology));
 
 		store.AddReferences<RenderPipeline, ShaderExecutor>(id, shaders.Values);
 

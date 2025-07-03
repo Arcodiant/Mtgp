@@ -106,7 +106,8 @@ internal class ParallaxStarsManager()
 									new(new(0, 0, 0), new(120, 36, 1)),
 									[],
 									[],
-									PolygonMode.Fill)
+									PolygonMode.Fill,
+									PrimitiveTopology.AxisAlignedQuadList)
 				.BuildAsync();
 
 		(actionList, currentParticlesBufferView, nextParticlesBufferView, computePipeline, renderPipeline) = await (actionListTask, currentParticlesBufferViewTask, nextParticlesBufferViewTask, computePipelineTask, renderPipelineTask);

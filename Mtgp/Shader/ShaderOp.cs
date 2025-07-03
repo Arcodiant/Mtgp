@@ -31,6 +31,7 @@ public enum ShaderOp
 	Divide,
 	Multiply,
 	IntToFloat,
+	FloatToInt,
 	Abs,
 	Negate,
 	AccessChain,

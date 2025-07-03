@@ -12,18 +12,22 @@ internal class WindowSizeEventModule(ISessionWorld sessionWorld)
 
 	public bool IsRunning { get; private set; }
 
+	private Entity guide;
+
 	public string Name => "Window Size Events";
 
 	public async Task InitialiseAsync(IMessageConnection connection)
 	{
 		this.IsRunning = true;
 
-		this.panel = await sessionWorld.CreateAsync(new Panel(new(0, 0, 80, 24), (0.5f, 0.5f, 0.5f)));
+		//this.panel = await sessionWorld.CreateAsync(new Panel(new(0, 0, 80, 24), (0.5f, 0.5f, 0.5f)));
+		this.guide = await sessionWorld.CreateAsync(new DimensionGuide(new(0, 0, 80, 24), TrueColour.White));
 	}
 
 	public async Task HideAsync(IMessageConnection connection)
 	{
-		await sessionWorld.DeleteAsync(this.panel);
+		//await sessionWorld.DeleteAsync(this.panel);
+		await sessionWorld.DeleteAsync(this.guide);
 	}
 
 	public Task OnInput(string data)

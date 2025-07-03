@@ -24,11 +24,9 @@ public class PanelManager(ISessionWorld sessionWorld, ILogger<PanelManager> logg
 		this.connection = connection;
 
 		await connection.GetResourceBuilder()
-					.ActionList(out var mainPipeActionListTask, "mainActionList")
-					.Pipe(out var mainPipeTask, "mainActionList")
+					.ActionList(out var mainPipeActionListTask)
 					.BuildAsync();
 
-		var pipeId = await mainPipeTask;
 		actionList = await mainPipeActionListTask;
 
 		var characters = new char[3, 3]
@@ -103,7 +101,8 @@ public class PanelManager(ISessionWorld sessionWorld, ILogger<PanelManager> logg
 										null,
 										[],
 										[],
-										PolygonMode.Fill)
+										PolygonMode.Fill,
+										PrimitiveTopology.AxisAlignedQuadList)
 					.BuildAsync();
 
 		var renderPipeline = await renderPipelineTask;

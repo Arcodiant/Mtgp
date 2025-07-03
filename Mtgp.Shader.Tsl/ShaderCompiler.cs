@@ -276,7 +276,7 @@ public class ShaderCompiler
 			{
 				return ShaderType.VectorOf(GetType((TypeReference)type.Arguments[0]), ((IntegerTypeArgument)type.Arguments[1]).Value);
 			}
-			else if(type.Token == "array")
+			else if (type.Token == "array")
 			{
 				return ShaderType.RuntimeArrayOf(GetType((TypeReference)type.Arguments[0]));
 			}
@@ -562,14 +562,45 @@ public class ShaderCompiler
 
 		ShaderState WriteAssignment(ShaderState state, AssignStatement assignment)
 		{
-			state = WriteExpression(state, assignment.RightHand, out int rightId, out _);
-			state = assignment.LeftHand switch
+			state = WriteExpression(state, assignment.RightHand, out int rightId, out var rightType);
+
+			int leftPointer;
+			ShaderType leftType;
+
+			switch (assignment.LeftHand)
 			{
-				BinaryExpression binaryExpression => state.WithCodeWriter(state.CodeWriter.Store(GetVarId(binaryExpression), rightId)),
-				ArrayAccessExpression arrayAccessExpression => WriteLeftHandArrayAccessExpressionAndStore(state, arrayAccessExpression, rightId),
-				TokenExpression tokenExpression => state.WithCodeWriter(state.CodeWriter.Store(GetTokenVarId(tokenExpression), rightId)),
-				_ => throw new Exception($"Unknown left hand type: {assignment.LeftHand}")
-			};
+				case TokenExpression tokenExpression:
+					leftPointer = GetTokenVarId(tokenExpression);
+					leftType = vars.Single(x => x.Id == leftPointer).Type;
+					break;
+				case ArrayAccessExpression arrayAccessExpression:
+					state = WriteArrayAccessExpression(state, arrayAccessExpression, out leftPointer, out leftType);
+					break;
+				case BinaryExpression binaryExpression:
+					leftPointer = GetVarId(binaryExpression);
+					leftType = idTypes[leftPointer];
+					break;
+				default:
+					throw new Exception($"Unknown left hand type: {assignment.LeftHand}");
+			}
+
+			if (leftType.ElementType! != rightType)
+			{
+				if (leftType.ElementType!.IsFloat() && rightType.IsInt())
+				{
+					state = WriteIntToFloat(state, rightId, out rightId, out rightType);
+				}
+				else if (leftType.ElementType!.IsInt() && rightType.IsFloat())
+				{
+					state = WriteFloatToInt(state, rightId, out rightId, out rightType);
+				}
+				else
+				{
+					throw new Exception($"Cannot assign {rightType} to {leftType.ElementType}");
+				}
+			}
+
+			state = state.WithCodeWriter(state.CodeWriter.Store(leftPointer, rightId));
 
 			return state;
 		}
@@ -967,6 +998,16 @@ public class ShaderCompiler
 			int typeId = GetTypeId(ref typesWriter, type);
 
 			return new(typesWriter, state.CodeWriter.IntToFloat(id, typeId, value));
+		}
+		ShaderState WriteFloatToInt(ShaderState state, int value, out int id, out ShaderType type)
+		{
+			type = ShaderType.Int(4);
+			id = GetNextId(type);
+
+			var typesWriter = state.TypesWriter;
+			int typeId = GetTypeId(ref typesWriter, type);
+
+			return new(typesWriter, state.CodeWriter.FloatToInt(id, typeId, value));
 		}
 		ShaderState PrepOperatorExpression(ShaderState state, BinaryExpression expression, out ShaderType type, out int leftId, out int rightId)
 		{

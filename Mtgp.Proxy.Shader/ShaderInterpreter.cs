@@ -662,6 +662,25 @@ public class ShaderInterpreter
 						types[result] = types[type];
 						break;
 					}
+				case ShaderOp.FloatToInt:
+					{
+						shaderReader = shaderReader.FloatToInt(out result, out int type, out int value);
+
+						if (!types[type].IsInt())
+						{
+							throw new InvalidOperationException("Float to int result type must be int");
+						}
+
+						if (!types[value].IsFloat())
+						{
+							throw new InvalidOperationException("Float to int value type must be float");
+						}
+
+						var targetSpan = GetTarget(result, type, workingSet);
+						new BitWriter(targetSpan).Write((int)BitConverter.ToSingle(GetSpan(value, workingSet)));
+						types[result] = types[type];
+						break;
+					}
 				case ShaderOp.Abs:
 					{
 						shaderReader = shaderReader.Abs(out result, out int type, out int value);

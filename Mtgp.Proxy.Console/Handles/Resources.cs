@@ -14,8 +14,6 @@ public record ImageHandle(int Id)
 	: ResourceHandle(Id);
 public record PipeHandle(int Id)
 	: ResourceHandle(Id);
-public record RenderPassHandle(int Id)
-	: ResourceHandle(Id);
 public record RenderPipelineHandle(int Id)
 	: ResourceHandle(Id);
 public record ShaderHandle(int Id)

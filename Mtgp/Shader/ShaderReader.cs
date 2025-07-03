@@ -455,6 +455,15 @@ public readonly ref struct ShaderReader(BitReader reader)
 		return new(reader);
 	}
 
+	public readonly ShaderReader FloatToInt(out int result, out int type, out int value)
+	{
+		var reader = this.ReadShaderOp(ShaderOp.FloatToInt, ShaderOpConstants.ConvertWordCount);
+
+		reader = reader.Read(out result).Read(out type).Read(out value);
+
+		return new(reader);
+	}
+
 	public readonly ShaderReader Abs(out int result, out int type, out int value)
 	{
 		var reader = this.ReadShaderOp(ShaderOp.Abs, ShaderOpConstants.UnaryWordCount);
