@@ -18,7 +18,7 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderExecutor> shaderStages
 {
 	public static string ResourceType => CreateRenderPipelineInfo.ResourceType;
 
-	public void Execute(ILogger logger, int instanceCount, int vertexCount, (byte[] Buffer, int Offset)[] vertexBuffers, ImageState[] imageAttachments, Memory<byte>[] bufferViewAttachments, FrameBuffer frameBuffer)
+        public void Execute(ILogger logger, int instanceCount, int vertexCount, (byte[] Buffer, int Offset)[] vertexBuffers, Memory<byte> pushConstants, ImageState[] imageAttachments, Memory<byte>[] bufferViewAttachments, FrameBuffer frameBuffer)
 	{
 		int timerValue = Environment.TickCount;
 
@@ -116,7 +116,7 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderExecutor> shaderStages
 
 					var outputSpan = primitiveSpan[(vertexIndex * vertex.OutputMappings.Size)..][..vertex.OutputMappings.Size];
 
-					vertex.Execute(imageAttachments, bufferViewAttachments, inputSpan, outputSpan);
+                                        vertex.Execute(imageAttachments, bufferViewAttachments, pushConstants.Span, inputSpan, outputSpan);
 				}
 
 				int fromX = BitConverter.ToInt32(vertex.OutputMappings.GetBuiltin(primitiveSpan, Builtin.PositionX, 0));
@@ -264,7 +264,7 @@ public class RenderPipeline(Dictionary<ShaderStage, ShaderExecutor> shaderStages
 
 				var output = new byte[outputSize];
 
-				fragment.Execute(imageAttachments, bufferViewAttachments, fragmentInput, output);
+                                fragment.Execute(imageAttachments, bufferViewAttachments, pushConstants.Span, fragmentInput, output);
 
 				float alpha = 1.0f;
 

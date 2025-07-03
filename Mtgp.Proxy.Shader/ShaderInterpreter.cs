@@ -92,7 +92,7 @@ public class ShaderInterpreter
 		public static UniformPointer FromUInt32(uint value) => new(value);
 	}
 
-	public override void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, Span<byte> input, Span<byte> output)
+        public override void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, Span<byte> pushConstants, Span<byte> input, Span<byte> output)
 	{
 		bool isRunning = true;
 
@@ -287,8 +287,8 @@ public class ShaderInterpreter
 									throw new InvalidOperationException("Output variable has no target decoration");
 								}
 								break;
-							case ShaderStorageClass.UniformConstant:
-							case ShaderStorageClass.Uniform:
+                                                        case ShaderStorageClass.UniformConstant:
+                                                        case ShaderStorageClass.Uniform:
 								if (variableDecorations[result].Binding is not null)
 								{
 									var uniformPointer = new UniformPointer((byte)variableDecorations[result].Binding!, 0);
@@ -300,10 +300,10 @@ public class ShaderInterpreter
 									throw new InvalidOperationException("Uniform variable has no binding decoration");
 								}
 								break;
-							case ShaderStorageClass.Function:
-								pointer = GetWorkingSetPointer(variableType.ElementType!.Size);
-								break;
-							case ShaderStorageClass.Image:
+                                                        case ShaderStorageClass.Function:
+                                                            pointer = GetWorkingSetPointer(variableType.ElementType!.Size);
+                                                            break;
+                                                        case ShaderStorageClass.Image:
 								if (variableDecorations[result].Binding is not null)
 								{
 									pointer = (int)variableDecorations[result].Binding!;
@@ -313,9 +313,12 @@ public class ShaderInterpreter
 									throw new InvalidOperationException("Image variable has no target decoration");
 								}
 								break;
-							default:
-								throw new InvalidOperationException($"Invalid storage class {variableStorageClass}");
-						}
+                                                        case ShaderStorageClass.PushConstant:
+                                                                pointer = variableDecorations[result].Binding ?? 0;
+                                                                break;
+                                                        default:
+                                                                throw new InvalidOperationException($"Invalid storage class {variableStorageClass}");
+                                                }
 
 						var targetSpan = GetTarget(result, type, workingSet);
 
@@ -367,16 +370,24 @@ public class ShaderInterpreter
 									inputSpan.CopyTo(targetSpan);
 									break;
 								}
-							case ShaderStorageClass.Uniform:
-								{
-									int pointerValue = BitConverter.ToInt32(GetSpan(pointer, workingSet));
-									var uniformPointer = UniformPointer.FromUInt32((uint)pointerValue);
+                                                        case ShaderStorageClass.Uniform:
+                                                                {
+                                                                        int pointerValue = BitConverter.ToInt32(GetSpan(pointer, workingSet));
+                                                                        var uniformPointer = UniformPointer.FromUInt32((uint)pointerValue);
 
-									var uniformSpan = bufferAttachments[uniformPointer.Binding].Span[(int)uniformPointer.Pointer..][..valueType.Size];
+                                                                        var uniformSpan = bufferAttachments[uniformPointer.Binding].Span[(int)uniformPointer.Pointer..][..valueType.Size];
 
-									uniformSpan.CopyTo(targetSpan);
-									break;
-								}
+                                                                        uniformSpan.CopyTo(targetSpan);
+                                                                        break;
+                                                                }
+                                                        case ShaderStorageClass.PushConstant:
+                                                                {
+                                                                        int pointerValue = BitConverter.ToInt32(GetSpan(pointer, workingSet));
+                                                                        var constantSpan = pushConstants.Slice(pointerValue, valueType.Size);
+
+                                                                        constantSpan.CopyTo(targetSpan);
+                                                                        break;
+                                                                }
 							case ShaderStorageClass.Function:
 								{
 									int pointerValue = BitConverter.ToInt32(GetSpan(pointer, workingSet));
@@ -416,15 +427,20 @@ public class ShaderInterpreter
 
 								valueToStore.CopyTo(outputSpan);
 								break;
-							case ShaderStorageClass.Uniform:
-								var uniformPointer = UniformPointer.FromUInt32((uint)pointerValue);
+                                                        case ShaderStorageClass.Uniform:
+                                                                var uniformPointer = UniformPointer.FromUInt32((uint)pointerValue);
 
-								var uniformSpan = bufferAttachments[uniformPointer.Binding].Span[(int)uniformPointer.Pointer..][..valueType.Size];
+                                                                var uniformSpan = bufferAttachments[uniformPointer.Binding].Span[(int)uniformPointer.Pointer..][..valueType.Size];
 
-								valueToStore.CopyTo(uniformSpan);
-								break;
-							case ShaderStorageClass.Function:
-								var targetSpan = workingSet[pointerValue..][..valueType.Size!];
+                                                                valueToStore.CopyTo(uniformSpan);
+                                                                break;
+                                                        case ShaderStorageClass.PushConstant:
+                                                                var constantSpan = pushConstants.Slice(pointerValue, valueType.Size);
+
+                                                                valueToStore.CopyTo(constantSpan);
+                                                                break;
+                                                        case ShaderStorageClass.Function:
+                                                                var targetSpan = workingSet[pointerValue..][..valueType.Size!];
 
 								valueToStore.CopyTo(targetSpan);
 								break;
@@ -767,12 +783,12 @@ public class ShaderInterpreter
 
 						var targetSpan = GetTarget(result, type, workingSet);
 
-						if (basePointerType.StorageClass is ShaderStorageClass.UniformConstant || basePointerType.StorageClass is ShaderStorageClass.Uniform)
-						{
-							var uniformPointer = UniformPointer.FromUInt32((uint)basePointerValue);
+                                                if (basePointerType.StorageClass is ShaderStorageClass.UniformConstant || basePointerType.StorageClass is ShaderStorageClass.Uniform || basePointerType.StorageClass is ShaderStorageClass.PushConstant)
+                                                {
+                                                        var uniformPointer = UniformPointer.FromUInt32((uint)basePointerValue);
 
-							new BitWriter(targetSpan).Write((int)new UniformPointer(uniformPointer.Binding, (uint)(uniformPointer.Pointer + offsetIntoBase)).ToUInt32());
-						}
+                                                        new BitWriter(targetSpan).Write((int)new UniformPointer(uniformPointer.Binding, (uint)(uniformPointer.Pointer + offsetIntoBase)).ToUInt32());
+                                                }
 						else
 						{
 							int elementPointer = basePointerValue + offsetIntoBase;

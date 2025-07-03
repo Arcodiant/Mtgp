@@ -76,8 +76,9 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 		proxy.RegisterMessageHandler<AddCopyBufferToImageActionRequest>(AddCopyBufferToImageAction);
 		proxy.RegisterMessageHandler<AddCopyBufferActionRequest>(AddCopyBufferAction);
 		proxy.RegisterMessageHandler<AddClearBufferActionRequest>(AddClearBufferAction);
-		proxy.RegisterMessageHandler<AddBindVertexBuffersRequest>(AddBindVertexBuffers);
-		proxy.RegisterMessageHandler<AddDrawActionRequest>(AddDrawAction);
+                proxy.RegisterMessageHandler<AddBindVertexBuffersRequest>(AddBindVertexBuffers);
+                proxy.RegisterMessageHandler<AddPushConstantsActionRequest>(AddPushConstantsAction);
+                proxy.RegisterMessageHandler<AddDrawActionRequest>(AddDrawAction);
 		proxy.RegisterMessageHandler<AddDispatchActionRequest>(AddDispatchAction);
 		proxy.RegisterMessageHandler<AddIndirectDrawActionRequest>(AddIndirectDrawAction);
 		proxy.RegisterMessageHandler<AddPresentActionRequest>(AddPresentAction);
@@ -298,14 +299,23 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 		return new MtgpResponse(0, "ok");
 	}
 
-	private MtgpResponse AddBindVertexBuffers(AddBindVertexBuffersRequest request)
-	{
-		var actionList = this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions;
+        private MtgpResponse AddBindVertexBuffers(AddBindVertexBuffersRequest request)
+        {
+                var actionList = this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions;
 
-		actionList.Add(new BindVertexBuffersAction(request.FirstBufferIndex, request.Buffers.Select(x => (this.resourceStore.Get<BufferInfo>(x.BufferIndex).Data, x.Offset)).ToArray()));
+                actionList.Add(new BindVertexBuffersAction(request.FirstBufferIndex, request.Buffers.Select(x => (this.resourceStore.Get<BufferInfo>(x.BufferIndex).Data, x.Offset)).ToArray()));
 
-		return new MtgpResponse(0, "ok");
-	}
+                return new MtgpResponse(0, "ok");
+        }
+
+        private MtgpResponse AddPushConstantsAction(AddPushConstantsActionRequest request)
+        {
+                var actionList = this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions;
+
+                actionList.Add(new SetPushConstantsAction(request.Data));
+
+                return new MtgpResponse(0, "ok");
+        }
 
 	private MtgpResponse AddClearBufferAction(AddClearBufferActionRequest request)
 	{

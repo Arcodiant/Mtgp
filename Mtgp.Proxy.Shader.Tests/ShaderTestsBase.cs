@@ -30,7 +30,7 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			Span<byte> outputData = stackalloc byte[4];
 
-			target.Execute([], [], default, outputData);
+                        target.Execute([], [], default, default, outputData);
 
 			new BitReader(outputMappings.GetBuiltin(outputData, Builtin.PositionX)).Read(out int outputValue);
 
@@ -61,7 +61,7 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			Span<byte> outputData = stackalloc byte[4];
 
-			target.Execute([], [], default, outputData);
+                        target.Execute([], [], default, default, outputData);
 
 			new BitReader(outputMappings.GetBuiltin(outputData, Builtin.PositionY)).Read(out int outputValue);
 
@@ -92,7 +92,7 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			Span<byte> outputData = stackalloc byte[4];
 
-			target.Execute([], [], default, outputData);
+                        target.Execute([], [], default, default, outputData);
 
 			new BitReader(outputMappings.GetLocation(outputData, location)).Read(out int outputValue);
 
@@ -129,7 +129,7 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			Span<byte> outputData = stackalloc byte[4];
 
-			target.Execute([], [], inputData, outputData);
+                        target.Execute([], [], default, default, inputData, outputData);
 
 			new BitReader(outputMappings.GetLocation(outputData, 0)).Read(out int outputValue);
 
@@ -172,7 +172,7 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			Span<byte> outputData = stackalloc byte[4];
 
-			target.Execute([], [], inputData, outputData);
+                        target.Execute([], [], default, default, inputData, outputData);
 
 			new BitReader(outputMappings.GetLocation(outputData, 0)).Read(out float outputValue);
 
@@ -217,7 +217,7 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			Span<byte> outputData = stackalloc byte[4];
 
-			target.Execute([], [], inputData, outputData);
+                        target.Execute([], [], default, default, inputData, outputData);
 
 			new BitReader(outputMappings.GetLocation(outputData, 0)).Read(out int outputValue);
 
@@ -259,7 +259,7 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			Span<byte> outputData = stackalloc byte[4];
 
-			target.Execute([], [], inputData, outputData);
+			target.Execute([], [], default, inputData, outputData);
 
 			new BitReader(outputMappings.GetLocation(outputData, 0)).Read(out int outputValue);
 
@@ -296,7 +296,7 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			Span<byte> outputData = stackalloc byte[16];
 
-			target.Execute([], [], inputData, outputData);
+			target.Execute([], [], default, inputData, outputData);
 
 			new BitReader(outputMappings.GetLocation(outputData, 2)).Read(out int outputValue);
 
@@ -338,7 +338,7 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			Span<byte> outputData = stackalloc byte[4];
 
-			target.Execute([], [], inputData, outputData);
+			target.Execute([], [], default, inputData, outputData);
 
 			new BitReader(outputMappings.GetLocation(outputData, 0)).Read(out int outputValue);
 
@@ -380,7 +380,7 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			Span<byte> outputData = stackalloc byte[4];
 
-			target.Execute([], [], inputData, outputData);
+			target.Execute([], [], default, inputData, outputData);
 
 			new BitReader(outputMappings.GetLocation(outputData, 0)).Read(out float outputValue);
 
@@ -410,7 +410,7 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			var uniformBinding = new byte[4];
 
-            target.Execute([], [uniformBinding], default, default);
+            target.Execute([], [uniformBinding], default, default, default);
 
             new BitReader(uniformBinding).Read(out int actual);
             actual.Should().Be(123);
@@ -448,7 +448,7 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			Span<byte> outputData = stackalloc byte[4];
 
-			target.Execute([], [uniformBinding], default, outputData);
+                        target.Execute([], [uniformBinding], default, default, outputData);
 
 			new BitReader(outputMappings.GetLocation(outputData, 0)).Read(out int outputValue);
 
@@ -505,7 +505,7 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			Span<byte> outputData = stackalloc byte[16];
 
-			target.Execute([], [uniformBinding], default, outputData);
+                        target.Execute([], [uniformBinding], default, default, outputData);
 
 			new BitReader(outputMappings.GetLocation(outputData, 0))
 				.Read(out int outputIntValue)
@@ -573,7 +573,7 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			Span<byte> outputData = stackalloc byte[16];
 
-			target.Execute([], [uniformBinding], default, outputData);
+                        target.Execute([], [uniformBinding], default, default, outputData);
 
 			new BitReader(outputMappings.GetLocation(outputData, 0))
 				.Read(out int outputIntValue)
@@ -614,7 +614,7 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			var uniformBinding = new byte[12];
 
-			target.Execute([], [uniformBinding], default, default);
+                        target.Execute([], [uniformBinding], default, default, default);
 
 			new BitReader(uniformBinding).Read(out int x).Read(out int y).Read(out int z);
 			x.Should().Be(123);
@@ -657,12 +657,13 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			var outputSpan = new byte[outputMappings.Size];
 
-			target.Execute(
-				imageAttachments,
-				[],
-				default,
-				outputSpan
-			);
+                        target.Execute(
+                                imageAttachments,
+                                [],
+                                default,
+                                default,
+                                outputSpan
+                        );
 
 			new BitReader(outputMappings.GetLocation(outputSpan, 0)).Read(out int outputValue);
 
@@ -709,12 +710,13 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			var outputSpan = new byte[outputMappings.Size];
 
-			target.Execute(
-				imageAttachments,
-				[],
-				default,
-				outputSpan
-			);
+                        target.Execute(
+                                imageAttachments,
+                                [],
+                                default,
+                                default,
+                                outputSpan
+                        );
 
 			new BitReader(outputMappings.GetLocation(outputSpan, 0))
 				.Read(out float x)
@@ -762,12 +764,13 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			var outputSpan = new byte[outputMappings.Size];
 
-			target.Execute(
-				imageAttachments,
-				[],
-				default,
-				outputSpan
-			);
+                        target.Execute(
+                                imageAttachments,
+                                [],
+                                default,
+                                default,
+                                outputSpan
+                        );
 
 			new BitReader(outputMappings.GetLocation(outputSpan, 0)).Read(out int outputValue);
 
@@ -801,7 +804,7 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			Span<byte> outputData = stackalloc byte[4];
 
-			target.Execute([], [], default, outputData);
+			target.Execute([], [], default, default, outputData);
 
 			new BitReader(outputMappings.GetLocation(outputData, 0)).Read(out int outputValue);
 
@@ -840,7 +843,7 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			Span<byte> outputData = stackalloc byte[outputMappings.Size];
 
-			target.Execute([], [], [], outputData);
+			target.Execute([], [], default, [], outputData);
 
 			new BitReader(outputMappings.GetLocation(outputData, 0)).Read(out int outputValue);
 
@@ -898,7 +901,7 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			Span<byte> outputData = stackalloc byte[outputMappings.Size];
 
-			target.Execute([], [], inputData, outputData);
+			target.Execute([], [], default, inputData, outputData);
 
 			new BitReader(outputMappings.GetLocation(outputData, 0)).Read(out int outputValue);
 
@@ -956,7 +959,7 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			Span<byte> outputData = stackalloc byte[outputMappings.Size];
 
-			target.Execute([], [], inputData, outputData);
+			target.Execute([], [], default, inputData, outputData);
 
 			new BitReader(outputMappings.GetLocation(outputData, 0)).Read(out int outputValue);
 
@@ -1014,7 +1017,7 @@ namespace Mtgp.Proxy.Shader.Tests
 
 			Span<byte> outputData = stackalloc byte[outputMappings.Size];
 
-			target.Execute([], [], inputData, outputData);
+			target.Execute([], [], default, inputData, outputData);
 
 			new BitReader(outputMappings.GetLocation(outputData, 0)).Read(out int outputValue);
 

@@ -4,10 +4,10 @@ using Mtgp.Shader;
 namespace Mtgp.Proxy.Shader;
 
 public class DispatchAction(ComputePipeline pipeline, Extent3D dimensions, Memory<byte>[] bufferViewAttachments)
-	: IAction
+        : IAction
 {
-	public void Execute(ILogger logger, ActionExecutionState state)
-	{
-		pipeline.Execute(logger, dimensions, bufferViewAttachments);
-	}
+        public void Execute(ILogger logger, ActionExecutionState state)
+        {
+                pipeline.Execute(logger, dimensions, bufferViewAttachments, state.PushConstants);
+        }
 }

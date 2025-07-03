@@ -8,7 +8,7 @@ public abstract class ShaderExecutor
 {
 	public abstract ShaderIoMappings InputMappings { get; }
 	public abstract ShaderIoMappings OutputMappings { get; }
-	public abstract void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, Span<byte> input, Span<byte> output);
+        public abstract void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, Span<byte> pushConstants, Span<byte> input, Span<byte> output);
 
 	public static string ResourceType => CreateShaderInfo.ResourceType;
 }

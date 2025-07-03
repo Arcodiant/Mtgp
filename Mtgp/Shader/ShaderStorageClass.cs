@@ -2,10 +2,11 @@
 
 public enum ShaderStorageClass
 {
-	Input,
-	Output,
-	Uniform,
-	UniformConstant,
-	Image,
-	Function
+        Input,
+        Output,
+        PushConstant,
+        Uniform,
+        UniformConstant,
+        Image,
+        Function
 }

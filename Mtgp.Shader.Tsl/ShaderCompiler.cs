@@ -14,8 +14,9 @@ internal enum PartType
 	Struct,
 	Func,
 	Uniform,
-	Image,
-	ReadBuffer,
+        Image,
+        PushConstant,
+        ReadBuffer,
 	WriteBuffer,
 	Var,
 	Identifier,
@@ -108,8 +109,9 @@ public class ShaderCompiler
 														.Match(Character.EqualTo('%'), PartType.Percent)
 														.Match(Span.EqualTo("struct"), PartType.Struct)
 														.Match(Span.EqualTo("func"), PartType.Func)
-														.Match(Span.EqualTo("uniform"), PartType.Uniform)
-														.Match(Span.EqualTo("image1d"), PartType.Image)
+                                                                               .Match(Span.EqualTo("uniform"), PartType.Uniform)
+                                                                               .Match(Span.EqualTo("pushConstant"), PartType.PushConstant)
+                                                                               .Match(Span.EqualTo("image1d"), PartType.Image)
 														.Match(Span.EqualTo("image2d"), PartType.Image)
 														.Match(Span.EqualTo("var"), PartType.Var)
 														.Match(Float, PartType.DecimalLiteral)
@@ -186,10 +188,11 @@ public class ShaderCompiler
 																						   select (TopLevelDefinition)new FuncDefinition(type, name, parameters, statements);
 
 	private readonly static TokenListParser<PartType, TopLevelDefinition> bindingDefinition = from decoration in decoration
-																							  from typeKeyword in Token.EqualTo(PartType.Uniform)
-																													.Or(Token.EqualTo(PartType.Image))
-																													.Or(Token.EqualTo(PartType.ReadBuffer))
-																													.Or(Token.EqualTo(PartType.WriteBuffer))
+ from typeKeyword in Token.EqualTo(PartType.Uniform)
+                                                                               .Or(Token.EqualTo(PartType.Image))
+                                                                               .Or(Token.EqualTo(PartType.ReadBuffer))
+                                                                               .Or(Token.EqualTo(PartType.WriteBuffer))
+                                                                               .Or(Token.EqualTo(PartType.PushConstant))
 																							  from type in typeReference
 																							  from name in BaseParsers.Identifier
 																							  from lineEnd in Token.EqualTo(PartType.Semicolon)
@@ -382,13 +385,14 @@ public class ShaderCompiler
 		{
 			var type = GetType(binding.Type);
 
-			var (storage, dimension) = binding.BindingType switch
-			{
-				"uniform" => (ShaderStorageClass.Uniform, 1),
-				"image1d" => (ShaderStorageClass.Image, 1),
-				"image2d" => (ShaderStorageClass.Image, 2),
-				_ => throw new Exception($"Unknown binding type: {binding.BindingType}")
-			};
+                        var (storage, dimension) = binding.BindingType switch
+                        {
+                                "uniform" => (ShaderStorageClass.Uniform, 1),
+                                "image1d" => (ShaderStorageClass.Image, 1),
+                                "image2d" => (ShaderStorageClass.Image, 2),
+                                "pushConstant" => (ShaderStorageClass.PushConstant, 1),
+                                _ => throw new Exception($"Unknown binding type: {binding.BindingType}")
+                        };
 
 			if (storage == ShaderStorageClass.Image)
 			{

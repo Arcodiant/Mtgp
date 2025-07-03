@@ -67,11 +67,14 @@ namespace Mtgp.Server
 		public static async Task AddCopyBufferToImageAction(this IMessageConnection connection, ActionListHandle actionList, BufferHandle buffer, ImageFormat bufferFormat, ImageHandle image, AddCopyBufferToImageActionRequest.CopyRegion[] copyRegions)
 			=> await connection.SendAsync(new AddCopyBufferToImageActionRequest(0, actionList.Id, buffer.Id, bufferFormat, image.Id, copyRegions));
 
-		public static async Task AddCopyBufferAction(this IMessageConnection connection, ActionListHandle actionList, BufferHandle sourceBuffer, BufferHandle destinationBuffer, int sourceOffset, int destinationOffset, int size)
-			=> await connection.SendAsync(new AddCopyBufferActionRequest(0, actionList.Id, sourceBuffer.Id, destinationBuffer.Id, sourceOffset, destinationOffset, size));
+                public static async Task AddCopyBufferAction(this IMessageConnection connection, ActionListHandle actionList, BufferHandle sourceBuffer, BufferHandle destinationBuffer, int sourceOffset, int destinationOffset, int size)
+                        => await connection.SendAsync(new AddCopyBufferActionRequest(0, actionList.Id, sourceBuffer.Id, destinationBuffer.Id, sourceOffset, destinationOffset, size));
 
-		public static async Task AddRunPipelineAction(this IMessageConnection connection, ActionListHandle actionList, StringSplitPipelineHandle pipeline)
-			=> await connection.SendAsync(new AddRunPipelineActionRequest(0, actionList.Id, pipeline.Id));
+                public static async Task AddPushConstantsAction(this IMessageConnection connection, ActionListHandle actionList, byte[] data)
+                        => await connection.SendAsync(new AddPushConstantsActionRequest(0, actionList.Id, data));
+
+                public static async Task AddRunPipelineAction(this IMessageConnection connection, ActionListHandle actionList, StringSplitPipelineHandle pipeline)
+                        => await connection.SendAsync(new AddRunPipelineActionRequest(0, actionList.Id, pipeline.Id));
 
 		public static async Task AddTriggerActionListAction(this IMessageConnection connection, ActionListHandle actionList, ActionListHandle triggeredActionList)
 			=> await connection.SendAsync(new AddTriggerActionListActionRequest(0, actionList.Id, triggeredActionList.Id));

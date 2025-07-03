@@ -258,12 +258,13 @@ public class ShaderJitter
 
 	private readonly static Lazy<MethodInfo> SpanCollection__GetItem = new(() => typeof(SpanCollection).GetMethod("get_Item", [typeof(int)])!);
 
-	private const int inputIndex = 0;
-	private const int outputIndex = 1;
-	private const int bufferAttachmentsIndex = 2;
-	private const int imageAttachmentsIndex = 3;
-	private const int imageDimensionsIndex = 4;
-	private delegate void ExecuteDelegate(Span<byte> input, Span<byte> output, SpanCollection bufferAttachments, SpanCollection imageAttachments, SpanCollection imageDimensionCollection);
+        private const int inputIndex = 0;
+        private const int outputIndex = 1;
+        private const int pushConstantsIndex = 2;
+        private const int bufferAttachmentsIndex = 3;
+        private const int imageAttachmentsIndex = 4;
+        private const int imageDimensionsIndex = 5;
+        private delegate void ExecuteDelegate(Span<byte> input, Span<byte> output, Span<byte> pushConstants, SpanCollection bufferAttachments, SpanCollection imageAttachments, SpanCollection imageDimensionCollection);
 
 	private readonly ExecuteDelegate execute;
 	public override ShaderIoMappings InputMappings { get; }
@@ -390,19 +391,30 @@ public class ShaderJitter
 
 						break;
 					}
-				case ShaderStorageClass.Uniform:
-					{
-						if (!bindings.TryGetValue(id, out var bindingValue))
-						{
-							throw new InvalidOperationException($"Variable {id} has no binding decoration.");
-						}
+                                case ShaderStorageClass.Uniform:
+                                        {
+                                                if (!bindings.TryGetValue(id, out var bindingValue))
+                                                {
+                                                        throw new InvalidOperationException($"Variable {id} has no binding decoration.");
+                                                }
 
-						methodEmitter.LoadArgumentAddress(bufferAttachmentsIndex)
-										.LoadConstant((int)bindingValue)
-										.Call(SpanCollection__GetItem.Value);
+                                                methodEmitter.LoadArgumentAddress(bufferAttachmentsIndex)
+                                                                               .LoadConstant((int)bindingValue)
+                                                                               .Call(SpanCollection__GetItem.Value);
 
-						break;
-					}
+                                                break;
+                                        }
+                                case ShaderStorageClass.PushConstant:
+                                        {
+                                                int offset = bindings.TryGetValue(id, out var bindingValue) ? (int)bindingValue : 0;
+
+                                                methodEmitter.LoadArgument(pushConstantsIndex)
+                                                               .LoadConstant(offset)
+                                                               .LoadConstant(variable.Type.ElementType!.Size)
+                                                               .Call(Slice.Value);
+
+                                                break;
+                                        }
 				case ShaderStorageClass.Image:
 					{
 						if (!bindings.TryGetValue(id, out var bindingValue))
@@ -858,8 +870,8 @@ public class ShaderJitter
 		this.execute = methodEmitter.CreateDelegate();
 	}
 
-	public override void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, Span<byte> input, Span<byte> output)
-	{
+        public override void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, Span<byte> pushConstants, Span<byte> input, Span<byte> output)
+        {
 		var bufferCollection = new SpanCollection();
 
 		for (int index = 0; index < bufferAttachments.Length; index++)
@@ -885,8 +897,8 @@ public class ShaderJitter
 			imageDimensionCollection.Add(imageDimensionSpan);
 		}
 
-		this.execute(input, output, bufferCollection, imageCollection, imageDimensionCollection);
-	}
+                this.execute(input, output, pushConstants, bufferCollection, imageCollection, imageDimensionCollection);
+        }
 
 	public static ShaderJitter Create(byte[] shaderData)
 	{
