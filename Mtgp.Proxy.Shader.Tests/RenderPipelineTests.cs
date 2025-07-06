@@ -13,7 +13,7 @@ public class RenderPipelineTests
 		public override ShaderIoMappings InputMappings { get; } = inputMappings;
 		public override ShaderIoMappings OutputMappings { get; } = outputMappings;
 
-		public override void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, Span<byte> input, Span<byte> output)
+		public override void Execute(ImageState[] imageAttachments, Memory<byte>[] bufferAttachments, Span<byte> pushConstants, Span<byte> input, Span<byte> output)
 		{
 			var inputData = input.ToArray();
 			var outputData = output.ToArray();

@@ -8,7 +8,7 @@ public abstract record MtgpRequest(int Id)
 public record MtgpResponse(int Id, string Result)
 	: MtgpMessage(Id, MtgpMessageType.Response)
 {
-	public void ThrowIfError()
+    public void ThrowIfError()
 	{
 		if (this.Result != Ok)
 		{

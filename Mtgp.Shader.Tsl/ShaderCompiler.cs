@@ -14,6 +14,7 @@ internal enum PartType
 	Struct,
 	Func,
 	Uniform,
+	PushConstant,
 	Image,
 	ReadBuffer,
 	WriteBuffer,
@@ -109,7 +110,8 @@ public class ShaderCompiler
 														.Match(Span.EqualTo("struct"), PartType.Struct)
 														.Match(Span.EqualTo("func"), PartType.Func)
 														.Match(Span.EqualTo("uniform"), PartType.Uniform)
-														.Match(Span.EqualTo("image1d"), PartType.Image)
+														.Match(Span.EqualTo("pushconstant"), PartType.PushConstant)
+                                                        .Match(Span.EqualTo("image1d"), PartType.Image)
 														.Match(Span.EqualTo("image2d"), PartType.Image)
 														.Match(Span.EqualTo("var"), PartType.Var)
 														.Match(Float, PartType.DecimalLiteral)
@@ -124,7 +126,12 @@ public class ShaderCompiler
 																			  from endOfLine in Token.EqualTo(PartType.Semicolon)
 																			  select (Statement)new AssignStatement(leftHand, rightHand);
 
-	private readonly static TokenListParser<PartType, Statement> variableDeclaration = from varKeyword in Token.EqualTo(PartType.Var)
+    private readonly static TokenListParser<PartType, TypeReference> typeReference = from type in Token.EqualTo(PartType.Identifier)
+                                                                                     from arguments in Parse.Ref(() => typeArgumentBlock!)
+                                                                                                            .OptionalOrDefault([])
+                                                                                     select new TypeReference(type.ToStringValue(), arguments);
+
+    private readonly static TokenListParser<PartType, Statement> variableDeclaration = from varKeyword in Token.EqualTo(PartType.Var)
 																					   from type in typeReference
 																					   from name in Token.EqualTo(PartType.Identifier)
 																					   from lineEnd in Token.EqualTo(PartType.Semicolon)
@@ -138,11 +145,6 @@ public class ShaderCompiler
 																			   from value in Token.EqualTo(PartType.Assign).IgnoreThen(Token.EqualTo(PartType.IntegerLiteral)).OptionalOrDefault()
 																			   from close in Token.EqualTo(PartType.RSquareParen)
 																			   select new Decoration(name.ToStringValue(), value.HasValue ? int.Parse(value.ToStringValue()) : null);
-
-	private readonly static TokenListParser<PartType, TypeReference> typeReference = from type in Token.EqualTo(PartType.Identifier)
-																					 from arguments in Parse.Ref(() => typeArgumentBlock!)
-																											.OptionalOrDefault([])
-																					 select new TypeReference(type.ToStringValue(), arguments);
 
 	private readonly static TokenListParser<PartType, TypeArgument> typeRefAsArgument = from typeRef in typeReference select (TypeArgument)typeRef;
 
@@ -190,7 +192,8 @@ public class ShaderCompiler
 																													.Or(Token.EqualTo(PartType.Image))
 																													.Or(Token.EqualTo(PartType.ReadBuffer))
 																													.Or(Token.EqualTo(PartType.WriteBuffer))
-																							  from type in typeReference
+																													.Or(Token.EqualTo(PartType.PushConstant))
+                                                                                              from type in typeReference
 																							  from name in BaseParsers.Identifier
 																							  from lineEnd in Token.EqualTo(PartType.Semicolon)
 																							  select (TopLevelDefinition)new BindingDefinition(type, typeKeyword.ToStringValue(), name, decoration);
@@ -387,6 +390,7 @@ public class ShaderCompiler
 				"uniform" => (ShaderStorageClass.Uniform, 1),
 				"image1d" => (ShaderStorageClass.Image, 1),
 				"image2d" => (ShaderStorageClass.Image, 2),
+				"pushconstant" => (ShaderStorageClass.PushConstant, 1),
 				_ => throw new Exception($"Unknown binding type: {binding.BindingType}")
 			};
 

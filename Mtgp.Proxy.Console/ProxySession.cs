@@ -8,7 +8,6 @@ using Mtgp.Util;
 using Serilog;
 using System.Diagnostics;
 using System.Net.Sockets;
-using System.Text.Json;
 
 namespace Mtgp.Proxy
 {

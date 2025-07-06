@@ -99,6 +99,17 @@ public static class ShaderDisassembler
 							assembly.AppendLine($"({result}, {type}, {dim})");
 						}
 						break;
+					case ShaderOp.TypeStruct:
+						{
+							shaderReader.TypeStruct(out int result, out int count);
+
+                            var members = new int[count];
+
+                            shaderReader.TypeStruct(out _, members, out _);
+
+                            assembly.AppendLine($"({result}, {string.Join(", ", members)})");
+                        }
+						break;
 					case ShaderOp.Variable:
 						{
 							shaderReader.Variable(out int result, out var storageClass, out int type);

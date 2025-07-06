@@ -9,7 +9,7 @@ public class ComputePipeline(ShaderExecutor shader)
 {
 	public static string ResourceType => CreateComputePipelineInfo.ResourceType;
 
-	public void Execute(ILogger logger, Extent3D dimensions, Memory<byte>[] bufferViewAttachments)
+	public void Execute(ILogger logger, Extent3D dimensions, Span<byte> pushConstants, Memory<byte>[] bufferViewAttachments)
 	{
 		Span<byte> inputSpan = stackalloc byte[shader.InputMappings.Size];
 
@@ -27,7 +27,7 @@ public class ComputePipeline(ShaderExecutor shader)
 				}
 			}
 
-			shader.Execute([], bufferViewAttachments, inputSpan, []);
+			shader.Execute([], bufferViewAttachments, pushConstants, inputSpan, []);
 		}
 	}
 }

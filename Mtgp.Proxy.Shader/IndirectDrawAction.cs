@@ -10,6 +10,6 @@ public class IndirectDrawAction(RenderPipeline pipeline, ImageState[] imageAttac
 		var instanceCount = BitConverter.ToInt32(buffer.Span[offset..]);
 		var vertexCount = BitConverter.ToInt32(buffer.Span[(offset + 4)..]);
 
-		pipeline.Execute(logger, instanceCount, vertexCount, [.. state.VertexBuffers], imageAttachments, bufferViewAttachments, frameBuffer);
+		pipeline.Execute(logger, instanceCount, vertexCount, [.. state.VertexBuffers], imageAttachments, bufferViewAttachments, state.PushConstants, frameBuffer);
 	}
 }

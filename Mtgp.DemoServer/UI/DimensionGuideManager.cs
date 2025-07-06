@@ -136,9 +136,15 @@ internal class DimensionGuideManager(ISessionWorld sessionWorld)
 
 			await connection.ResetActionList(actionList);
 
+			var characterBytes = new byte[4];
+
+			new BitWriter(characterBytes).WriteRunes(['|']);
+			await connection.AddSetPushConstants(actionList, characterBytes);
 			await connection.AddBindVertexBuffers(actionList, 0, [vertexBuffer]);
 			await connection.AddIndirectDrawAction(actionList, renderPipeline, [], [guideBufferView], frameBuffer, drawBufferView, 0);
-			await connection.AddBindVertexBuffers(actionList, 0, [(vertexBuffer.Buffer, vertexBuffer.Offset + 16)]);
+            new BitWriter(characterBytes).WriteRunes(['-']);
+            await connection.AddSetPushConstants(actionList, characterBytes);
+            await connection.AddBindVertexBuffers(actionList, 0, [(vertexBuffer.Buffer, vertexBuffer.Offset + 16)]);
 			await connection.AddIndirectDrawAction(actionList, renderPipeline, [], [guideBufferView], frameBuffer, drawBufferView, 0);
 		}
 

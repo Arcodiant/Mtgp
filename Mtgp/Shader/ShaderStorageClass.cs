@@ -7,5 +7,6 @@ public enum ShaderStorageClass
 	Uniform,
 	UniformConstant,
 	Image,
-	Function
+	Function,
+	PushConstant
 }

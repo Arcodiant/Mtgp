@@ -61,6 +61,9 @@ namespace Mtgp.Server
 		public static async Task AddBindVertexBuffers(this IMessageConnection connection, ActionListHandle actionList, int firstBufferIndex, (BufferHandle Buffer, int Offset)[] buffers)
 			=> await connection.SendAsync(new AddBindVertexBuffersRequest(0, actionList.Id, firstBufferIndex, [.. buffers.Select(x => new AddBindVertexBuffersRequest.VertexBufferBinding(x.Buffer.Id, x.Offset))]));
 
+		public static async Task AddSetPushConstants(this IMessageConnection connection, ActionListHandle actionList, byte[] data)
+			=> await connection.SendAsync(new AddSetPushConstantsActionRequest(0, actionList.Id, data));
+
 		public static async Task AddPresentAction(this IMessageConnection connection, ActionListHandle actionList, PresentSetHandle presentSet)
 			=> await connection.SendAsync(new AddPresentActionRequest(0, actionList.Id, presentSet.Id));
 

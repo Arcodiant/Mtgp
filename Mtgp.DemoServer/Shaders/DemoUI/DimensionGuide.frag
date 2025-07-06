@@ -5,6 +5,8 @@
     [Location=2] vec<float, 3> background;
 }
 
+[Binding=0] pushconstant int guideCharacter;
+
 struct Input
 {
     [PositionX] int x;
@@ -13,7 +15,7 @@ struct Input
 
 func Output Main(Input input)
 {
-    result.character = '*';
+    result.character = guideCharacter;
     result.colour = Vec(1.0, 1.0, 1.0);
     result.background = Vec(0.0, 0.0, 0.0);
 }

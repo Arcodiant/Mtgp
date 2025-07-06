@@ -8,6 +8,6 @@ public class DispatchAction(ComputePipeline pipeline, Extent3D dimensions, Memor
 {
 	public void Execute(ILogger logger, ActionExecutionState state)
 	{
-		pipeline.Execute(logger, dimensions, bufferViewAttachments);
+		pipeline.Execute(logger, dimensions, state.PushConstants, bufferViewAttachments);
 	}
 }

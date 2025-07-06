@@ -77,7 +77,8 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 		proxy.RegisterMessageHandler<AddCopyBufferActionRequest>(AddCopyBufferAction);
 		proxy.RegisterMessageHandler<AddClearBufferActionRequest>(AddClearBufferAction);
 		proxy.RegisterMessageHandler<AddBindVertexBuffersRequest>(AddBindVertexBuffers);
-		proxy.RegisterMessageHandler<AddDrawActionRequest>(AddDrawAction);
+		proxy.RegisterMessageHandler<AddSetPushConstantsActionRequest>(AddSetPushConstantsAction);
+        proxy.RegisterMessageHandler<AddDrawActionRequest>(AddDrawAction);
 		proxy.RegisterMessageHandler<AddDispatchActionRequest>(AddDispatchAction);
 		proxy.RegisterMessageHandler<AddIndirectDrawActionRequest>(AddIndirectDrawAction);
 		proxy.RegisterMessageHandler<AddPresentActionRequest>(AddPresentAction);
@@ -306,6 +307,15 @@ internal class ShaderModeExtension(ILogger<ShaderModeExtension> logger, TelnetCo
 
 		return new MtgpResponse(0, "ok");
 	}
+
+	private MtgpResponse AddSetPushConstantsAction(AddSetPushConstantsActionRequest request)
+	{
+		var actionList = this.resourceStore.Get<ActionListInfo>(request.ActionList).Actions;
+
+		actionList.Add(new SetPushConstantsAction(request.Data));
+
+		return new MtgpResponse(0, "ok");
+    }
 
 	private MtgpResponse AddClearBufferAction(AddClearBufferActionRequest request)
 	{
