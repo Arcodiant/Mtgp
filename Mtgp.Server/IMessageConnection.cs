@@ -82,6 +82,9 @@ namespace Mtgp.Server
 		public static async Task SetBufferData(this IMessageConnection connection, BufferHandle buffer, int offset, byte[] data)
 			=> await connection.SendAsync(new SetBufferDataRequest(0, buffer.Id, offset, data));
 
+		public static async Task SetBufferData(this IMessageConnection connection, (BufferHandle Buffer, int Offset) buffer, byte[] data)
+			=> await connection.SendAsync(new SetBufferDataRequest(0, buffer.Buffer.Id, buffer.Offset, data));
+
 		public static async Task ResetActionList(this IMessageConnection connection, ActionListHandle actionList)
 			=> await connection.SendAsync(new ResetActionListRequest(0, actionList.Id));
 

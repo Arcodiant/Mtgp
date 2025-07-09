@@ -51,27 +51,6 @@ public class TelnetClient(TcpClient client)
 		await this.writer.WriteAsync(value);
 	}
 
-	public static string Clean(IEnumerable<char> value) => value.Aggregate(new StringBuilder(), (builder, character) =>
-	{
-		var replacement = character switch
-		{
-			'\x1B' => "\\x1B",
-			'\n' => "\\n",
-			'\r' => "\\r",
-			'\t' => "\\t",
-			'\0' => "\\0",
-			'\a' => "\\a",
-			'\v' => "\\v",
-			'\b' => "\\b",
-			'\f' => "\\f",
-			_ => character.ToString()
-		};
-
-		builder.Append(replacement);
-
-		return builder;
-	}).ToString();
-
 	private readonly SemaphoreSlim queuelock = new(1);
 
 	private async Task PopulateQueue(CancellationToken token)

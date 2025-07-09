@@ -135,6 +135,11 @@ internal class DemoSession(MtgpConnection connection, ISessionWorld sessionWorld
 			await UpdateModule();
 		};
 
+		onWindowSizeChanged = async (size) =>
+		{
+			await currentModule.OnWindowSizeChanged(size);
+		};
+
 		await messagePump.SetDefaultPipe(DefaultPipe.Input, -1, [], false);
 
 		await messagePump.RunAsync(exitTokenSource.Token);

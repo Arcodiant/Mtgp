@@ -5,14 +5,16 @@ using Mtgp.Shader;
 
 namespace Mtgp.DemoServer.Modules;
 
-internal class WindowSizeEventModule(ISessionWorld sessionWorld)
+internal class WindowSizeEventModule(ISessionWorld sessionWorld, IGraphicsManager graphics)
 	: IDemoModule
 {
-	private Entity panel;
 
 	public bool IsRunning { get; private set; }
 
+	private IMessageConnection connection;
 	private Entity guide;
+	private List<Entity> displayLabels = [];
+	private Entity panel;
 
 	public string Name => "Window Size Events";
 
@@ -20,31 +22,39 @@ internal class WindowSizeEventModule(ISessionWorld sessionWorld)
 	{
 		this.IsRunning = true;
 
-		//this.panel = await sessionWorld.CreateAsync(new Panel(new(0, 0, 80, 24), (0.5f, 0.5f, 0.5f)));
-		this.guide = await sessionWorld.CreateAsync(new DimensionGuide(new(0, 0, 80, 24), TrueColour.White));
+		this.connection = connection;
+
+		this.guide = await sessionWorld.CreateAsync(new DimensionGuide(new(0, 0, graphics.WindowSize.Width, graphics.WindowSize.Height), TrueColour.White));
+
+		this.displayLabels.Add(await sessionWorld.CreateAsync(new Label(new Offset2D(1, 1), "Window Size Events", TrueColour.White)));
 	}
 
 	public async Task HideAsync(IMessageConnection connection)
 	{
-		//await sessionWorld.DeleteAsync(this.panel);
 		await sessionWorld.DeleteAsync(this.guide);
+
+		foreach (var label in this.displayLabels)
+		{
+			await sessionWorld.DeleteAsync(label);
+		}
 	}
 
-	public Task OnInput(string data)
+	public async Task OnInput(string data)
 	{
 		switch(data)
 		{
+			case "o":
+				await connection.OpenUrl("https://github.com/Arcodiant/Mtgp/blob/main/Mtgp.DemoServer/Modules/WindowSizeEventModule.cs");
+				break;
 			case "x":
 				IsRunning = false;
 				break;
 		}
-
-		return Task.CompletedTask;
 	}
 
-	public Task OnWindowSizeChanged(Extent2D size)
+	public async Task OnWindowSizeChanged(Extent2D size)
 	{
-		return Task.CompletedTask;
+		await sessionWorld.UpdateAsync<DimensionGuide>(this.guide, g => g with { Area = new Rect2D(0, 0, size.Width, size.Height) });
 	}
 
 	public Task OnKey(Key key)

@@ -46,7 +46,7 @@ internal class TelnetPresentReceiver
 				int y = 0;
 				ColourField? foreground = null;
 				ColourField? background = null;
-				var buffer = new char[8192];
+				var buffer = new char[65536];
 				int count = 0;
 
 				for (int index = 0; index < sortedValues.Length; index++)

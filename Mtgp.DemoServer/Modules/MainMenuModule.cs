@@ -41,7 +41,7 @@ internal class MainMenuModule(IGraphicsManager graphics, ISessionWorld sessionWo
 		this.selectedIndex = 0;
 
 		this.menuPanel = await sessionWorld.CreateAsync(new Panel(panelArea, (0.0f, 0.0f, 0.5f), BackgroundGradient: (0.25f, 0.25f, 1.0f)));
-		this.menu = await sessionWorld.CreateAsync(new Menu(panelArea.WithMargin(1), (TrueColour.White, TrueColour.Black), (TrueColour.Black, TrueColour.White), [.. this.moduleLookup.Select(x => x.Value.Label)]));
+		this.menu = await sessionWorld.CreateMenuAsync(panelArea.WithMargin(1), (TrueColour.White, TrueColour.Black), (TrueColour.Black, TrueColour.White), [.. this.moduleLookup.Select(x => x.Value.Label)]);
 	}
 
 	public async Task OnInput(string data)

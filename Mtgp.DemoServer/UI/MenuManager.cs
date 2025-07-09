@@ -6,7 +6,7 @@ using Mtgp.Shader;
 
 namespace Mtgp.DemoServer.UI;
 
-public record Menu(Rect2D Area, (TrueColour Foreground, TrueColour Background) Default, (TrueColour Foreground, TrueColour Background) Selected, string[] Items, int SelectedIndex = 0);
+public record Menu((TrueColour Foreground, TrueColour Background) Default, (TrueColour Foreground, TrueColour Background) Selected, string[] Items, int SelectedIndex = 0);
 
 public class MenuManager(ISessionWorld sessionWorld, ILogger<MenuManager> logger)
 	: IGraphicsService
@@ -76,18 +76,11 @@ public class MenuManager(ISessionWorld sessionWorld, ILogger<MenuManager> logger
 
 		async Task UpdateBuffers(bool forceBuildActionList = false)
 		{
-			var menus = new List<Menu>();
+			IEnumerable<(Position Position, Size Size, Menu Menu)> menus = sessionWorld.GetAll<Position, Size, Menu>();
 
-			var query = new QueryDescription().WithAll<Menu>();
-
-			sessionWorld.World.Query(in query, (ref Menu menu) =>
-			{
-				menus.Add(menu);
-			});
-
-			var items = menus.SelectMany((menu, menuIndex) => menu.Items.Select((item, itemIndex) => (MenuIndex: menuIndex, ItemIndex: itemIndex, MenuItem: item))).ToArray();
+			var items = menus.SelectMany((menu, menuIndex) => menu.Menu.Items.Select((item, itemIndex) => (MenuIndex: menuIndex, ItemIndex: itemIndex, MenuItem: item))).ToArray();
 			int itemCount = items.Length;
-			int menuCount = menus.Count;
+			int menuCount = menus.Count();
 
 			var newMenuImageString = string.Join('\n', items.Select(x => x.MenuItem));
 
@@ -126,14 +119,14 @@ public class MenuManager(ISessionWorld sessionWorld, ILogger<MenuManager> logger
 
 			foreach (var (menuIndex, itemIndex, item) in items)
 			{
-				var menu = menus[menuIndex];
+				var menu = menus.ElementAt(menuIndex);
 
 				itemWriter = itemWriter.Write(menuIndex)
-										.Write(menu.Area.Offset.X)
-										.Write(menu.Area.Offset.Y + itemIndex)
+										.Write(menu.Position.Offset.X)
+										.Write(menu.Position.Offset.Y + itemIndex)
 										.Write(0)
 										.Write(lineIndex)
-										.Write(Math.Min(item.Length, menu.Area.Extent.Width))
+										.Write(Math.Min(item.Length, menu.Size.Extent.Width))
 										.Write(itemIndex);
 
 				lineIndex += 1;
@@ -143,11 +136,11 @@ public class MenuManager(ISessionWorld sessionWorld, ILogger<MenuManager> logger
 
 			foreach (var menu in menus)
 			{
-				menuWriter = menuWriter.Write(menu.SelectedIndex)
-										.Write(menu.Default.Foreground)
-										.Write(menu.Selected.Foreground)
-										.Write(menu.Default.Background)
-										.Write(menu.Selected.Background);
+				menuWriter = menuWriter.Write(menu.Menu.SelectedIndex)
+										.Write(menu.Menu.Default.Foreground)
+										.Write(menu.Menu.Selected.Foreground)
+										.Write(menu.Menu.Default.Background)
+										.Write(menu.Menu.Selected.Background);
 			}
 
 			new BitWriter(drawBufferData)
@@ -194,5 +187,18 @@ public class MenuManager(ISessionWorld sessionWorld, ILogger<MenuManager> logger
 		sessionWorld.SubscribeComponentAdded<Menu>(HandleComponentEvent);
 		sessionWorld.SubscribeComponentRemoved<Menu>(HandleComponentEvent);
 		sessionWorld.SubscribeComponentChanged<Menu>(HandleComponentEvent);
+		sessionWorld.SubscribeComponentChanged<Position, Menu>((entity, _, menu) => HandleComponentEvent(entity, menu));
+
+		graphics.WindowSizeChanged += BuildActionList;
+	}
+}
+
+public static class MenuManagerExtensions
+{
+	public static async Task<Entity> CreateMenuAsync(this ISessionWorld world, Rect2D area, (TrueColour Foreground, TrueColour Background) defaultStyle, (TrueColour Foreground, TrueColour Background) selectedStyle, string[] items)
+	{
+		var menu = new Menu(defaultStyle, selectedStyle, items);
+
+		return await world.CreateAsync(new Position(area.Offset), new Size(area.Extent), menu);
 	}
 }

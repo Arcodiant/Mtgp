@@ -96,6 +96,7 @@ public class RenderPipelineTests
 			[],
 			[],
 			[],
+			[],
 			framebuffer
 		);
 	}
@@ -160,6 +161,7 @@ public class RenderPipelineTests
 			NullLogger.Instance,
 			1,
 			2,
+			[],
 			[],
 			[],
 			[],

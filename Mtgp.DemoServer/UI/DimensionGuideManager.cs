@@ -160,9 +160,6 @@ internal class DimensionGuideManager(ISessionWorld sessionWorld)
 		sessionWorld.SubscribeComponentRemoved<DimensionGuide>(HandleComponentEvent);
 		sessionWorld.SubscribeComponentChanged<DimensionGuide>(HandleComponentEvent);
 
-		graphics.WindowSizeChanged += async () =>
-		{
-			await BuildActionList();
-		};
+		graphics.WindowSizeChanged += BuildActionList;
 	}
 }
