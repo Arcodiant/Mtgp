@@ -37,6 +37,7 @@ try
 	builder.Services.AddScoped<IGraphicsService, DimensionGuideManager>();
 	builder.Services.AddScoped<IGraphicsService, LabelManager>();
 	builder.Services.AddScoped<IDemoModule, WindowSizeEventModule>();
+	builder.Services.AddScoped<IDemoModule, DragModule>();
 	builder.Services.AddScoped<IDemoModule, ParallaxStarsModule>();
 	builder.Services.AddDefaultFactories();
 

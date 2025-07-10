@@ -11,168 +11,177 @@ using System.Net.Sockets;
 
 namespace Mtgp.Proxy
 {
-    internal class ProxySession(TcpClient telnetTcpClient, IFactory<TelnetConnection, TelnetClient> connectionFactory, IFactory<ShaderModeExtension, TelnetConnection, ClientProfile, EventExtension> shaderModeFactory, ILogger<ProxySession> logger)
-    {
-        static ClientProfile IdentifyProfile(IEnumerable<string> terminalTypes)
-        {
-            foreach (var (terminalType, profile) in ClientProfile.ByTerminalType)
-            {
-                if (terminalTypes.Contains(terminalType))
-                {
-                    return profile;
-                }
-            }
+	internal class ProxySession(TcpClient telnetTcpClient, IFactory<TelnetConnection, TelnetClient> connectionFactory, IFactory<ShaderModeExtension, TelnetConnection, ClientProfile, EventExtension> shaderModeFactory, ILogger<ProxySession> logger)
+	{
+		static ClientProfile IdentifyProfile(IEnumerable<string> terminalTypes)
+		{
+			foreach (var (terminalType, profile) in ClientProfile.ByTerminalType)
+			{
+				if (terminalTypes.Contains(terminalType))
+				{
+					return profile;
+				}
+			}
 
-            var mttsCaps = MttsCaps.None;
+			var mttsCaps = MttsCaps.None;
 
-            if (terminalTypes.Any(type => type.StartsWith("mtts")))
-            {
-                mttsCaps = (MttsCaps)int.Parse(terminalTypes.Single(type => type.StartsWith("mtts")).AsSpan(4));
+			if (terminalTypes.Any(type => type.StartsWith("mtts")))
+			{
+				mttsCaps = (MttsCaps)int.Parse(terminalTypes.Single(type => type.StartsWith("mtts")).AsSpan(4));
 
-                var colourFormat = ColourFormat.Ansi16;
+				var colourFormat = ColourFormat.Ansi16;
 
-                if (mttsCaps.HasFlag(MttsCaps.TrueColour))
-                {
-                    colourFormat = ColourFormat.TrueColour;
-                }
-                else if (mttsCaps.HasFlag(MttsCaps._256Colours))
-                {
-                    colourFormat = ColourFormat.Ansi256;
-                }
+				if (mttsCaps.HasFlag(MttsCaps.TrueColour))
+				{
+					colourFormat = ColourFormat.TrueColour;
+				}
+				else if (mttsCaps.HasFlag(MttsCaps._256Colours))
+				{
+					colourFormat = ColourFormat.Ansi256;
+				}
 
-                var clientCaps = ClientCap.None;
+				var clientCaps = ClientCap.None;
 
-                if (mttsCaps.HasFlag(MttsCaps.VT100))
-                {
-                    clientCaps |= ClientCap.SetCursor;
-                }
+				if (mttsCaps.HasFlag(MttsCaps.VT100))
+				{
+					clientCaps |= ClientCap.SetCursor;
+				}
 
-                return new ClientProfile("MTTS", colourFormat, clientCaps);
-            }
+				return new ClientProfile("MTTS", colourFormat, clientCaps);
+			}
 
-            if (terminalTypes.Contains("xterm"))
-            {
-                return new ClientProfile("XTerm", ColourFormat.TrueColour, ClientCap.SetCursor | ClientCap.GetWindowSize | ClientCap.SetWindowSize | ClientCap.SetTitle);
-            }
+			if (terminalTypes.Contains("xterm"))
+			{
+				return new ClientProfile("XTerm", ColourFormat.TrueColour, ClientCap.SetCursor | ClientCap.GetWindowSize | ClientCap.SetWindowSize | ClientCap.SetTitle | ClientCap.MouseEvents);
+			}
 
-            return new ClientProfile("Basic", ColourFormat.Ansi16, ClientCap.None);
-        }
+			return new ClientProfile("Basic", ColourFormat.Ansi16, ClientCap.None);
+		}
 
-        public async Task RunAsync()
-        {
-            using var telnetClient = new TelnetClient(telnetTcpClient);
+		public async Task RunAsync()
+		{
+			using var telnetClient = new TelnetClient(telnetTcpClient);
 
-            var connection = connectionFactory.Create(telnetClient);
+			var connection = connectionFactory.Create(telnetClient);
 
-            connection.Start();
+			connection.Start();
 
-            await connection.RequestOptionAndWaitAsync(TelnetCommand.DO, TelnetOption.TerminalType);
-            await connection.RequestOptionAndWaitAsync(TelnetCommand.DO, TelnetOption.NewEnvironmentOption);
+			await connection.RequestOptionAndWaitAsync(TelnetCommand.DO, TelnetOption.TerminalType);
+			await connection.RequestOptionAndWaitAsync(TelnetCommand.DO, TelnetOption.NewEnvironmentOption);
 
-            var terminalType = (await connection.GetTerminalTypeAsync()).ToLower();
-            var terminalTypes = new List<string>();
+			var terminalType = (await connection.GetTerminalTypeAsync()).ToLower();
+			var terminalTypes = new List<string>();
 
-            while (!terminalTypes.Contains(terminalType))
-            {
-                Log.Information("Terminal Type: {TerminalType}", terminalType);
+			while (!terminalTypes.Contains(terminalType))
+			{
+				Log.Information("Terminal Type: {TerminalType}", terminalType);
 
-                terminalTypes.Add(terminalType);
+				terminalTypes.Add(terminalType);
 
-                terminalType = (await connection.GetTerminalTypeAsync()).ToLower();
-            }
+				terminalType = (await connection.GetTerminalTypeAsync()).ToLower();
+			}
 
-            bool willNaws = await connection.RequestOptionAndWaitAsync(TelnetCommand.DO, TelnetOption.NegotiateAboutWindowSize) == TelnetCommand.WILL;
+			bool willNaws = await connection.RequestOptionAndWaitAsync(TelnetCommand.DO, TelnetOption.NegotiateAboutWindowSize) == TelnetCommand.WILL;
 
-            var profile = IdentifyProfile(terminalTypes);
+			var profile = IdentifyProfile(terminalTypes);
 
-            Log.Information("Identified client profile: {Profile}", profile);
+			Log.Information("Identified client profile: {Profile}", profile);
 
-            if (profile.Quirks.HasFlag(ClientQuirk.MustResetTerminalTypeOption))
-            {
-                await connection.RequestOptionAndWaitAsync(TelnetCommand.DONT, TelnetOption.TerminalType);
-                await connection.RequestOptionAndWaitAsync(TelnetCommand.DO, TelnetOption.TerminalType);
+			if (profile.Quirks.HasFlag(ClientQuirk.MustResetTerminalTypeOption))
+			{
+				await connection.RequestOptionAndWaitAsync(TelnetCommand.DONT, TelnetOption.TerminalType);
+				await connection.RequestOptionAndWaitAsync(TelnetCommand.DO, TelnetOption.TerminalType);
 
-                await connection.GetTerminalTypeAsync();
-            }
+				await connection.GetTerminalTypeAsync();
+			}
 
-            Func<MtgpRequest, Task<MtgpResponse>> sendRequest = request => Task.FromResult(new MtgpResponse(request.Id, "error"));
+			Func<MtgpRequest, Task<MtgpResponse>> sendRequest = request => Task.FromResult(new MtgpResponse(request.Id, "error"));
 
-            var proxy = new ProxyController(async request => await sendRequest(request), logger);
+			var proxy = new ProxyController(async request => await sendRequest(request), logger);
 
-            var eventExtension = new EventExtension();
+			var eventExtension = new EventExtension();
 
-            proxy.AddExtension(eventExtension);
+			proxy.AddExtension(eventExtension);
 
-            if (profile.SupportsShaderMode())
-            {
-                logger.LogInformation("Using shader mode");
+			if (profile.SupportsShaderMode())
+			{
+				logger.LogInformation("Using shader mode");
 
-                var shaderExtension = shaderModeFactory.Create(connection, profile, eventExtension);
+				var shaderExtension = shaderModeFactory.Create(connection, profile, eventExtension);
 
-                await shaderExtension.SetupAsync();
+				await shaderExtension.SetupAsync();
 
-                proxy.AddExtension(shaderExtension);
-            }
-            else
-            {
-                logger.LogInformation("Using line mode");
-                proxy.AddExtension(new LineModeExtension(telnetClient));
-            }
-            proxy.AddExtension(new DataExtension([new LocalStorageDataScheme()]));
+				proxy.AddExtension(shaderExtension);
+			}
+			else
+			{
+				logger.LogInformation("Using line mode");
+				proxy.AddExtension(new LineModeExtension(telnetClient));
+			}
+			proxy.AddExtension(new DataExtension([new LocalStorageDataScheme()]));
 
-            using var mtgpClient = new TcpClient();
+			if (profile.SupportsMouseEvents())
+			{
+				var mouseExtension = new MouseExtension(eventExtension, connection);
 
-            await mtgpClient.ConnectAsync("localhost", 2323);
+				await mouseExtension.SetupAsync();
 
-            logger.LogInformation("Running");
+				proxy.AddExtension(mouseExtension);
+			}
 
-            using var mtgpStream = mtgpClient.GetStream();
+			using var mtgpClient = new TcpClient();
 
-            var mtgpConnection = await MtgpConnection.CreateClientConnectionAsync(logger, mtgpStream);
+			await mtgpClient.ConnectAsync("localhost", 2323);
 
-            sendRequest = async request =>
-            {
-                await mtgpStream.WriteMessageAsync(request, logger);
+			logger.LogInformation("Running");
 
-                return new MtgpResponse(request.Id, "ok");
-            };
+			using var mtgpStream = mtgpClient.GetStream();
 
-            bool isRunning = true;
+			var mtgpConnection = await MtgpConnection.CreateClientConnectionAsync(logger, mtgpStream);
 
-            while (isRunning && mtgpClient.Connected)
-            {
-                var (readSuccess, message) = await mtgpConnection.TryReadMessageAsync();
+			sendRequest = async request =>
+			{
+				await mtgpStream.WriteMessageAsync(request, logger);
 
-                if (readSuccess && message is not null)
-                {
-                    if (message.Type == MtgpMessageType.Request)
-                    {
-                        var request = (MtgpRequest)message;
+				return new MtgpResponse(request.Id, "ok");
+			};
 
-                        logger.LogDebug("Received request {RequestID} of type: {RequestType}", request.Id, request.GetType());
+			bool isRunning = true;
+
+			while (isRunning && mtgpClient.Connected)
+			{
+				var (readSuccess, message) = await mtgpConnection.TryReadMessageAsync();
+
+				if (readSuccess && message is not null)
+				{
+					if (message.Type == MtgpMessageType.Request)
+					{
+						var request = (MtgpRequest)message;
+
+						logger.LogDebug("Received request {RequestID} of type: {RequestType}", request.Id, request.GetType());
 
 						logger.LogTrace("Received request: {@Request}", request);
 
-                        var stopwatch = Stopwatch.StartNew();
+						var stopwatch = Stopwatch.StartNew();
 
-                        var response = await proxy.HandleMessageAsync(request);
+						var response = await proxy.HandleMessageAsync(request);
 
-                        await mtgpStream.WriteMessageAsync(response, response.GetType(), logger);
+						await mtgpStream.WriteMessageAsync(response, response.GetType(), logger);
 
-                        stopwatch.Stop();
+						stopwatch.Stop();
 
-                        logger.LogDebug("Handled request {RequestID} in {ElapsedMs}ms", request.Id, stopwatch.Elapsed.TotalMilliseconds);
-                    }
-                }
-                else
-                {
-                    isRunning = false;
-                }
-            }
+						logger.LogDebug("Handled request {RequestID} in {ElapsedMs}ms", request.Id, stopwatch.Elapsed.TotalMilliseconds);
+					}
+				}
+				else
+				{
+					isRunning = false;
+				}
+			}
 
-            mtgpClient.Close();
+			mtgpClient.Close();
 
-            connection.Stop();
-        }
-    }
+			connection.Stop();
+		}
+	}
 }

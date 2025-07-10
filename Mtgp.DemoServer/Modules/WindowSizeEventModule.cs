@@ -58,7 +58,8 @@ internal class WindowSizeEventModule(ISessionWorld sessionWorld, IGraphicsManage
 	}
 
 	public Task OnKey(Key key)
-	{
-		return Task.CompletedTask;
-	}
+		=> Task.CompletedTask;
+
+	public Task OnMouse(MouseButton button, MouseEventType eventType, int x, int y)
+		=> Task.CompletedTask;
 }

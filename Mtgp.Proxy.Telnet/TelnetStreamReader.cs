@@ -4,12 +4,13 @@ namespace Mtgp.Proxy.Telnet;
 
 public class TelnetStreamReader
 {
+	private readonly List<byte> buffer = [];
+
 	private ReceiveState receiveState = ReceiveState.Character;
 	private AnsiCodeState ansiCodeState = AnsiCodeState.Character;
 	private bool altered = false;
 	private TelnetCommand receivedCommand;
 	private TelnetOption sbOption;
-	private List<byte> buffer = [];
 
 	private enum ReceiveState
 	{
@@ -26,7 +27,10 @@ public class TelnetStreamReader
 		Character,
 		Escaped,
 		Csi,
-		Ss3
+		Ss3,
+		MouseButton,
+		MouseX,
+		MouseY
 	}
 
 	public void GetEvents(ReadOnlySpan<byte> data, Queue<TelnetEvent> events)
@@ -92,7 +96,7 @@ public class TelnetStreamReader
 								break;
 							case AnsiCodeState.Csi:
 							case AnsiCodeState.Ss3:
-								if (char.IsLetter((char)datum) || (char)datum == '~')
+								if ((char.IsLetter((char)datum) && ((char)datum != 'M' || this.ansiCodeState == AnsiCodeState.Ss3 || buffer.Count > 1)) || (char)datum == '~')
 								{
 									if (this.ansiCodeState == AnsiCodeState.Csi)
 									{
@@ -105,10 +109,31 @@ public class TelnetStreamReader
 									this.ansiCodeState = AnsiCodeState.Character;
 									buffer.Clear();
 								}
+								else if ((char)datum == 'M')
+								{
+									this.ansiCodeState = AnsiCodeState.MouseButton;
+									buffer.Clear();
+								}
 								else
 								{
 									buffer.Add(datum);
 								}
+								break;
+							case AnsiCodeState.MouseButton:
+								buffer.Add(datum);
+								this.ansiCodeState = AnsiCodeState.MouseX;
+								break;
+							case AnsiCodeState.MouseX:
+								buffer.Add(datum);
+								this.ansiCodeState = AnsiCodeState.MouseY;
+								break;
+							case AnsiCodeState.MouseY:
+								buffer.Add(datum);
+
+								events.Enqueue(new TelnetMouseEvent([.. buffer]));
+								buffer.Clear();
+
+								this.ansiCodeState = AnsiCodeState.Character;
 								break;
 						}
 					}
@@ -215,6 +240,62 @@ public record TelnetSs3Event(string Value, char Suffix, bool Altered)
 {
 	public TelnetSs3Event(ReadOnlySpan<byte> data, char suffix, bool altered)
 		: this(Encoding.UTF8.GetString(data), suffix, altered)
+	{
+	}
+}
+
+public enum TelnetMouseButton
+{
+	Unknown,
+	Left = 1,
+	Right = 2,
+	Middle = 3,
+	ScrollUp = 4,
+	ScrollDown = 5
+}
+
+public enum TelnetMouseEventType
+{
+	Unknown,
+	Down,
+	Up,
+	Drag
+}
+
+public record TelnetMouseEvent(TelnetMouseButton Button, TelnetMouseEventType Event, int X, int Y)
+	: TelnetEvent
+{
+	private static TelnetMouseButton MapMouseButton(byte button)
+		=> button switch
+			{
+				32 => TelnetMouseButton.Left,
+				33 => TelnetMouseButton.Middle,
+				34 => TelnetMouseButton.Right,
+				96 => TelnetMouseButton.ScrollUp,
+				97 => TelnetMouseButton.ScrollDown,
+				64 => TelnetMouseButton.Left,
+				65 => TelnetMouseButton.Middle,
+				66 => TelnetMouseButton.Right,
+				_ => TelnetMouseButton.Unknown
+			};
+
+	private static TelnetMouseEventType MapMouseEventType(byte button)
+		=> button switch
+		{
+			32 => TelnetMouseEventType.Down,
+			33 => TelnetMouseEventType.Down,
+			34 => TelnetMouseEventType.Down,
+			35 => TelnetMouseEventType.Up,
+			96 => TelnetMouseEventType.Down,
+			97 => TelnetMouseEventType.Down,
+			64 => TelnetMouseEventType.Drag,
+			65 => TelnetMouseEventType.Drag,
+			66 => TelnetMouseEventType.Drag,
+			_ => TelnetMouseEventType.Unknown
+		};
+
+	public TelnetMouseEvent(ReadOnlySpan<byte> data)
+		: this(MapMouseButton(data[0]), MapMouseEventType(data[0]), data[1] - 33, data[2] - 33)
 	{
 	}
 }

@@ -18,6 +18,7 @@ public enum ClientCap
 	SetTitle		= 1 << 1,
 	GetWindowSize	= 1 << 2,
 	SetWindowSize	= 1 << 3,
+	MouseEvents		= 1 << 4,
 }
 
 [Flags]
@@ -49,7 +50,7 @@ public record ClientProfile
 	public static readonly ClientProfile TinTin = new("TinTin", ColourFormat.TrueColour, ClientCap.SetCursor | ClientCap.GetWindowSize | ClientCap.SetWindowSize, ClientQuirk.SetServerSideEchoOnly);
 	public static readonly ClientProfile MUDlet = new("MUDlet", ColourFormat.TrueColour, ClientCap.GetWindowSize);
 	public static readonly ClientProfile WindowsTelnet = new("Windows Telnet", ColourFormat.Ansi16, ClientCap.GetWindowSize | ClientCap.SetCursor, ClientQuirk.MustResetTerminalTypeOption);
-	public static readonly ClientProfile PuTTY = new("PuTTY", ColourFormat.TrueColour, ClientCap.SetCursor | ClientCap.SetTitle | ClientCap.GetWindowSize | ClientCap.SetWindowSize);
+	public static readonly ClientProfile PuTTY = new("PuTTY", ColourFormat.TrueColour, ClientCap.SetCursor | ClientCap.SetTitle | ClientCap.GetWindowSize | ClientCap.SetWindowSize | ClientCap.MouseEvents);
 	public static readonly ClientProfile Mushclient = new("MUSHclient", ColourFormat.Ansi256, ClientCap.None);
 
 	public static readonly Dictionary<string, ClientProfile> ByTerminalType = new()

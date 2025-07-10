@@ -14,8 +14,9 @@ internal static class LoggerExtensions
 	private static readonly EventId receivedTelnetCloseEventId = new(eventIdBase + 4, $"Received${nameof(TelnetCloseEvent)}");
 	private static readonly EventId receivedTelnetCsiEventId = new(eventIdBase + 5, $"Received${nameof(TelnetCsiEvent)}");
 	private static readonly EventId receivedUnknownTelnetEvent = new(eventIdBase + 6, "ReceivedUnknownTelnetEvent");
+	private static readonly EventId receivedTelnetMouseEvent = new(eventIdBase + 6, $"Received{nameof(TelnetMouseEvent)}");
 
-	private static readonly LogLevel telnetReceiveLogLevel = LogLevel.Debug;
+	private static readonly LogLevel telnetReceiveLogLevel = LogLevel.Trace;
 
 	private static readonly Action<ILogger, string, Exception?> logReceivedTelnetStringEvent = LoggerMessage.Define<string>(
 		telnetReceiveLogLevel,
@@ -62,9 +63,14 @@ internal static class LoggerExtensions
 		receivedUnknownTelnetEvent,
 		"Received unknown telnet event: {@Event}");
 
+	private static readonly Action<ILogger, TelnetMouseButton, int, int, Exception?> logReceivedTelnetMouseEvent = LoggerMessage.Define<TelnetMouseButton, int, int>(
+		LogLevel.Debug,
+		receivedTelnetMouseEvent,
+		"Received mouse event: Button {Button}, X {X}, Y {Y}");
+
 	public static void LogReceivedTelnetStringEvent(this ILogger logger, TelnetStringEvent stringEvent)
 	{
-		if (logger.IsEnabled(LogLevel.Debug))
+		if (logger.IsEnabled(telnetReceiveLogLevel))
 		{
 			logReceivedTelnetStringEvent(logger, StringUtil.Clean(stringEvent.Value), null);
 		}
@@ -72,7 +78,7 @@ internal static class LoggerExtensions
 
 	public static void LogReceivedTelnetCommandEvent(this ILogger logger, TelnetCommandEvent commandEvent)
 	{
-		if (logger.IsEnabled(LogLevel.Debug))
+		if (logger.IsEnabled(telnetReceiveLogLevel))
 		{
 			logReceivedTelnetCommandEvent(logger, commandEvent.Command, commandEvent.Option, null);
 		}
@@ -80,7 +86,7 @@ internal static class LoggerExtensions
 
 	public static void LogReceivedTelnetSubNegotiationEvent(this ILogger logger, TelnetSubNegotiationEvent subNegotiationEvent)
 	{
-		if (logger.IsEnabled(LogLevel.Debug))
+		if (logger.IsEnabled(telnetReceiveLogLevel))
 		{
 			switch (subNegotiationEvent.Option)
 			{
@@ -101,7 +107,7 @@ internal static class LoggerExtensions
 
 	public static void LogReceivedTelnetCloseEvent(this ILogger logger)
 	{
-		if (logger.IsEnabled(LogLevel.Debug))
+		if (logger.IsEnabled(telnetReceiveLogLevel))
 		{
 			logReceivedTelnetCloseEvent(logger, null);
 		}
@@ -109,7 +115,7 @@ internal static class LoggerExtensions
 
 	public static void LogReceivedTelnetCsiEvent(this ILogger logger, TelnetCsiEvent csiEvent)
 	{
-		if (logger.IsEnabled(LogLevel.Debug))
+		if (logger.IsEnabled(telnetReceiveLogLevel))
 		{
 			logReceivedTelnetCsiEvent(logger, csiEvent.Value, csiEvent.Suffix, csiEvent.Altered, null);
 		}
@@ -117,7 +123,7 @@ internal static class LoggerExtensions
 
 	public static void LogReceivedTelnetSs3Event(this ILogger logger, TelnetSs3Event ss3Event)
 	{
-		if (logger.IsEnabled(LogLevel.Debug))
+		if (logger.IsEnabled(telnetReceiveLogLevel))
 		{
 			logReceivedTelnetSs3Event(logger, ss3Event.Value, ss3Event.Suffix, ss3Event.Altered, null);
 		}
@@ -128,6 +134,14 @@ internal static class LoggerExtensions
 		if (logger.IsEnabled(LogLevel.Warning))
 		{
 			logReceivedUnknownTelnetEvent(logger, @event, null);
+		}
+	}
+
+	public static void LogReceivedTelnetMouseEvent(this ILogger logger, TelnetMouseEvent mouseEvent)
+	{
+		if (logger.IsEnabled(telnetReceiveLogLevel))
+		{
+			logReceivedTelnetMouseEvent(logger, mouseEvent.Button, mouseEvent.X, mouseEvent.Y, null);
 		}
 	}
 }

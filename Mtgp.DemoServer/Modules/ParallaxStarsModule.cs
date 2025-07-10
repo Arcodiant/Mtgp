@@ -36,12 +36,11 @@ internal class ParallaxStarsModule(ParallaxStarsManager starsManager)
 	}
 
 	public Task OnWindowSizeChanged(Extent2D size)
-	{
-		return Task.CompletedTask;
-	}
+		=> Task.CompletedTask;
 
 	public Task OnKey(Key key)
-	{
-		return Task.CompletedTask;
-	}
+		=> Task.CompletedTask;
+
+	public Task OnMouse(MouseButton button, MouseEventType eventType, int x, int y)
+		=> Task.CompletedTask;
 }

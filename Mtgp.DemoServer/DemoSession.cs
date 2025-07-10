@@ -1,5 +1,4 @@
-﻿using Arch.Core;
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using Mtgp.Comms;
 using Mtgp.DemoServer.Modules;
 using Mtgp.DemoServer.UI;
@@ -23,6 +22,7 @@ internal class DemoSession(MtgpConnection connection, ISessionWorld sessionWorld
 	{
 		PipeHandle? windowSizePipe = default;
 		PipeHandle? keyPressedPipe = default;
+		Dictionary<int, MouseEventType> mousePipes = [];
 		Extent2D? windowSize = default;
 
 		var exitTokenSource = new CancellationTokenSource();
@@ -32,6 +32,8 @@ internal class DemoSession(MtgpConnection connection, ISessionWorld sessionWorld
 		var onInput = async (string data) => { };
 
 		var onKey = async (Key key) => { };
+
+		var onMouse = async (MouseButton button, MouseEventType eventType, int x, int y) => { };
 
 		async Task HandleSendAsync(SendRequest request)
 		{
@@ -61,6 +63,19 @@ internal class DemoSession(MtgpConnection connection, ISessionWorld sessionWorld
 			{
 				await onInput(Encoding.UTF32.GetString(request.Value));
 			}
+			else if (mousePipes.TryGetValue(request.Pipe, out var mouseEvent))
+			{
+				new BitReader(request.Value)
+					.Read(out int buttonId)
+					.Read(out int x)
+					.Read(out int y);
+
+				var button = (MouseButton)buttonId;
+
+				logger.LogInformation("{MouseEvent} at ({X}, {Y}) with button {Button}", mouseEvent, x, y, button);
+
+				await onMouse(button, mouseEvent, x, y);
+			}
 			else
 			{
 				logger.LogWarning("Received unexpected send request: {@Request}", request);
@@ -76,6 +91,10 @@ internal class DemoSession(MtgpConnection connection, ISessionWorld sessionWorld
 
 		windowSizePipe = await messagePump.SubscribeEventAsync(Events.WindowSizeChanged);
 		keyPressedPipe = await messagePump.SubscribeEventAsync(Events.KeyPressed);
+
+		mousePipes[(await messagePump.SubscribeEventAsync(Events.MouseDown)).Id] = MouseEventType.Pressed;
+		mousePipes[(await messagePump.SubscribeEventAsync(Events.MouseUp)).Id] = MouseEventType.Released;
+		mousePipes[(await messagePump.SubscribeEventAsync(Events.MouseDrag)).Id] = MouseEventType.Drag;
 
 		while (windowSize is null)
 		{
@@ -138,6 +157,13 @@ internal class DemoSession(MtgpConnection connection, ISessionWorld sessionWorld
 		onWindowSizeChanged = async (size) =>
 		{
 			await currentModule.OnWindowSizeChanged(size);
+		};
+
+		onMouse = async (button, eventType, x, y) =>
+		{
+			await currentModule.OnMouse(button, eventType, x, y);
+
+			await UpdateModule();
 		};
 
 		await messagePump.SetDefaultPipe(DefaultPipe.Input, -1, [], false);

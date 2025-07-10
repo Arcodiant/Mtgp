@@ -20,6 +20,7 @@ public class TelnetConnection(TelnetClient client, ILogger<TelnetConnection> log
 	private readonly Channel<string> textChannel = Channel.CreateUnbounded<string>();
 	private readonly Channel<(int, int)> windowSizeChannel = Channel.CreateUnbounded<(int, int)>();
 	private readonly Channel<(AnsiEscapeType, string, char)> ansiEventChannel = Channel.CreateUnbounded<(AnsiEscapeType, string, char)>();
+	private readonly Channel<(TelnetMouseButton, TelnetMouseEventType, int, int)> mouseEventChannel = Channel.CreateUnbounded<(TelnetMouseButton, TelnetMouseEventType, int, int)>();
 
 	private readonly CancellationTokenSource readTaskCancellation = new();
 
@@ -28,6 +29,7 @@ public class TelnetConnection(TelnetClient client, ILogger<TelnetConnection> log
 	public ChannelReader<string> LineReader => this.textChannel.Reader;
 	public ChannelReader<(int Width, int Height)> WindowSizeReader => this.windowSizeChannel.Reader;
 	public ChannelReader<(AnsiEscapeType Type, string Data, char Terminator)> AnsiEventReader => this.ansiEventChannel.Reader;
+	public ChannelReader<(TelnetMouseButton Button, TelnetMouseEventType Event, int X, int Y)> MouseEventReader => this.mouseEventChannel.Reader;
 
 	private bool IsRunning => !readTaskCancellation.IsCancellationRequested && readTask != null && !readTask.IsCompleted;
 
@@ -157,11 +159,71 @@ public class TelnetConnection(TelnetClient client, ILogger<TelnetConnection> log
 						return;
 					case TelnetCsiEvent csiEvent:
 						logger.LogReceivedTelnetCsiEvent(csiEvent);
-						await ansiEventChannel.Writer.WriteAsync((AnsiEscapeType.Csi, csiEvent.Value, csiEvent.Suffix));
+
+						if (char.ToUpperInvariant(csiEvent.Suffix) == 'M')
+						{
+							var valueParts = csiEvent.Value[1..].Split(';', StringSplitOptions.RemoveEmptyEntries);
+
+							static TelnetMouseButton MapButton(int button)
+								=> button switch
+								{
+									0 => TelnetMouseButton.Left,
+									1 => TelnetMouseButton.Middle,
+									2 => TelnetMouseButton.Right,
+									32 => TelnetMouseButton.Left,
+									33 => TelnetMouseButton.Middle,
+									34 => TelnetMouseButton.Right,
+									64 => TelnetMouseButton.ScrollUp,
+									65 => TelnetMouseButton.ScrollDown,
+									_ => TelnetMouseButton.Unknown
+								};
+
+							static TelnetMouseEventType MapEventType(int button, char suffix)
+							{
+								if (suffix == 'm')
+								{
+									return TelnetMouseEventType.Up;
+								}
+								else if ((button & 32) != 0)
+								{
+									return TelnetMouseEventType.Drag;
+								}
+								else
+								{
+									return TelnetMouseEventType.Down;
+								}
+							}
+
+							if (valueParts.Length == 3
+									&& csiEvent.Value[0] == '<'
+									&& int.TryParse(valueParts[0], out int button)
+									&& int.TryParse(valueParts[1], out int x)
+									&& int.TryParse(valueParts[2], out int y))
+							{
+								var mappedButton = MapButton(button);
+								var mappedEventType = MapEventType(button, csiEvent.Suffix);
+
+								logger.LogTrace("Received mouse event as CSI: {Button} ({X}, {Y}) EventType: {EventType}", mappedButton, x, y, mappedEventType);
+
+								await mouseEventChannel.Writer.WriteAsync((mappedButton, mappedEventType, x, y));
+							}
+							else
+							{
+								logger.LogWarning("Received invalid mouse event data: {Value}", csiEvent.Value);
+							}
+						}
+						else
+						{
+							await ansiEventChannel.Writer.WriteAsync((AnsiEscapeType.Csi, csiEvent.Value, csiEvent.Suffix));
+						}
 						break;
 					case TelnetSs3Event ss3Event:
 						logger.LogReceivedTelnetSs3Event(ss3Event);
 						await ansiEventChannel.Writer.WriteAsync((AnsiEscapeType.Ss3, ss3Event.Value, ss3Event.Suffix));
+						break;
+					case TelnetMouseEvent mouseEvent:
+						logger.LogReceivedTelnetMouseEvent(mouseEvent);
+						await mouseEventChannel.Writer.WriteAsync((mouseEvent.Button, mouseEvent.Event, mouseEvent.X, mouseEvent.Y));
 						break;
 					default:
 						logger.LogReceivedUnknownTelnetEvent(@event);

@@ -114,7 +114,8 @@ internal class MainMenuModule(IGraphicsManager graphics, ISessionWorld sessionWo
 	}
 
 	public Task OnWindowSizeChanged(Extent2D size)
-	{
-		return Task.CompletedTask;
-	}
+		=> Task.CompletedTask;
+
+	public Task OnMouse(MouseButton button, MouseEventType eventType, int x, int y)
+		=> Task.CompletedTask;
 }
