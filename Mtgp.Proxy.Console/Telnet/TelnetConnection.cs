@@ -100,135 +100,142 @@ public class TelnetConnection(TelnetClient client, ILogger<TelnetConnection> log
 	{
 		this.readTask = Task.Run(async () =>
 		{
-			bool running = true;
-
-			while (running)
+			try
 			{
-				var @event = await client.ReadAsync(readTaskCancellation.Token);
+				bool running = true;
 
-				switch (@event)
+				while (running)
 				{
-					case TelnetStringEvent stringEvent:
-						logger.LogReceivedTelnetStringEvent(stringEvent);
-						await textChannel.Writer.WriteAsync(stringEvent.Value);
-						break;
-					case TelnetCommandEvent commandEvent:
-						{
-							logger.LogReceivedTelnetCommandEvent(commandEvent);
+					var @event = await client.ReadAsync(readTaskCancellation.Token);
 
-							if (commandEvent.Command.IsInformative())
-							{
-								this.clientOptionState[commandEvent.Option] = commandEvent.Command;
-							}
-							else if (commandEvent.Command.IsImperative())
-							{
-								this.serverOptionState[commandEvent.Option] = commandEvent.Command;
-							}
-
-							if (waitingOptionRequests.TryGetValue(commandEvent.Option, out var tcs))
-							{
-								waitingOptionRequests.Remove(commandEvent.Option);
-								tcs.SetResult(commandEvent.Command);
-							}
+					switch (@event)
+					{
+						case TelnetStringEvent stringEvent:
+							logger.LogReceivedTelnetStringEvent(stringEvent);
+							await textChannel.Writer.WriteAsync(stringEvent.Value);
 							break;
-						}
-					case TelnetSubNegotiationEvent subNegotiationEvent:
-						{
-							logger.LogReceivedTelnetSubNegotiationEvent(subNegotiationEvent);
-
-							if (waitingSubnegotiations.TryGetValue(subNegotiationEvent.Option, out var tcs))
+						case TelnetCommandEvent commandEvent:
 							{
-								waitingSubnegotiations.Remove(subNegotiationEvent.Option);
-								tcs.SetResult(subNegotiationEvent.Data ?? []);
-							}
+								logger.LogReceivedTelnetCommandEvent(commandEvent);
 
-							if (subNegotiationEvent.Option == TelnetOption.NegotiateAboutWindowSize
-									&& subNegotiationEvent.Data is not null
-									&& subNegotiationEvent.Data.Length == 4)
-							{
-								int width = subNegotiationEvent.Data[0] * 256 + subNegotiationEvent.Data[1];
-								int height = subNegotiationEvent.Data[2] * 256 + subNegotiationEvent.Data[3];
-								await windowSizeChannel.Writer.WriteAsync((width, height));
-							}
-
-							break;
-						}
-					case TelnetCloseEvent:
-						logger.LogReceivedTelnetCloseEvent();
-						running = false;
-						return;
-					case TelnetCsiEvent csiEvent:
-						logger.LogReceivedTelnetCsiEvent(csiEvent);
-
-						if (char.ToUpperInvariant(csiEvent.Suffix) == 'M')
-						{
-							var valueParts = csiEvent.Value[1..].Split(';', StringSplitOptions.RemoveEmptyEntries);
-
-							static TelnetMouseButton MapButton(int button)
-								=> button switch
+								if (commandEvent.Command.IsInformative())
 								{
-									0 => TelnetMouseButton.Left,
-									1 => TelnetMouseButton.Middle,
-									2 => TelnetMouseButton.Right,
-									32 => TelnetMouseButton.Left,
-									33 => TelnetMouseButton.Middle,
-									34 => TelnetMouseButton.Right,
-									64 => TelnetMouseButton.ScrollUp,
-									65 => TelnetMouseButton.ScrollDown,
-									_ => TelnetMouseButton.Unknown
-								};
-
-							static TelnetMouseEventType MapEventType(int button, char suffix)
-							{
-								if (suffix == 'm')
-								{
-									return TelnetMouseEventType.Up;
+									this.clientOptionState[commandEvent.Option] = commandEvent.Command;
 								}
-								else if ((button & 32) != 0)
+								else if (commandEvent.Command.IsImperative())
 								{
-									return TelnetMouseEventType.Drag;
+									this.serverOptionState[commandEvent.Option] = commandEvent.Command;
+								}
+
+								if (waitingOptionRequests.TryGetValue(commandEvent.Option, out var tcs))
+								{
+									waitingOptionRequests.Remove(commandEvent.Option);
+									tcs.SetResult(commandEvent.Command);
+								}
+								break;
+							}
+						case TelnetSubNegotiationEvent subNegotiationEvent:
+							{
+								logger.LogReceivedTelnetSubNegotiationEvent(subNegotiationEvent);
+
+								if (waitingSubnegotiations.TryGetValue(subNegotiationEvent.Option, out var tcs))
+								{
+									waitingSubnegotiations.Remove(subNegotiationEvent.Option);
+									tcs.SetResult(subNegotiationEvent.Data ?? []);
+								}
+
+								if (subNegotiationEvent.Option == TelnetOption.NegotiateAboutWindowSize
+										&& subNegotiationEvent.Data is not null
+										&& subNegotiationEvent.Data.Length == 4)
+								{
+									int width = subNegotiationEvent.Data[0] * 256 + subNegotiationEvent.Data[1];
+									int height = subNegotiationEvent.Data[2] * 256 + subNegotiationEvent.Data[3];
+									await windowSizeChannel.Writer.WriteAsync((width, height));
+								}
+
+								break;
+							}
+						case TelnetCloseEvent:
+							logger.LogReceivedTelnetCloseEvent();
+							running = false;
+							return;
+						case TelnetCsiEvent csiEvent:
+							logger.LogReceivedTelnetCsiEvent(csiEvent);
+
+							if (char.ToUpperInvariant(csiEvent.Suffix) == 'M')
+							{
+								var valueParts = csiEvent.Value[1..].Split(';', StringSplitOptions.RemoveEmptyEntries);
+
+								static TelnetMouseButton MapButton(int button)
+									=> button switch
+									{
+										0 => TelnetMouseButton.Left,
+										1 => TelnetMouseButton.Middle,
+										2 => TelnetMouseButton.Right,
+										32 => TelnetMouseButton.Left,
+										33 => TelnetMouseButton.Middle,
+										34 => TelnetMouseButton.Right,
+										64 => TelnetMouseButton.ScrollUp,
+										65 => TelnetMouseButton.ScrollDown,
+										_ => TelnetMouseButton.Unknown
+									};
+
+								static TelnetMouseEventType MapEventType(int button, char suffix)
+								{
+									if (suffix == 'm')
+									{
+										return TelnetMouseEventType.Up;
+									}
+									else if ((button & 32) != 0)
+									{
+										return TelnetMouseEventType.Drag;
+									}
+									else
+									{
+										return TelnetMouseEventType.Down;
+									}
+								}
+
+								if (valueParts.Length == 3
+										&& csiEvent.Value[0] == '<'
+										&& int.TryParse(valueParts[0], out int button)
+										&& int.TryParse(valueParts[1], out int x)
+										&& int.TryParse(valueParts[2], out int y))
+								{
+									var mappedButton = MapButton(button);
+									var mappedEventType = MapEventType(button, csiEvent.Suffix);
+
+									logger.LogTrace("Received mouse event as CSI: {Button} ({X}, {Y}) EventType: {EventType}", mappedButton, x, y, mappedEventType);
+
+									await mouseEventChannel.Writer.WriteAsync((mappedButton, mappedEventType, x, y));
 								}
 								else
 								{
-									return TelnetMouseEventType.Down;
+									logger.LogWarning("Received invalid mouse event data: {Value}", csiEvent.Value);
 								}
-							}
-
-							if (valueParts.Length == 3
-									&& csiEvent.Value[0] == '<'
-									&& int.TryParse(valueParts[0], out int button)
-									&& int.TryParse(valueParts[1], out int x)
-									&& int.TryParse(valueParts[2], out int y))
-							{
-								var mappedButton = MapButton(button);
-								var mappedEventType = MapEventType(button, csiEvent.Suffix);
-
-								logger.LogTrace("Received mouse event as CSI: {Button} ({X}, {Y}) EventType: {EventType}", mappedButton, x, y, mappedEventType);
-
-								await mouseEventChannel.Writer.WriteAsync((mappedButton, mappedEventType, x, y));
 							}
 							else
 							{
-								logger.LogWarning("Received invalid mouse event data: {Value}", csiEvent.Value);
+								await ansiEventChannel.Writer.WriteAsync((AnsiEscapeType.Csi, csiEvent.Value, csiEvent.Suffix));
 							}
-						}
-						else
-						{
-							await ansiEventChannel.Writer.WriteAsync((AnsiEscapeType.Csi, csiEvent.Value, csiEvent.Suffix));
-						}
-						break;
-					case TelnetSs3Event ss3Event:
-						logger.LogReceivedTelnetSs3Event(ss3Event);
-						await ansiEventChannel.Writer.WriteAsync((AnsiEscapeType.Ss3, ss3Event.Value, ss3Event.Suffix));
-						break;
-					case TelnetMouseEvent mouseEvent:
-						logger.LogReceivedTelnetMouseEvent(mouseEvent);
-						await mouseEventChannel.Writer.WriteAsync((mouseEvent.Button, mouseEvent.Event, mouseEvent.X, mouseEvent.Y));
-						break;
-					default:
-						logger.LogReceivedUnknownTelnetEvent(@event);
-						break;
+							break;
+						case TelnetSs3Event ss3Event:
+							logger.LogReceivedTelnetSs3Event(ss3Event);
+							await ansiEventChannel.Writer.WriteAsync((AnsiEscapeType.Ss3, ss3Event.Value, ss3Event.Suffix));
+							break;
+						case TelnetMouseEvent mouseEvent:
+							logger.LogReceivedTelnetMouseEvent(mouseEvent);
+							await mouseEventChannel.Writer.WriteAsync((mouseEvent.Button, mouseEvent.Event, mouseEvent.X, mouseEvent.Y));
+							break;
+						default:
+							logger.LogReceivedUnknownTelnetEvent(@event);
+							break;
+					}
 				}
+			}
+			catch(Exception ex)
+			{
+				logger.LogError(ex, "Telnet Connection read loop failed.");
 			}
 		}, readTaskCancellation.Token);
 	}

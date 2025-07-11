@@ -7,6 +7,11 @@ namespace Mtgp.Server;
 public class MtgpSessionPump(MessagePump pump, MtgpConnection connection)
 	: IMessageConnection
 {
+	private List<Func<Task>> inputEvents = [];
+
+	public void AddInputEvent(Func<Task> inputEvent)
+		=> inputEvents.Add(inputEvent);
+
 	public static MtgpSessionPump Create(MtgpConnection connection, Action<MessagePumpBuilder> build)
 	{
 		async Task<object?> ReadMessageAsync()
@@ -59,7 +64,16 @@ public class MtgpSessionPump(MessagePump pump, MtgpConnection connection)
 	}
 
 	public async Task<bool> HandleNextAsync()
-		=> await pump.HandleNextAsync();
+	{
+		bool result = await pump.HandleNextAsync();
+
+		if (result)
+		{
+			await RunInputEvents();
+		}
+
+		return result;
+	}
 
 	public async Task RunAsync(CancellationToken cancellationToken)
 	{
@@ -69,6 +83,21 @@ public class MtgpSessionPump(MessagePump pump, MtgpConnection connection)
 			{
 				return;
 			}
+			else
+			{
+				await this.RunInputEvents();
+			}
+		}
+	}
+
+	private async Task RunInputEvents()
+	{
+		var eventsToRun = inputEvents.ToArray();
+		inputEvents.Clear();
+
+		foreach (var inputEvent in eventsToRun)
+		{
+			await inputEvent();
 		}
 	}
 }

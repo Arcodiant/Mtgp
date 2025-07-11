@@ -35,6 +35,8 @@ internal class DemoSession(MtgpConnection connection, ISessionWorld sessionWorld
 
 		var onMouse = async (MouseButton button, MouseEventType eventType, int x, int y) => { };
 
+		MtgpSessionPump? messagePump = null;
+
 		async Task HandleSendAsync(SendRequest request)
 		{
 			if (request.Pipe == windowSizePipe?.Id)
@@ -43,25 +45,34 @@ internal class DemoSession(MtgpConnection connection, ISessionWorld sessionWorld
 					.Read(out int width)
 					.Read(out int height);
 
-				logger.LogInformation("Window size changed: {Width}x{Height}", width, height);
+				messagePump!.AddInputEvent(async () =>
+				{
+					logger.LogInformation("Window size changed: {Width}x{Height}", width, height);
 
-				windowSize = new(width, height);
+					windowSize = new(width, height);
 
-				await graphics.SetWindowSizeAsync(windowSize);
+					await graphics.SetWindowSizeAsync(windowSize);
 
-				await onWindowSizeChanged(windowSize);
+					await onWindowSizeChanged(windowSize);
+				});
 			}
 			else if (request.Pipe == keyPressedPipe?.Id)
 			{
 				var key = (Key)request.Value[0];
 
-				logger.LogInformation("Key Pressed: {Key}", key);
+				messagePump!.AddInputEvent(async () =>
+				{
+					logger.LogInformation("Key Pressed: {Key}", key);
 
-				await onKey(key);
+					await onKey(key);
+				});
 			}
 			else if (request.Pipe == -1)
 			{
-				await onInput(Encoding.UTF32.GetString(request.Value));
+				messagePump!.AddInputEvent(async () =>
+				{
+					await onInput(Encoding.UTF32.GetString(request.Value));
+				});
 			}
 			else if (mousePipes.TryGetValue(request.Pipe, out var mouseEvent))
 			{
@@ -72,9 +83,12 @@ internal class DemoSession(MtgpConnection connection, ISessionWorld sessionWorld
 
 				var button = (MouseButton)buttonId;
 
-				logger.LogInformation("{MouseEvent} at ({X}, {Y}) with button {Button}", mouseEvent, x, y, button);
+				messagePump!.AddInputEvent(async () =>
+				{
+					logger.LogInformation("{MouseEvent} at ({X}, {Y}) with button {Button}", mouseEvent, x, y, button);
 
-				await onMouse(button, mouseEvent, x, y);
+					await onMouse(button, mouseEvent, x, y);
+				});
 			}
 			else
 			{
@@ -82,7 +96,7 @@ internal class DemoSession(MtgpConnection connection, ISessionWorld sessionWorld
 			}
 		}
 
-		var messagePump = MtgpSessionPump.Create(connection, builder => builder.AddHandler<SendRequest>(HandleSendAsync));
+		messagePump = MtgpSessionPump.Create(connection, builder => builder.AddHandler<SendRequest>(HandleSendAsync));
 
 		foreach (var service in services)
 		{

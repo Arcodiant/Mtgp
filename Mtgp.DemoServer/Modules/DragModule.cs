@@ -38,6 +38,11 @@ internal class DragModule(ISessionWorld sessionWorld)
 
 	public Task OnInput(string data)
 	{
+		if (data == "x")
+		{
+			IsRunning = false;
+		}
+
 		return Task.CompletedTask;
 	}
 

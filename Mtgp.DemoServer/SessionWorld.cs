@@ -1,7 +1,6 @@
 ﻿using Arch.Core;
-using Mtgp.DemoServer.UI;
+using Microsoft.Extensions.Logging;
 using Mtgp.Shader;
-using System.Runtime.CompilerServices;
 
 namespace Mtgp.DemoServer;
 
@@ -64,7 +63,7 @@ public static class SessionWorldExtensions
 	}
 }
 
-public class SessionWorld
+public class SessionWorld(ILogger<SessionWorld> logger)
 	: ISessionWorld
 {
 	public World World { get; } = World.Create();
@@ -139,22 +138,25 @@ public class SessionWorld
 			await eventSemaphore.WaitAsync();
 			entered = true;
 
+			logger.LogDebug("Enter lock on update of {Entity} with {Component}", entity, typeof(T).Name);
+
 			T component = World.Get<T>(entity);
 
 			component = transform(component);
 
 			World.Set(entity, component);
-
-			await RunPendingEventsAsync();
 		}
 		finally
 		{
 			if (entered)
 			{
+				logger.LogDebug("Exit lock on update of {Entity} with {Component}", entity, typeof(T).Name);
+
 				eventSemaphore.Release();
 			}
-			
 		}
+
+		await RunPendingEventsAsync();
 	}
 
 	public async Task<Entity> CreateAsync<T>(T component)
@@ -170,26 +172,31 @@ public class SessionWorld
 	{
 		bool entered = false;
 
+		Entity result;
+
 		try
 		{
 			await eventSemaphore.WaitAsync();
 
 			entered = true;
 
-			var result = create(World);
+			logger.LogDebug("Enter lock on create with {Create}", create);
 
-			await RunPendingEventsAsync();
-
-			return result;
+			result = create(World);
 		}
 		finally
 		{
 			if (entered)
 			{
+				logger.LogDebug("Exit lock on create with {Create}", create);
+
 				eventSemaphore.Release();
 			}
-			
 		}
+
+		await RunPendingEventsAsync();
+
+		return result;
 	}
 
 	public async Task DeleteAsync(Entity entity)
@@ -199,27 +206,38 @@ public class SessionWorld
 		{
 			await eventSemaphore.WaitAsync();
 			entered = true;
+
+			logger.LogDebug("Enter lock on delete of {Entity}", entity);
+
 			World.Destroy(entity);
-			await RunPendingEventsAsync();
 		}
 		finally
 		{
 			if (entered)
 			{
+				logger.LogDebug("Exit lock on delete of {Entity}", entity);
+
 				eventSemaphore.Release();
 			}
-			
+
 		}
+
+		await RunPendingEventsAsync();
 	}
 
 	private async Task RunPendingEventsAsync()
 	{
-		foreach (var action in pendingEvents)
+		logger.LogDebug("RunPendingEventsAsync with {Count} pending events", pendingEvents.Count);
+
+		var events = pendingEvents.ToArray();
+		pendingEvents.Clear();
+
+		foreach (var action in events)
 		{
 			await action();
 		}
 
-		pendingEvents.Clear();
+		logger.LogDebug("RunPendingEventsAsync completed");
 	}
 }
 

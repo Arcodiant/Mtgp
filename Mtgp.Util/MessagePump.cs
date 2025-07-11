@@ -35,12 +35,31 @@ public class MessagePump(Func<Task<object?>> getNextAsync, Dictionary<Type, Func
 		{
 			await callback(message, this);
 		}
+		else if (TryGetCatchAll(message, out var catchAll))
+		{
+			await catchAll(message, this);
+		}
 		else
 		{
 			throw new InvalidOperationException($"No handler registered for message type {message.GetType()}");
 		}
 
 		return true;
+	}
+
+	private bool TryGetCatchAll(object message, [NotNullWhen(true)] out Func<object, IMessageCorrelator, Task>? handler)
+	{
+		foreach(var (registeredType, registeredHandler) in messageHandlers)
+		{
+			if (registeredType.IsAssignableFrom(message.GetType()))
+			{
+				handler = registeredHandler;
+				return true;
+			}
+		}
+
+		handler = default;
+		return false;
 	}
 
 	private bool TryGetCallback(object message, [NotNullWhen(true)] out Func<object, IMessageCorrelator, Task>? callback)

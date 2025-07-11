@@ -60,4 +60,49 @@ public record ClientProfile
 		["mudlet"] = MUDlet,
 		["mushclient"] = Mushclient,
 	};
+
+	public static ClientProfile Identify(IEnumerable<string> terminalTypes)
+	{
+		foreach (var (terminalType, profile) in ClientProfile.ByTerminalType)
+		{
+			if (terminalTypes.Contains(terminalType))
+			{
+				return profile;
+			}
+		}
+
+		var mttsCaps = MttsCaps.None;
+
+		if (terminalTypes.Any(type => type.StartsWith("mtts")))
+		{
+			mttsCaps = (MttsCaps)int.Parse(terminalTypes.Single(type => type.StartsWith("mtts")).AsSpan(4));
+
+			var colourFormat = ColourFormat.Ansi16;
+
+			if (mttsCaps.HasFlag(MttsCaps.TrueColour))
+			{
+				colourFormat = ColourFormat.TrueColour;
+			}
+			else if (mttsCaps.HasFlag(MttsCaps._256Colours))
+			{
+				colourFormat = ColourFormat.Ansi256;
+			}
+
+			var clientCaps = ClientCap.None;
+
+			if (mttsCaps.HasFlag(MttsCaps.VT100))
+			{
+				clientCaps |= ClientCap.SetCursor;
+			}
+
+			return new ClientProfile("MTTS", colourFormat, clientCaps);
+		}
+
+		if (terminalTypes.Contains("xterm"))
+		{
+			return new ClientProfile("XTerm", ColourFormat.TrueColour, ClientCap.SetCursor | ClientCap.GetWindowSize | ClientCap.SetWindowSize | ClientCap.SetTitle | ClientCap.MouseEvents);
+		}
+
+		return new ClientProfile("Basic", ColourFormat.Ansi16, ClientCap.None);
+	}
 };
